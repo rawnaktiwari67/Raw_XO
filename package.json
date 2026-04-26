@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "scripts": {
+    "install:all": "npm install --prefix server && npm install --prefix client",
+    "build": "npm run build --prefix server && npm run build --prefix client",
+    "dev:server": "npm run dev --prefix server",
+    "dev:client": "npm run dev --prefix client -- --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@clerk/clerk-react": "^5.61.5",
+    "@clerk/express": "^2.1.5"
+  }
+}

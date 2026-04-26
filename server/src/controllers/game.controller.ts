@@ -1,0 +1,690 @@
+import { Request, Response } from 'express';
+import crypto from 'crypto';
+import GameScore from '../models/GameScore';
+import TrackRating from '../models/TrackRating';
+import User from '../models/User';
+import { isDbConnected } from '../config/db';
+import { devStore } from '../utils/devStore';
+import { successResponse, errorResponse } from '../utils/apiResponse';
+import { calculateLevel, calculateGameXP } from '../utils/xpUtils';
+import { env } from '../config/env';
+
+type ItunesSearchResult = {
+    trackId?: number;
+    trackName?: string;
+    artistName?: string;
+    collectionName?: string;
+    releaseDate?: string;
+    trackTimeMillis?: number;
+    previewUrl?: string;
+    artworkUrl100?: string;
+    trackViewUrl?: string;
+};
+
+type SongPreview = {
+    id: string;
+    title: string;
+    artist: string;
+    album: string;
+    releaseYear: number;
+    durationMs: number;
+    snippetUrl: string;
+    artworkUrl: string;
+    trackUrl: string;
+};
+
+type GameGenre = 'all' | 'hip-hop' | 'pop' | 'rnb' | 'dance';
+type GameLanguage = 'all' | 'english' | 'hindi' | 'punjabi' | 'korean' | 'spanish';
+type GameDifficulty = 'easy' | 'medium' | 'hard';
+type LeaderboardPeriod = 'daily' | 'all-time';
+type GameFilters = {
+    genre: GameGenre;
+    language: GameLanguage;
+    difficulty: GameDifficulty;
+    artist: string;
+};
+
+type ArtistProfile = {
+    label: string;
+    value: string;
+    language: GameLanguage;
+};
+
+const ITUNES_SEARCH_ENDPOINT = 'https://itunes.apple.com/search';
+const ITUNES_TRACK_LIMIT = Math.min(
+    200,
+    Math.max(20, Number.parseInt(env.GAME_ITUNES_LIMIT, 10) || 80)
+);
+const TRACK_CACHE_MS = Math.max(
+    60_000,
+    Number.parseInt(env.GAME_TRACK_CACHE_MS, 10) || 10 * 60_000
+);
+const ARTIST_QUERIES = env.GAME_ARTIST_QUERY
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+const CURATED_ARTISTS: ArtistProfile[] = [
+    { label: 'The Weeknd', value: 'the weeknd', language: 'english' },
+    { label: 'Drake', value: 'drake', language: 'english' },
+    { label: 'Kanye West', value: 'kanye west', language: 'english' },
+    { label: 'Travis Scott', value: 'travis scott', language: 'english' },
+    { label: 'Kendrick Lamar', value: 'kendrick lamar', language: 'english' },
+    { label: 'Taylor Swift', value: 'taylor swift', language: 'english' },
+    { label: 'Billie Eilish', value: 'billie eilish', language: 'english' },
+    { label: 'Dua Lipa', value: 'dua lipa', language: 'english' },
+    { label: 'Arijit Singh', value: 'arijit singh', language: 'hindi' },
+    { label: 'Pritam', value: 'pritam', language: 'hindi' },
+    { label: 'Shreya Ghoshal', value: 'shreya ghoshal', language: 'hindi' },
+    { label: 'Atif Aslam', value: 'atif aslam', language: 'hindi' },
+    { label: 'Diljit Dosanjh', value: 'diljit dosanjh', language: 'punjabi' },
+    { label: 'Karan Aujla', value: 'karan aujla', language: 'punjabi' },
+    { label: 'AP Dhillon', value: 'ap dhillon', language: 'punjabi' },
+    { label: 'Shubh', value: 'shubh', language: 'punjabi' },
+];
+const DEFAULT_ARTIST_QUERIES = ARTIST_QUERIES.length > 0
+    ? ARTIST_QUERIES
+    : CURATED_ARTISTS.map((artist) => artist.value);
+const GENRE_QUERY_MAP: Record<GameGenre, string[]> = {
+    all: DEFAULT_ARTIST_QUERIES,
+    'hip-hop': ['kanye west', 'travis scott', 'drake', 'kendrick lamar'],
+    pop: ['the weeknd', 'dua lipa', 'billie eilish', 'taylor swift'],
+    rnb: ['the weeknd', 'sza', 'frank ocean', 'brent faiyaz'],
+    dance: ['dua lipa', 'calvin harris', 'david guetta', 'charli xcx'],
+};
+const LANGUAGE_QUERY_MAP: Record<GameLanguage, string[]> = {
+    all: [],
+    english: ['the weeknd', 'kanye west', 'travis scott', 'drake'],
+    hindi: ['arijit singh', 'shreya ghoshal', 'pritam', 'atif aslam'],
+    punjabi: ['diljit dosanjh', 'karan aujla', 'ap dhillon', 'shubh'],
+    korean: ['bts', 'blackpink', 'newjeans', 'jung kook'],
+    spanish: ['bad bunny', 'karol g', 'rosalia', 'rauw alejandro'],
+};
+
+const songPoolCache = new Map<string, { songs: SongPreview[]; fetchedAt: number }>();
+const inFlightSongPools = new Map<string, Promise<SongPreview[]>>();
+
+const hmacSign = (data: string): string =>
+    crypto.createHmac('sha256', env.GAME_SECRET).update(data).digest('hex');
+
+const hmacVerify = (data: string, sig: string): boolean => {
+    if (!sig) return false;
+    const expected = hmacSign(data);
+    if (sig.length !== expected.length) return false;
+    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(sig));
+};
+
+const shuffle = <T>(arr: T[]): T[] => [...arr].sort(() => Math.random() - 0.5);
+
+const normalizeTitle = (value: string): string =>
+    value.toLowerCase().trim().replace(/\s+/g, ' ');
+
+const dedupeQueries = (queries: string[]): string[] => {
+    const seen = new Set<string>();
+
+    return queries.filter((query) => {
+        const normalized = normalizeTitle(query);
+        if (!normalized || seen.has(normalized)) return false;
+        seen.add(normalized);
+        return true;
+    });
+};
+
+const parseFilters = (source: Partial<Record<'genre' | 'language' | 'difficulty' | 'artist', unknown>>): GameFilters => {
+    const genreValue = typeof source.genre === 'string' ? source.genre.toLowerCase() : 'all';
+    const languageValue = typeof source.language === 'string' ? source.language.toLowerCase() : 'all';
+    const difficultyValue = typeof source.difficulty === 'string'
+        ? String(source.difficulty).toLowerCase()
+        : 'medium';
+    const artistValue = typeof source.artist === 'string'
+        ? normalizeTitle(String(source.artist))
+        : 'all';
+
+    const genre = genreValue in GENRE_QUERY_MAP ? genreValue as GameGenre : 'all';
+    const language = languageValue in LANGUAGE_QUERY_MAP ? languageValue as GameLanguage : 'all';
+    const difficulty = difficultyValue === 'easy' || difficultyValue === 'medium' || difficultyValue === 'hard'
+        ? difficultyValue as GameDifficulty
+        : 'medium';
+
+    return { genre, language, difficulty, artist: artistValue || 'all' };
+};
+
+const getQueryTerms = (filters: GameFilters): string[] => {
+    if (filters.artist !== 'all') {
+        return [filters.artist];
+    }
+
+    const genreTerms = GENRE_QUERY_MAP[filters.genre];
+    const languageTerms = LANGUAGE_QUERY_MAP[filters.language];
+
+    if (filters.genre === 'all' && filters.language === 'all') {
+        return DEFAULT_ARTIST_QUERIES;
+    }
+
+    if (filters.language === 'all') {
+        return genreTerms;
+    }
+
+    if (filters.genre === 'all') {
+        return languageTerms;
+    }
+
+    const overlap = languageTerms.filter((term) =>
+        genreTerms.some((genreTerm) => normalizeTitle(genreTerm) === normalizeTitle(term))
+    );
+
+    return overlap.length > 0 ? overlap : languageTerms;
+};
+
+const filtersCacheKey = (filters: GameFilters): string => `${filters.genre}:${filters.language}:${filters.difficulty}:${filters.artist}`;
+
+const applyDifficulty = (songs: SongPreview[], difficulty: GameDifficulty): SongPreview[] => {
+    const byRecent = [...songs].sort((a, b) => b.releaseYear - a.releaseYear);
+    const byOlderLongCuts = [...songs].sort((a, b) => {
+        if (a.releaseYear !== b.releaseYear) return a.releaseYear - b.releaseYear;
+        return b.durationMs - a.durationMs;
+    });
+
+    if (difficulty === 'easy') {
+        const recent = byRecent.filter((song) => song.releaseYear >= 2018);
+        return (recent.length >= 4 ? recent : byRecent).slice(0, Math.min(32, songs.length));
+    }
+
+    if (difficulty === 'hard') {
+        const olderLongCuts = byOlderLongCuts.filter((song) => song.releaseYear <= 2015 && song.durationMs >= 240000);
+        return (olderLongCuts.length >= 4 ? olderLongCuts : byOlderLongCuts).slice(0, Math.min(28, songs.length));
+    }
+
+    const medium = byRecent.filter((song) => song.releaseYear >= 2012);
+    return (medium.length >= 4 ? medium : byRecent).slice(0, Math.min(30, songs.length));
+};
+
+const calculateScorePayload = (correct: boolean, streak: number, responseTimeMs: number) => {
+    if (!correct) {
+        return {
+            pointsAwarded: 0,
+            speedBonus: 0,
+            multiplier: 1,
+        };
+    }
+
+    const speedWindowMs = 5000;
+    const safeResponseTime = responseTimeMs > 0 ? Math.min(responseTimeMs, speedWindowMs) : speedWindowMs;
+    const speedBonus = Math.max(0, Math.round(((speedWindowMs - safeResponseTime) / speedWindowMs) * 60));
+    const multiplier = Math.min(1 + Math.floor(streak / 3) * 0.25, 2);
+    const pointsAwarded = Math.round((100 + speedBonus) * multiplier);
+
+    return { pointsAwarded, speedBonus, multiplier };
+};
+
+const getPeriodStart = (period: LeaderboardPeriod): Date | null => {
+    if (period !== 'daily') return null;
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    return start;
+};
+
+const artworkLarge = (url = ''): string =>
+    url.replace(/100x100bb\.(jpg|png|webp)$/i, '600x600bb.$1');
+
+const matchesGuess = (guess: string, song: SongPreview): boolean => {
+    const normalizedGuess = normalizeTitle(guess);
+    if (!normalizedGuess) return false;
+
+    const title = normalizeTitle(song.title);
+    const artist = normalizeTitle(song.artist);
+    return normalizedGuess === title ||
+        normalizedGuess === artist ||
+        title.includes(normalizedGuess) ||
+        artist.includes(normalizedGuess);
+};
+
+const getJson = async (url: string): Promise<unknown> => {
+    const response = await fetch(url, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) {
+        throw new Error(`iTunes API request failed (${response.status})`);
+    }
+    return response.json();
+};
+
+const fetchItunesSongPool = async (queries: string[]): Promise<SongPreview[]> => {
+    const payloads = await Promise.all(
+        dedupeQueries(queries).map(async (term) => {
+            const params = new URLSearchParams({
+                term,
+                media: 'music',
+                entity: 'song',
+                limit: String(ITUNES_TRACK_LIMIT),
+                country: env.GAME_ITUNES_COUNTRY,
+            });
+
+            return getJson(`${ITUNES_SEARCH_ENDPOINT}?${params.toString()}`) as Promise<{
+                results?: ItunesSearchResult[];
+            }>;
+        })
+    );
+
+    const results = payloads.flatMap((payload) => Array.isArray(payload.results) ? payload.results : []);
+    const seen = new Set<string>();
+    const songs: SongPreview[] = [];
+
+    for (const item of results) {
+        if (!item.trackId || !item.trackName || !item.artistName || !item.previewUrl) {
+            continue;
+        }
+
+        const title = item.trackName.trim();
+        const artist = item.artistName.trim();
+        const dedupeKey = `${normalizeTitle(title)}::${artist.toLowerCase()}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+
+        songs.push({
+            id: String(item.trackId),
+            title,
+            artist,
+            album: item.collectionName?.trim() ?? '',
+            releaseYear: item.releaseDate ? new Date(item.releaseDate).getFullYear() : 0,
+            durationMs: item.trackTimeMillis ?? 0,
+            snippetUrl: item.previewUrl,
+            artworkUrl: artworkLarge(item.artworkUrl100),
+            trackUrl: item.trackViewUrl ?? '',
+        });
+    }
+
+    return songs;
+};
+
+const getSongPool = async (filters: GameFilters): Promise<SongPreview[]> => {
+    const cacheKey = filtersCacheKey(filters);
+    const cached = songPoolCache.get(cacheKey);
+    const isFresh =
+        !!cached &&
+        cached.songs.length >= 4 &&
+        Date.now() - cached.fetchedAt < TRACK_CACHE_MS;
+
+    if (isFresh && cached) return cached.songs;
+    if (inFlightSongPools.has(cacheKey)) return inFlightSongPools.get(cacheKey)!;
+
+    const queryTerms = getQueryTerms(filters);
+
+    const nextFetch = fetchItunesSongPool(queryTerms)
+        .then((songs) => {
+            const preparedSongs = applyDifficulty(songs, filters.difficulty);
+            if (preparedSongs.length >= 4) {
+                songPoolCache.set(cacheKey, { songs: preparedSongs, fetchedAt: Date.now() });
+                return preparedSongs;
+            }
+
+            return cached?.songs ?? [];
+        })
+        .catch(() => cached?.songs ?? [])
+        .finally(() => {
+            inFlightSongPools.delete(cacheKey);
+        });
+
+    inFlightSongPools.set(cacheKey, nextFetch);
+
+    const songs = await nextFetch;
+    if (songs.length < 4) {
+        throw new Error('Song pool unavailable');
+    }
+    return songs;
+};
+
+const buildQuestionWithExclusion = (songs: SongPreview[], excludeSongIds: string[] = []): {
+    correct: SongPreview;
+    options: string[];
+} => {
+    const excluded = new Set(excludeSongIds);
+    const candidates = songs.filter((song) => !excluded.has(`${song.id}:${hmacSign(song.id)}`));
+    const source = candidates.length >= 4 ? candidates : songs;
+    const correct = source[Math.floor(Math.random() * source.length)];
+
+    let others = shuffle(
+        source.filter(
+            (song) =>
+                song.id !== correct.id &&
+                normalizeTitle(song.title) !== normalizeTitle(correct.title)
+        )
+    ).slice(0, 3);
+
+    if (others.length < 3) {
+        const remaining = shuffle(
+            source.filter((song) => song.id !== correct.id && !others.some((other) => other.id === song.id))
+        ).slice(0, 3 - others.length);
+        others = [...others, ...remaining];
+    }
+
+    if (others.length < 3) {
+        throw new Error('Not enough unique songs to build options');
+    }
+
+    const options = shuffle([correct.title, ...others.map((song) => song.title)]);
+    return { correct, options };
+};
+
+// GET /game/question
+export const getQuestion = async (_req: Request, res: Response): Promise<void> => {
+    try {
+        const filters = parseFilters({
+            genre: _req.query.genre,
+            language: _req.query.language,
+            difficulty: _req.query.difficulty,
+            artist: _req.query.artist,
+        });
+        const songs = await getSongPool(filters);
+        const excludeSongIds = typeof _req.query.excludeSongIds === 'string'
+            ? _req.query.excludeSongIds.split(',').map((item) => item.trim()).filter(Boolean)
+            : [];
+        const { correct, options } = buildQuestionWithExclusion(songs, excludeSongIds);
+        const signedId = hmacSign(correct.id);
+
+        res.json(successResponse({
+            snippetUrl: correct.snippetUrl,
+            options,
+            songId: `${correct.id}:${signedId}`,
+            artistName: correct.artist,
+            filters,
+        }));
+    } catch {
+        res.status(503).json(errorResponse('Game question unavailable'));
+    }
+};
+
+// POST /game/answer
+export const submitAnswer = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { songId, answer } = req.body;
+        if (!songId || !answer) {
+            res.status(400).json(errorResponse('songId and answer are required'));
+            return;
+        }
+
+        const [id, sig] = String(songId).split(':');
+        if (!id || !hmacVerify(id, sig ?? '')) {
+            res.status(400).json(errorResponse('Invalid song token'));
+            return;
+        }
+
+        const filters = parseFilters({
+            genre: req.body.genre,
+            language: req.body.language,
+            difficulty: req.body.difficulty,
+            artist: req.body.artist,
+        });
+        const songs = await getSongPool(filters);
+        const song = songs.find((item) => item.id === id);
+        if (!song) {
+            res.status(404).json(errorResponse('Song no longer available, fetch a new round'));
+            return;
+        }
+
+        const correct = matchesGuess(String(answer), song);
+        const streak = Number(req.body.streak) || 0;
+        const responseTimeMs = Math.max(0, Math.min(5000, Number(req.body.responseTimeMs) || 0));
+        const { pointsAwarded, speedBonus, multiplier } = calculateScorePayload(correct, streak, responseTimeMs);
+        const xpEarned = calculateGameXP(correct, streak) + Math.round(speedBonus * 0.5);
+
+        if (req.userId && isDbConnected()) {
+            await GameScore.create({
+                user: req.userId,
+                trackId: song.id,
+                trackName: song.title,
+                artistName: song.artist,
+                artworkUrl: song.artworkUrl,
+                trackUrl: song.trackUrl,
+                correct,
+                responseTimeMs,
+                score: pointsAwarded,
+                correctCount: correct ? 1 : 0,
+                totalQuestions: 1,
+                xpEarned,
+            });
+
+            const user = await User.findByIdAndUpdate(
+                req.userId,
+                { $inc: { xp: xpEarned } },
+                { new: true }
+            );
+
+            if (user) {
+                const { level, badge } = calculateLevel(user.xp);
+                if (level !== user.level || badge !== user.levelBadge) {
+                    await User.findByIdAndUpdate(req.userId, { level, levelBadge: badge });
+                }
+            }
+        } else if (req.userId) {
+            devStore.saveGameScore({
+                user: req.userId ?? '',
+                trackId: song.id,
+                trackName: song.title,
+                artistName: song.artist,
+                artworkUrl: song.artworkUrl,
+                trackUrl: song.trackUrl,
+                correct,
+                responseTimeMs,
+                score: pointsAwarded,
+                correctCount: correct ? 1 : 0,
+                totalQuestions: 1,
+                xpEarned,
+            });
+            devStore.incrementUserXp(req.userId, xpEarned);
+        }
+
+        res.json(successResponse({
+            correct,
+            correctAnswer: song.title,
+            correctArtist: song.artist,
+            album: song.album,
+            artworkUrl: song.artworkUrl,
+            trackUrl: song.trackUrl,
+            trackId: `${song.id}:${hmacSign(song.id)}`,
+            xpEarned,
+            pointsAwarded,
+            speedBonus,
+            multiplier,
+            responseTimeMs,
+            filters,
+        }));
+    } catch {
+        res.status(500).json(errorResponse('Server error'));
+    }
+};
+
+// POST /game/rating
+export const rateTrack = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { trackId, rating } = req.body;
+        const numericRating = Number(rating);
+
+        if (!trackId || !Number.isInteger(numericRating) || numericRating < 1 || numericRating > 5) {
+            res.status(400).json(errorResponse('trackId and a 1-5 rating are required'));
+            return;
+        }
+
+        const [id, sig] = String(trackId).split(':');
+        if (!id || !hmacVerify(id, sig ?? '')) {
+            res.status(400).json(errorResponse('Invalid track token'));
+            return;
+        }
+
+        const filters = parseFilters({
+            genre: req.body.genre,
+            language: req.body.language,
+            difficulty: req.body.difficulty,
+            artist: req.body.artist,
+        });
+        const songs = await getSongPool(filters);
+        const song = songs.find((item) => item.id === id);
+        if (!song) {
+            res.status(404).json(errorResponse('Track no longer available'));
+            return;
+        }
+
+        if (!req.userId) {
+            res.json(successResponse({
+                guest: true,
+                trackId: song.id,
+                rating: numericRating,
+            }, 'Guest rating accepted'));
+            return;
+        }
+
+        const saved = isDbConnected()
+            ? await TrackRating.findOneAndUpdate(
+                { user: req.userId, trackId: song.id },
+                {
+                    user: req.userId,
+                    trackId: song.id,
+                    trackName: song.title,
+                    artistName: song.artist,
+                    artworkUrl: song.artworkUrl,
+                    trackUrl: song.trackUrl,
+                    rating: numericRating,
+                },
+                { new: true, upsert: true, setDefaultsOnInsert: true }
+            )
+            : devStore.saveRating({
+                user: req.userId ?? '',
+                trackId: song.id,
+                trackName: song.title,
+                artistName: song.artist,
+                artworkUrl: song.artworkUrl,
+                trackUrl: song.trackUrl,
+                rating: numericRating,
+            });
+
+        res.json(successResponse(saved, 'Rating saved'));
+    } catch {
+        res.status(500).json(errorResponse('Server error'));
+    }
+};
+
+// GET /game/artists
+export const getArtists = async (_req: Request, res: Response): Promise<void> => {
+    res.json(successResponse(CURATED_ARTISTS));
+};
+
+// GET /game/stats
+export const getStats = async (req: Request, res: Response): Promise<void> => {
+    try {
+        if (!req.userId) {
+            res.json(successResponse({
+                totalGamesPlayed: 0,
+                totalCorrect: 0,
+                accuracy: 0,
+                streak: 0,
+                bestStreak: 0,
+                ratingsCount: 0,
+                averageResponseTimeMs: 0,
+                fastestCorrectResponseTimeMs: 0,
+            }));
+            return;
+        }
+        if (!isDbConnected()) {
+            res.json(successResponse(devStore.getStats(req.userId)));
+            return;
+        }
+        const history = await GameScore.find({ user: req.userId })
+            .sort({ sessionDate: -1 })
+            .limit(250);
+
+        const totalGamesPlayed = history.length;
+        const totalCorrect = history.filter((item) => item.correct || item.correctCount > 0).length;
+        const accuracy = totalGamesPlayed > 0 ? Math.round((totalCorrect / totalGamesPlayed) * 100) : 0;
+        const timedHistory = history.filter((item) => item.responseTimeMs > 0);
+
+        let streak = 0;
+        let bestStreak = 0;
+        let runningStreak = 0;
+        for (const item of history) {
+            if (item.correct || item.correctCount > 0) streak += 1;
+            else break;
+        }
+        for (const item of [...history].reverse()) {
+            if (item.correct || item.correctCount > 0) {
+                runningStreak += 1;
+                bestStreak = Math.max(bestStreak, runningStreak);
+            } else {
+                runningStreak = 0;
+            }
+        }
+
+        const ratingsCount = await TrackRating.countDocuments({ user: req.userId });
+        const averageResponseTimeMs = timedHistory.length > 0
+            ? Math.round(timedHistory.reduce((sum, item) => sum + item.responseTimeMs, 0) / timedHistory.length)
+            : 0;
+        const fastestCorrectResponseTimeMs = history
+            .filter((item) => (item.correct || item.correctCount > 0) && item.responseTimeMs > 0)
+            .reduce((best, item) => best === 0 ? item.responseTimeMs : Math.min(best, item.responseTimeMs), 0);
+
+        res.json(successResponse({
+            totalGamesPlayed,
+            totalCorrect,
+            accuracy,
+            streak,
+            bestStreak,
+            ratingsCount,
+            averageResponseTimeMs,
+            fastestCorrectResponseTimeMs,
+        }));
+    } catch {
+        res.status(500).json(errorResponse('Server error'));
+    }
+};
+
+// GET /game/leaderboard
+export const getLeaderboard = async (_req: Request, res: Response): Promise<void> => {
+    try {
+        const period = _req.query.period === 'daily' ? 'daily' : 'all-time';
+        if (!isDbConnected()) {
+            res.json(successResponse(devStore.getLeaderboard(period, _req.userId)));
+            return;
+        }
+        const periodStart = getPeriodStart(period);
+        const matchStage = periodStart ? { $match: { sessionDate: { $gte: periodStart } } } : null;
+        const pipeline: object[] = [
+            ...(matchStage ? [matchStage] : []),
+            { $group: { _id: '$user', totalScore: { $sum: '$score' }, sessions: { $sum: 1 }, xpTotal: { $sum: '$xpEarned' } } },
+            { $sort: { totalScore: -1 } },
+            { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
+            { $unwind: '$user' },
+            { $project: { username: '$user.username', avatar: '$user.avatar', levelBadge: '$user.levelBadge', totalScore: 1, sessions: 1, xpTotal: 1 } },
+        ];
+        const fullLeaderboard = await GameScore.aggregate(pipeline as any);
+        const userRank = _req.userId
+            ? fullLeaderboard.findIndex((entry) => String(entry._id) === String(_req.userId)) + 1 || null
+            : null;
+
+        res.json(successResponse({
+            entries: fullLeaderboard.slice(0, 50),
+            userRank,
+            period,
+        }));
+    } catch {
+        res.status(500).json(errorResponse('Server error'));
+    }
+};
+
+// GET /game/history
+export const getHistory = async (req: Request, res: Response): Promise<void> => {
+    try {
+        if (!req.userId) {
+            res.json(successResponse([]));
+            return;
+        }
+        if (!isDbConnected()) {
+            res.json(successResponse(devStore.getHistory(req.userId)));
+            return;
+        }
+        const history = await GameScore.find({ user: req.userId })
+            .sort({ sessionDate: -1 })
+            .limit(20);
+        res.json(successResponse(history));
+    } catch {
+        res.status(500).json(errorResponse('Server error'));
+    }
+};

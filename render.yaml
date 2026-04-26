@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: raw-xo-api
+    runtime: node
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: GAME_ITUNES_COUNTRY
+        value: us
+      - key: GAME_ITUNES_LIMIT
+        value: 80
+      - key: GAME_TRACK_CACHE_MS
+        value: 600000
+      - key: CLIENT_ORIGIN
+        value: https://your-frontend-domain.onrender.com
+
+  - type: static
+    name: raw-xo-web
+    rootDir: client
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    pullRequestPreviewsEnabled: true
+    envVars:
+      - key: VITE_API_URL
+        value: https://your-backend-domain.onrender.com/api/v1
+      - key: VITE_APPLE_MUSIC_COUNTRY
+        value: IN
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

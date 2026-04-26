@@ -1,0 +1,7 @@
+﻿src/controllers/thread.controller.ts(28,23): error TS2345: Argument of type '{ upvotes: number; createdAt: number; } | { createdAt: number; upvotes?: undefined; }' is not assignable to parameter of type 'string | { [key: string]: SortOrder | { $meta: any; }; } | [string, SortOrder][] | null | undefined'.
+  Type '{ upvotes: number; createdAt: number; }' is not assignable to type 'string | { [key: string]: SortOrder | { $meta: any; }; } | [string, SortOrder][] | null | undefined'.
+    Type '{ upvotes: number; createdAt: number; }' is not assignable to type '{ [key: string]: SortOrder | { $meta: any; }; }'.
+      Property 'upvotes' is incompatible with index signature.
+        Type 'number' is not assignable to type 'SortOrder | { $meta: any; }'.
+src/data/seed.ts(10,17): error TS2307: Cannot find module './models/Era' or its corresponding type declarations.
+src/data/seed.ts(11,18): error TS2307: Cannot find module './models/Tour' or its corresponding type declarations.
