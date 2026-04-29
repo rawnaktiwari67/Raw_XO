@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useGameStore } from '../../stores/gameStore';
+import { gameService } from '../../services/gameService';
 import type { GameArtistOption, GameDifficulty, GameGenre, GameLanguage } from '../../types/game';
 
 const TOTAL_SECONDS = 5;
@@ -121,16 +122,59 @@ function ArtistPicker({
     value,
     onChange,
     disabled,
+    language,
 }: {
     artists: GameArtistOption[];
     value: string;
     onChange: (artist: string) => void;
     disabled: boolean;
+    language: GameLanguage;
 }) {
     const [query, setQuery] = useState('');
-    const filteredArtists = artists
+    const [liveArtists, setLiveArtists] = useState<GameArtistOption[]>([]);
+    const normalizedQuery = query.trim().replace(/\s+/g, ' ');
+    const customArtistValue = normalizedQuery.toLowerCase();
+    const exactPreset = artists.find((artist) => artist.value === customArtistValue);
+    const filteredPresetArtists = artists
         .filter((artist) => artist.label.toLowerCase().includes(query.toLowerCase()))
         .slice(0, 8);
+    const filteredArtists = [...filteredPresetArtists, ...liveArtists]
+        .filter((artist, index, list) => list.findIndex((item) => item.value === artist.value) === index)
+        .slice(0, 12);
+    const canUseCustomArtist = normalizedQuery.length >= 2 && !exactPreset;
+
+    const applyCustomArtist = () => {
+        if (exactPreset) {
+            onChange(exactPreset.value);
+            return;
+        }
+        if (!canUseCustomArtist) return;
+        onChange(customArtistValue);
+    };
+
+    useEffect(() => {
+        if (normalizedQuery.length < 2) {
+            setLiveArtists([]);
+            return;
+        }
+
+        let active = true;
+        const timeout = window.setTimeout(async () => {
+            try {
+                const response = await gameService.searchArtists(normalizedQuery, language);
+                if (!active) return;
+                setLiveArtists(Array.isArray(response.data?.data) ? response.data.data : []);
+            } catch {
+                if (!active) return;
+                setLiveArtists([]);
+            }
+        }, 250);
+
+        return () => {
+            active = false;
+            window.clearTimeout(timeout);
+        };
+    }, [language, normalizedQuery]);
 
     return (
         <div className="space-y-2">
@@ -150,6 +194,11 @@ function ArtistPicker({
             <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(event) => {
+                    if (event.key !== 'Enter') return;
+                    event.preventDefault();
+                    applyCustomArtist();
+                }}
                 placeholder="Search artist"
                 disabled={disabled}
                 className="h-12 w-full rounded-2xl bg-white/[0.03] px-4 text-sm text-text-1 outline-none transition-colors placeholder:text-text-4 focus:bg-white/[0.045]"
@@ -169,6 +218,22 @@ function ArtistPicker({
                 >
                     Any
                 </motion.button>
+                {canUseCustomArtist ? (
+                    <motion.button
+                        type="button"
+                        whileHover={disabled ? undefined : { y: -1, scale: 1.01 }}
+                        whileTap={disabled ? undefined : { scale: 0.99 }}
+                        onClick={applyCustomArtist}
+                        disabled={disabled}
+                        className={`rounded-full px-4 py-2 text-[11px] uppercase tracking-[0.12em] transition-all duration-300 ${
+                            value === customArtistValue
+                                ? 'bg-[linear-gradient(180deg,rgba(244,162,97,0.20),rgba(244,162,97,0.08))] text-text-1'
+                                : 'bg-white/[0.03] text-text-3 hover:text-text-1'
+                        }`}
+                    >
+                        Use "{normalizedQuery}"
+                    </motion.button>
+                ) : null}
                 {filteredArtists.map((artist) => {
                     const active = value === artist.value;
 
@@ -390,8 +455,9 @@ export default function GamePlayer() {
     const isResult = phase === 'result' && !!result;
     const isCorrect = !!result?.correct;
     const isUrgent = timerActive && timeLeft <= 2;
-    const selectedArtistLabel =
-        artistOptions.find((artist) => artist.value === filters.artist)?.label ?? 'Any artist';
+    const selectedArtistLabel = filters.artist === 'all'
+        ? 'Any artist'
+        : (artistOptions.find((artist) => artist.value === filters.artist)?.label ?? filters.artist);
     const liveMultiplier = result?.multiplier ?? getLiveMultiplier(streak);
 
     const topTitle = isResult
@@ -426,6 +492,7 @@ export default function GamePlayer() {
                     value={filters.artist}
                     onChange={handleArtistChange}
                     disabled={phase === 'answered' || isLoading}
+                    language={filters.language}
                 />
                 <div className="grid gap-6 md:grid-cols-3">
                     <FilterRail label="Genre" options={GENRE_OPTIONS} value={filters.genre} onChange={handleGenreChange} disabled={phase === 'answered' || isLoading} />

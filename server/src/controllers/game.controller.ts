@@ -99,9 +99,25 @@ const LANGUAGE_QUERY_MAP: Record<GameLanguage, string[]> = {
     korean: ['bts', 'blackpink', 'newjeans', 'jung kook'],
     spanish: ['bad bunny', 'karol g', 'rosalia', 'rauw alejandro'],
 };
+type ItunesArtistSearchResult = {
+    artistId?: number;
+    artistName?: string;
+};
+const INDIA_FOCUSED_LANGUAGES: GameLanguage[] = ['hindi', 'punjabi'];
+const INDIA_FOCUSED_ARTISTS = [
+    'arijit singh',
+    'pritam',
+    'shreya ghoshal',
+    'atif aslam',
+    'diljit dosanjh',
+    'karan aujla',
+    'ap dhillon',
+    'shubh',
+];
 
 const songPoolCache = new Map<string, { songs: SongPreview[]; fetchedAt: number }>();
 const inFlightSongPools = new Map<string, Promise<SongPreview[]>>();
+const recentCorrectByCacheKey = new Map<string, string[]>();
 
 const hmacSign = (data: string): string =>
     crypto.createHmac('sha256', env.GAME_SECRET).update(data).digest('hex');
@@ -117,6 +133,45 @@ const shuffle = <T>(arr: T[]): T[] => [...arr].sort(() => Math.random() - 0.5);
 
 const normalizeTitle = (value: string): string =>
     value.toLowerCase().trim().replace(/\s+/g, ' ');
+
+const normalizeArtistKey = (value: string): string =>
+    normalizeTitle(value)
+        .replace(/\s*(feat\.?|ft\.?|featuring)\s+.+$/i, '')
+        .replace(/[^\p{L}\p{N}\s&]/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+const normalizeTrackTitleKey = (value: string): string =>
+    normalizeTitle(value)
+        .replace(/\s*(feat\.?|ft\.?|featuring)\s+.+$/i, '')
+        .replace(/\s*[\(\[].*?(remaster|live|acoustic|version|edit|mix|mono|stereo|deluxe).*?[\)\]]/gi, '')
+        .replace(/\s+-\s*(remaster|live|acoustic|version|edit|mix).*/gi, '')
+        .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+const artistTokens = (value: string): string[] =>
+    normalizeArtistKey(value)
+        .split(' ')
+        .map((token) => token.trim())
+        .filter((token) => token.length >= 2 && token !== 'the');
+
+const isLikelySameArtist = (requestedArtist: string, candidateArtist: string): boolean => {
+    const requestedTokens = artistTokens(requestedArtist);
+    if (requestedTokens.length === 0) return true;
+
+    const candidateTokens = artistTokens(candidateArtist);
+    if (candidateTokens.length === 0) return false;
+
+    return requestedTokens.every((requestedToken) =>
+        candidateTokens.some(
+            (candidateToken) =>
+                candidateToken === requestedToken ||
+                candidateToken.startsWith(requestedToken) ||
+                requestedToken.startsWith(candidateToken)
+        )
+    );
+};
 
 const dedupeQueries = (queries: string[]): string[] => {
     const seen = new Set<string>();
@@ -150,7 +205,7 @@ const parseFilters = (source: Partial<Record<'genre' | 'language' | 'difficulty'
 
 const getQueryTerms = (filters: GameFilters): string[] => {
     if (filters.artist !== 'all') {
-        return [filters.artist];
+        return [filters.artist, `${filters.artist} songs`];
     }
 
     const genreTerms = GENRE_QUERY_MAP[filters.genre];
@@ -176,6 +231,23 @@ const getQueryTerms = (filters: GameFilters): string[] => {
 };
 
 const filtersCacheKey = (filters: GameFilters): string => `${filters.genre}:${filters.language}:${filters.difficulty}:${filters.artist}`;
+
+const rememberCorrectSong = (cacheKey: string, songId: string) => {
+    const existing = recentCorrectByCacheKey.get(cacheKey) ?? [];
+    const next = [songId, ...existing.filter((id) => id !== songId)].slice(0, 16);
+    recentCorrectByCacheKey.set(cacheKey, next);
+};
+
+const shouldUseIndiaCatalog = (filters: GameFilters): boolean => {
+    if (INDIA_FOCUSED_LANGUAGES.includes(filters.language)) return true;
+    if (filters.artist === 'all') return false;
+
+    const normalizedArtist = normalizeTitle(filters.artist);
+    return INDIA_FOCUSED_ARTISTS.some((artist) => normalizedArtist.includes(artist));
+};
+
+const getCatalogCountry = (filters: GameFilters): string =>
+    shouldUseIndiaCatalog(filters) ? 'in' : env.GAME_ITUNES_COUNTRY;
 
 const applyDifficulty = (songs: SongPreview[], difficulty: GameDifficulty): SongPreview[] => {
     const byRecent = [...songs].sort((a, b) => b.releaseYear - a.releaseYear);
@@ -249,7 +321,11 @@ const getJson = async (url: string): Promise<unknown> => {
     return response.json();
 };
 
-const fetchItunesSongPool = async (queries: string[]): Promise<SongPreview[]> => {
+const fetchItunesSongPool = async (
+    queries: string[],
+    country: string,
+    selectedArtist?: string
+): Promise<SongPreview[]> => {
     const payloads = await Promise.all(
         dedupeQueries(queries).map(async (term) => {
             const params = new URLSearchParams({
@@ -257,7 +333,7 @@ const fetchItunesSongPool = async (queries: string[]): Promise<SongPreview[]> =>
                 media: 'music',
                 entity: 'song',
                 limit: String(ITUNES_TRACK_LIMIT),
-                country: env.GAME_ITUNES_COUNTRY,
+                country,
             });
 
             return getJson(`${ITUNES_SEARCH_ENDPOINT}?${params.toString()}`) as Promise<{
@@ -277,7 +353,10 @@ const fetchItunesSongPool = async (queries: string[]): Promise<SongPreview[]> =>
 
         const title = item.trackName.trim();
         const artist = item.artistName.trim();
-        const dedupeKey = `${normalizeTitle(title)}::${artist.toLowerCase()}`;
+        if (selectedArtist && !isLikelySameArtist(selectedArtist, artist)) {
+            continue;
+        }
+        const dedupeKey = `${normalizeTrackTitleKey(title)}::${normalizeArtistKey(artist)}`;
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
 
@@ -309,8 +388,9 @@ const getSongPool = async (filters: GameFilters): Promise<SongPreview[]> => {
     if (inFlightSongPools.has(cacheKey)) return inFlightSongPools.get(cacheKey)!;
 
     const queryTerms = getQueryTerms(filters);
+    const country = getCatalogCountry(filters);
 
-    const nextFetch = fetchItunesSongPool(queryTerms)
+    const nextFetch = fetchItunesSongPool(queryTerms, country, filters.artist !== 'all' ? filters.artist : undefined)
         .then((songs) => {
             const preparedSongs = applyDifficulty(songs, filters.difficulty);
             if (preparedSongs.length >= 4) {
@@ -334,13 +414,24 @@ const getSongPool = async (filters: GameFilters): Promise<SongPreview[]> => {
     return songs;
 };
 
-const buildQuestionWithExclusion = (songs: SongPreview[], excludeSongIds: string[] = []): {
+const buildQuestionWithExclusion = (songs: SongPreview[], excludeSongIds: string[] = [], cacheKey: string): {
     correct: SongPreview;
     options: string[];
 } => {
-    const excluded = new Set(excludeSongIds);
-    const candidates = songs.filter((song) => !excluded.has(`${song.id}:${hmacSign(song.id)}`));
-    const source = candidates.length >= 4 ? candidates : songs;
+    const explicitExcluded = new Set(
+        excludeSongIds
+            .map((token) => token.split(':')[0]?.trim())
+            .filter(Boolean)
+    );
+    const recentCorrect = new Set(recentCorrectByCacheKey.get(cacheKey) ?? []);
+    const excludedIds = new Set([...explicitExcluded, ...recentCorrect]);
+    const candidates = songs.filter((song) => !excludedIds.has(song.id));
+    const fallbackWithoutExplicitExclusions = songs.filter((song) => !explicitExcluded.has(song.id));
+    const source = candidates.length >= 4
+        ? candidates
+        : fallbackWithoutExplicitExclusions.length >= 4
+            ? fallbackWithoutExplicitExclusions
+            : songs;
     const correct = source[Math.floor(Math.random() * source.length)];
 
     let others = shuffle(
@@ -375,11 +466,13 @@ export const getQuestion = async (_req: Request, res: Response): Promise<void> =
             difficulty: _req.query.difficulty,
             artist: _req.query.artist,
         });
+        const cacheKey = filtersCacheKey(filters);
         const songs = await getSongPool(filters);
         const excludeSongIds = typeof _req.query.excludeSongIds === 'string'
             ? _req.query.excludeSongIds.split(',').map((item) => item.trim()).filter(Boolean)
             : [];
-        const { correct, options } = buildQuestionWithExclusion(songs, excludeSongIds);
+        const { correct, options } = buildQuestionWithExclusion(songs, excludeSongIds, cacheKey);
+        rememberCorrectSong(cacheKey, correct.id);
         const signedId = hmacSign(correct.id);
 
         res.json(successResponse({
@@ -566,6 +659,54 @@ export const rateTrack = async (req: Request, res: Response): Promise<void> => {
 // GET /game/artists
 export const getArtists = async (_req: Request, res: Response): Promise<void> => {
     res.json(successResponse(CURATED_ARTISTS));
+};
+
+// GET /game/artists/search
+export const searchArtists = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const query = typeof req.query.q === 'string' ? normalizeTitle(req.query.q) : '';
+        const language = typeof req.query.language === 'string' ? normalizeTitle(req.query.language) : 'all';
+
+        if (!query || query.length < 2) {
+            res.json(successResponse([]));
+            return;
+        }
+
+        const country = (language === 'hindi' || language === 'punjabi') ? 'in' : env.GAME_ITUNES_COUNTRY;
+        const params = new URLSearchParams({
+            term: query,
+            entity: 'musicArtist',
+            limit: '30',
+            country,
+        });
+
+        const payload = await getJson(`${ITUNES_SEARCH_ENDPOINT}?${params.toString()}`) as {
+            results?: ItunesArtistSearchResult[];
+        };
+        const rawResults = Array.isArray(payload.results) ? payload.results : [];
+
+        const seen = new Set<string>();
+        const artists = rawResults
+            .filter((item) => typeof item.artistName === 'string' && item.artistName.trim().length > 0)
+            .map((item) => item.artistName!.trim())
+            .filter((name) => isLikelySameArtist(query, name))
+            .filter((name) => {
+                const key = normalizeArtistKey(name);
+                if (!key || seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            })
+            .slice(0, 15)
+            .map((name) => ({
+                label: name,
+                value: normalizeTitle(name),
+                language: 'all' as GameLanguage,
+            }));
+
+        res.json(successResponse(artists));
+    } catch {
+        res.status(500).json(errorResponse('Artist search unavailable'));
+    }
 };
 
 // GET /game/stats

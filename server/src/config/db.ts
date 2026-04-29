@@ -9,9 +9,6 @@ export const connectDB = async (): Promise<void> => {
         console.log(`MongoDB connected: ${conn.connection.host}`);
     } catch (error) {
         console.error('MongoDB connection failed:', error);
-        if (env.NODE_ENV === 'production') {
-            process.exit(1);
-        }
         console.warn('MongoDB is unavailable. Running with local dev-data.json fallback.');
     }
 };

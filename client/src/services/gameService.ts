@@ -1,5 +1,5 @@
 import api from './api';
-import type { GameFilters, LeaderboardPeriod } from '../types/game';
+import type { GameFilters, GameLanguage, LeaderboardPeriod } from '../types/game';
 import type { LyricGuessRound, MeaningEntry } from '../types/culture';
 
 export const gameService = {
@@ -24,6 +24,10 @@ export const gameService = {
         }),
     getHistory: () => api.get('/game/history'),
     getArtists: () => api.get('/game/artists'),
+    searchArtists: (query: string, language: GameLanguage) =>
+        api.get('/game/artists/search', {
+            params: { q: query, language },
+        }),
     buildLyricGuessRounds: (entries: MeaningEntry[]): LyricGuessRound[] =>
         entries.map((entry, index) => ({
             id: `${entry.trackId}-lyric-round`,
