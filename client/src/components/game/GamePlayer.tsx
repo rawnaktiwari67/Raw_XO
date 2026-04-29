@@ -134,22 +134,36 @@ function ArtistPicker({
     const [liveArtists, setLiveArtists] = useState<GameArtistOption[]>([]);
     const normalizedQuery = query.trim().replace(/\s+/g, ' ');
     const customArtistValue = normalizedQuery.toLowerCase();
-    const exactPreset = artists.find((artist) => artist.value === customArtistValue);
-    const filteredPresetArtists = artists
-        .filter((artist) => artist.label.toLowerCase().includes(query.toLowerCase()))
-        .slice(0, 8);
+    const visiblePresetArtists = artists.filter((artist) => language === 'all' || artist.language === language || artist.language === 'all');
+    const exactPreset = visiblePresetArtists.find((artist) => artist.value === customArtistValue);
+    const selectedArtist = value === 'all'
+        ? null
+        : artists.find((artist) => artist.value === value) ?? { label: value, value, language };
+    const filteredPresetArtists = visiblePresetArtists
+        .filter((artist) => {
+            if (!normalizedQuery) return true;
+            return artist.label.toLowerCase().includes(normalizedQuery.toLowerCase());
+        })
+        .slice(0, normalizedQuery ? 10 : 18);
     const filteredArtists = [...filteredPresetArtists, ...liveArtists]
         .filter((artist, index, list) => list.findIndex((item) => item.value === artist.value) === index)
-        .slice(0, 12);
+        .slice(0, normalizedQuery ? 14 : 18);
     const canUseCustomArtist = normalizedQuery.length >= 2 && !exactPreset;
 
     const applyCustomArtist = () => {
         if (exactPreset) {
             onChange(exactPreset.value);
+            setQuery('');
             return;
         }
         if (!canUseCustomArtist) return;
         onChange(customArtistValue);
+        setQuery('');
+    };
+
+    const selectArtist = (artist: string) => {
+        onChange(artist);
+        setQuery('');
     };
 
     useEffect(() => {
@@ -177,20 +191,26 @@ function ArtistPicker({
     }, [language, normalizedQuery]);
 
     return (
-        <div className="space-y-2">
-            <div className="flex items-center justify-between gap-4">
-                <p className="label-xs">Artist</p>
+        <div className="rounded-[1.25rem] bg-white/[0.025] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+            <div className="mb-4 flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                    <p className="label-xs">Artist Pool</p>
+                    <p className="mt-2 truncate text-sm font-medium text-text-1">
+                        {selectedArtist ? selectedArtist.label : 'All available artists'}
+                    </p>
+                </div>
                 {value !== 'all' ? (
                     <button
                         type="button"
-                        onClick={() => onChange('all')}
+                        onClick={() => selectArtist('all')}
                         disabled={disabled}
-                        className="text-[11px] uppercase tracking-[0.12em] text-text-4 transition-colors hover:text-text-1"
+                        className="rounded-full bg-white/[0.04] px-3 py-2 text-[10px] uppercase tracking-[0.12em] text-text-3 transition-colors hover:text-text-1 disabled:opacity-50"
                     >
                         Clear
                     </button>
                 ) : null}
             </div>
+
             <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -199,62 +219,67 @@ function ArtistPicker({
                     event.preventDefault();
                     applyCustomArtist();
                 }}
-                placeholder="Search artist"
+                placeholder="Search any artist"
                 disabled={disabled}
-                className="h-12 w-full rounded-2xl bg-white/[0.03] px-4 text-sm text-text-1 outline-none transition-colors placeholder:text-text-4 focus:bg-white/[0.045]"
+                className="h-12 w-full rounded-[1rem] bg-black/15 px-4 text-sm text-text-1 outline-none ring-1 ring-white/[0.04] transition-all placeholder:text-text-4 focus:bg-black/20 focus:ring-amber/30"
             />
-            <div className="flex flex-wrap gap-2">
-                <motion.button
-                    type="button"
-                    whileHover={disabled ? undefined : { y: -1, scale: 1.01 }}
-                    whileTap={disabled ? undefined : { scale: 0.99 }}
-                    onClick={() => onChange('all')}
-                    disabled={disabled}
-                    className={`rounded-full px-4 py-2 text-[11px] uppercase tracking-[0.12em] transition-all duration-300 ${
-                        value === 'all'
-                            ? 'bg-[linear-gradient(180deg,rgba(244,162,97,0.20),rgba(244,162,97,0.08))] text-text-1'
-                            : 'bg-white/[0.03] text-text-3 hover:text-text-1'
-                    }`}
-                >
-                    Any
-                </motion.button>
-                {canUseCustomArtist ? (
+
+            <div className="mt-4 max-h-[15rem] overflow-y-auto pr-1 [scrollbar-width:thin]">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-2">
                     <motion.button
                         type="button"
                         whileHover={disabled ? undefined : { y: -1, scale: 1.01 }}
                         whileTap={disabled ? undefined : { scale: 0.99 }}
-                        onClick={applyCustomArtist}
+                        onClick={() => selectArtist('all')}
                         disabled={disabled}
-                        className={`rounded-full px-4 py-2 text-[11px] uppercase tracking-[0.12em] transition-all duration-300 ${
-                            value === customArtistValue
-                                ? 'bg-[linear-gradient(180deg,rgba(244,162,97,0.20),rgba(244,162,97,0.08))] text-text-1'
+                        className={`min-h-11 rounded-[0.9rem] px-3 py-2 text-left text-[11px] uppercase tracking-[0.11em] transition-all duration-300 ${
+                            value === 'all'
+                                ? 'bg-[linear-gradient(180deg,rgba(244,162,97,0.22),rgba(244,162,97,0.08))] text-text-1 ring-1 ring-amber/20'
                                 : 'bg-white/[0.03] text-text-3 hover:text-text-1'
-                        }`}
+                        } disabled:opacity-60`}
                     >
-                        Use "{normalizedQuery}"
+                        Any Artist
                     </motion.button>
-                ) : null}
-                {filteredArtists.map((artist) => {
-                    const active = value === artist.value;
 
-                    return (
+                    {canUseCustomArtist ? (
                         <motion.button
-                            key={artist.value}
                             type="button"
                             whileHover={disabled ? undefined : { y: -1, scale: 1.01 }}
                             whileTap={disabled ? undefined : { scale: 0.99 }}
-                            onClick={() => onChange(artist.value)}
+                            onClick={applyCustomArtist}
                             disabled={disabled}
-                            className={`rounded-full px-4 py-2 text-[11px] uppercase tracking-[0.12em] transition-all duration-300 ${
-                                active
-                                    ? 'bg-[linear-gradient(180deg,rgba(244,162,97,0.20),rgba(244,162,97,0.08))] text-text-1'
-                                    : 'bg-white/[0.03] text-text-3 hover:text-text-1'
-                            }`}
+                            className="min-h-11 rounded-[0.9rem] bg-amber/10 px-3 py-2 text-left text-[11px] uppercase tracking-[0.11em] text-text-1 ring-1 ring-amber/20 transition-all duration-300 disabled:opacity-60"
                         >
-                            {artist.label}
+                            Use {normalizedQuery}
                         </motion.button>
-                    );
-                })}
+                    ) : null}
+
+                    {filteredArtists.map((artist) => {
+                        const active = value === artist.value;
+
+                        return (
+                            <motion.button
+                                key={artist.value}
+                                type="button"
+                                whileHover={disabled ? undefined : { y: -1, scale: 1.01 }}
+                                whileTap={disabled ? undefined : { scale: 0.99 }}
+                                onClick={() => selectArtist(artist.value)}
+                                disabled={disabled}
+                                className={`min-h-11 rounded-[0.9rem] px-3 py-2 text-left text-[11px] uppercase tracking-[0.11em] transition-all duration-300 ${
+                                    active
+                                        ? 'bg-[linear-gradient(180deg,rgba(244,162,97,0.22),rgba(244,162,97,0.08))] text-text-1 ring-1 ring-amber/20'
+                                        : 'bg-white/[0.03] text-text-3 hover:text-text-1'
+                                } disabled:opacity-60`}
+                            >
+                                <span className="block truncate">{artist.label}</span>
+                            </motion.button>
+                        );
+                    })}
+                </div>
+
+                {filteredArtists.length === 0 && !canUseCustomArtist ? (
+                    <p className="py-6 text-center text-sm text-text-4">No artists found.</p>
+                ) : null}
             </div>
         </div>
     );
@@ -358,6 +383,12 @@ export default function GamePlayer() {
     useEffect(() => {
         void fetchArtists();
     }, [fetchArtists]);
+
+    useEffect(() => {
+        if (phase === 'idle' && !question) {
+            resetPlaybackState();
+        }
+    }, [phase, question?.songId]);
 
     useEffect(() => {
         if (phase !== 'playing' || !question) return;

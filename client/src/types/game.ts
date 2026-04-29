@@ -37,6 +37,7 @@ export interface GameResult {
     artworkUrl?: string;
     trackUrl?: string;
     trackId?: string;
+    songKey?: string;
     filters?: GameFilters;
 }
 

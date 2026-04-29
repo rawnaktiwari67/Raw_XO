@@ -19,6 +19,15 @@ import { gameService } from '../services/gameService';
 type Phase = 'idle' | 'playing' | 'answered' | 'result';
 
 const getApiData = <T>(response: { data?: { data?: T } }): T | undefined => response.data?.data;
+const getApiError = (error: unknown, fallback: string): string => {
+    if (typeof error === 'object' && error && 'response' in error) {
+        const response = (error as { response?: { data?: { error?: unknown; message?: unknown } } }).response;
+        const message = response?.data?.error ?? response?.data?.message;
+        if (typeof message === 'string' && message.trim()) return message;
+    }
+
+    return fallback;
+};
 
 interface GameState {
     question: GameQuestion | null;
@@ -107,8 +116,8 @@ export const useGameStore = create<GameState>((set, get) => ({
                 phase: 'playing',
                 isLoading: false,
             });
-        } catch {
-            set({ isLoading: false, error: 'Could not load a song clip.' });
+        } catch (error) {
+            set({ isLoading: false, error: getApiError(error, 'Could not load a song clip.') });
         }
     },
 
@@ -131,7 +140,7 @@ export const useGameStore = create<GameState>((set, get) => ({
                 sessionScore: s.sessionScore + (result.pointsAwarded ?? 0),
                 roundsPlayedInSession: s.roundsPlayedInSession + 1,
                 correctAnswersInSession: s.correctAnswersInSession + (result.correct ? 1 : 0),
-                recentSongIds: result.trackId ? [result.trackId, ...s.recentSongIds.filter((item) => item !== result.trackId)].slice(0, 18) : s.recentSongIds,
+                recentSongIds: result.songKey ? [result.songKey, ...s.recentSongIds.filter((item) => item !== result.songKey)].slice(0, 18) : s.recentSongIds,
             }));
             const nextState = get();
             if (nextState.roundsPlayedInSession > 0 && nextState.roundsPlayedInSession % 6 === 0) {
@@ -149,8 +158,13 @@ export const useGameStore = create<GameState>((set, get) => ({
             get().fetchStats();
             get().fetchHistory();
             get().fetchLeaderboard(get().leaderboardPeriod);
-        } catch {
-            set({ phase: 'idle', error: 'Could not submit this guess.' });
+        } catch (error) {
+            set({
+                phase: 'idle',
+                question: null,
+                selectedAnswer: null,
+                error: getApiError(error, 'Could not submit this guess.'),
+            });
         }
     },
 
@@ -167,7 +181,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
     },
 
-    resetRound: () => set({ question: null, phase: 'idle', selectedAnswer: null, result: null, lastBrokenStreak: null }),
+    resetRound: () => set({ question: null, phase: 'idle', selectedAnswer: null, result: null, lastBrokenStreak: null, error: null }),
     dismissSessionSummary: () => set({ isSummaryVisible: false, sessionSummary: null }),
 
     fetchStats: async () => {

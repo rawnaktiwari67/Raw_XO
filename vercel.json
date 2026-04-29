@@ -1,5 +1,5 @@
 {
-  "installCommand": "npm ci --prefix server --include=dev && npm ci --prefix client --include=dev",
+  "installCommand": "npm ci --include=dev",
   "buildCommand": "npm run build:apps",
   "outputDirectory": "client/dist",
   "functions": {

@@ -72,6 +72,18 @@ const CURATED_ARTISTS: ArtistProfile[] = [
     { label: 'Taylor Swift', value: 'taylor swift', language: 'english' },
     { label: 'Billie Eilish', value: 'billie eilish', language: 'english' },
     { label: 'Dua Lipa', value: 'dua lipa', language: 'english' },
+    { label: 'SZA', value: 'sza', language: 'english' },
+    { label: 'Frank Ocean', value: 'frank ocean', language: 'english' },
+    { label: 'Brent Faiyaz', value: 'brent faiyaz', language: 'english' },
+    { label: 'Post Malone', value: 'post malone', language: 'english' },
+    { label: 'Ariana Grande', value: 'ariana grande', language: 'english' },
+    { label: 'Doja Cat', value: 'doja cat', language: 'english' },
+    { label: 'Bad Bunny', value: 'bad bunny', language: 'spanish' },
+    { label: 'Karol G', value: 'karol g', language: 'spanish' },
+    { label: 'Rosalia', value: 'rosalia', language: 'spanish' },
+    { label: 'BTS', value: 'bts', language: 'korean' },
+    { label: 'BLACKPINK', value: 'blackpink', language: 'korean' },
+    { label: 'Jung Kook', value: 'jung kook', language: 'korean' },
     { label: 'Arijit Singh', value: 'arijit singh', language: 'hindi' },
     { label: 'Pritam', value: 'pritam', language: 'hindi' },
     { label: 'Shreya Ghoshal', value: 'shreya ghoshal', language: 'hindi' },
@@ -86,14 +98,14 @@ const DEFAULT_ARTIST_QUERIES = ARTIST_QUERIES.length > 0
     : CURATED_ARTISTS.map((artist) => artist.value);
 const GENRE_QUERY_MAP: Record<GameGenre, string[]> = {
     all: DEFAULT_ARTIST_QUERIES,
-    'hip-hop': ['kanye west', 'travis scott', 'drake', 'kendrick lamar'],
-    pop: ['the weeknd', 'dua lipa', 'billie eilish', 'taylor swift'],
-    rnb: ['the weeknd', 'sza', 'frank ocean', 'brent faiyaz'],
-    dance: ['dua lipa', 'calvin harris', 'david guetta', 'charli xcx'],
+    'hip-hop': ['kanye west', 'travis scott', 'drake', 'kendrick lamar', 'post malone', 'doja cat'],
+    pop: ['the weeknd', 'dua lipa', 'billie eilish', 'taylor swift', 'ariana grande', 'bad bunny'],
+    rnb: ['the weeknd', 'sza', 'frank ocean', 'brent faiyaz', 'ariana grande', 'drake'],
+    dance: ['dua lipa', 'calvin harris', 'david guetta', 'charli xcx', 'the weeknd', 'doja cat'],
 };
 const LANGUAGE_QUERY_MAP: Record<GameLanguage, string[]> = {
     all: [],
-    english: ['the weeknd', 'kanye west', 'travis scott', 'drake'],
+    english: ['the weeknd', 'kanye west', 'travis scott', 'drake', 'sza', 'billie eilish', 'dua lipa', 'ariana grande'],
     hindi: ['arijit singh', 'shreya ghoshal', 'pritam', 'atif aslam'],
     punjabi: ['diljit dosanjh', 'karan aujla', 'ap dhillon', 'shubh'],
     korean: ['bts', 'blackpink', 'newjeans', 'jung kook'],
@@ -455,9 +467,27 @@ const getSongPool = async (filters: GameFilters): Promise<SongPreview[]> => {
                 return preparedSongs;
             }
 
-            return cached?.songs ?? [];
+            if (cached?.songs && cached.songs.length >= 4) {
+                return cached.songs;
+            }
+
+            if (filters.artist !== 'all') {
+                return getSongPool({ ...filters, artist: 'all' });
+            }
+
+            return [];
         })
-        .catch(() => cached?.songs ?? [])
+        .catch(() => {
+            if (cached?.songs && cached.songs.length >= 4) {
+                return cached.songs;
+            }
+
+            if (filters.artist !== 'all') {
+                return getSongPool({ ...filters, artist: 'all' });
+            }
+
+            return [];
+        })
         .finally(() => {
             inFlightSongPools.delete(cacheKey);
         });
@@ -625,6 +655,7 @@ export const submitAnswer = async (req: Request, res: Response): Promise<void> =
             artworkUrl: song.artworkUrl,
             trackUrl: song.trackUrl,
             trackId: createSongToken(song),
+            songKey: song.id,
             xpEarned,
             pointsAwarded,
             speedBonus,
