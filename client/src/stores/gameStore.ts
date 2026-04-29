@@ -18,6 +18,8 @@ import { gameService } from '../services/gameService';
 
 type Phase = 'idle' | 'playing' | 'answered' | 'result';
 
+const getApiData = <T>(response: { data?: { data?: T } }): T | undefined => response.data?.data;
+
 interface GameState {
     question: GameQuestion | null;
     phase: Phase;
@@ -96,9 +98,12 @@ export const useGameStore = create<GameState>((set, get) => ({
         set({ isLoading: true, question: null, result: null, selectedAnswer: null, phase: 'idle', error: null, lastBrokenStreak: null });
         try {
             const res = await gameService.getQuestion(filters, excludeSongIds);
+            const question = getApiData<GameQuestion>(res);
+            if (!question) throw new Error('Invalid question payload');
+
             set({
-                question: res.data.data,
-                roundFilters: res.data.data.filters ?? filters,
+                question,
+                roundFilters: question.filters ?? filters,
                 phase: 'playing',
                 isLoading: false,
             });
@@ -113,7 +118,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         set({ selectedAnswer: answer, phase: 'answered' });
         try {
             const res = await gameService.submitAnswer(question.songId, answer, streak, responseTimeMs, roundFilters);
-            const result: GameResult = res.data.data;
+            const result = getApiData<GameResult>(res);
+            if (!result) throw new Error('Invalid answer payload');
+
             const newStreak = result.correct ? streak + 1 : 0;
             set((s) => ({
                 result,
@@ -166,7 +173,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     fetchStats: async () => {
         try {
             const res = await gameService.getStats();
-            set({ stats: res.data.data });
+            set({ stats: getApiData<GameStats>(res) ?? null });
         } catch {
             set({ stats: null });
         }
@@ -174,24 +181,35 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     fetchLeaderboard: async (period) => {
         const requestedPeriod = period ?? get().leaderboardPeriod;
-        const res = await gameService.getLeaderboard(requestedPeriod);
-        const payload: LeaderboardData = res.data.data;
-        set({
-            leaderboard: payload.entries,
-            leaderboardRank: payload.userRank,
-            leaderboardPeriod: payload.period ?? requestedPeriod,
-        });
+        try {
+            const res = await gameService.getLeaderboard(requestedPeriod);
+            const payload = getApiData<LeaderboardData>(res);
+
+            set({
+                leaderboard: Array.isArray(payload?.entries) ? payload.entries : [],
+                leaderboardRank: payload?.userRank ?? null,
+                leaderboardPeriod: payload?.period ?? requestedPeriod,
+            });
+        } catch {
+            set({ leaderboard: [], leaderboardRank: null, leaderboardPeriod: requestedPeriod });
+        }
     },
 
     fetchHistory: async () => {
-        const res = await gameService.getHistory();
-        set({ history: res.data.data });
+        try {
+            const res = await gameService.getHistory();
+            const history = getApiData<GameSession[]>(res);
+            set({ history: Array.isArray(history) ? history : [] });
+        } catch {
+            set({ history: [] });
+        }
     },
 
     fetchArtists: async () => {
         try {
             const res = await gameService.getArtists();
-            set({ artistOptions: res.data.data });
+            const artists = getApiData<GameArtistOption[]>(res);
+            set({ artistOptions: Array.isArray(artists) ? artists : [] });
         } catch {
             set({ artistOptions: [] });
         }
