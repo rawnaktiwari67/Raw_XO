@@ -129,6 +129,63 @@ const hmacVerify = (data: string, sig: string): boolean => {
     return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(sig));
 };
 
+const tokenKey = (): Buffer =>
+    crypto.createHash('sha256').update(env.GAME_SECRET).digest();
+
+const createSongToken = (song: SongPreview): string => {
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', tokenKey(), iv);
+    const encrypted = Buffer.concat([
+        cipher.update(JSON.stringify(song), 'utf8'),
+        cipher.final(),
+    ]);
+    const authTag = cipher.getAuthTag();
+
+    return [
+        iv.toString('base64url'),
+        encrypted.toString('base64url'),
+        authTag.toString('base64url'),
+    ].join('.');
+};
+
+const decodeSongToken = (token: string): SongPreview | null => {
+    try {
+        const [ivValue, encryptedValue, authTagValue] = token.split('.');
+        if (!ivValue || !encryptedValue || !authTagValue) return null;
+
+        const decipher = crypto.createDecipheriv(
+            'aes-256-gcm',
+            tokenKey(),
+            Buffer.from(ivValue, 'base64url')
+        );
+        decipher.setAuthTag(Buffer.from(authTagValue, 'base64url'));
+
+        const decrypted = Buffer.concat([
+            decipher.update(Buffer.from(encryptedValue, 'base64url')),
+            decipher.final(),
+        ]);
+        const parsed = JSON.parse(decrypted.toString('utf8')) as Partial<SongPreview>;
+
+        if (
+            !parsed.id ||
+            !parsed.title ||
+            !parsed.artist ||
+            !parsed.snippetUrl ||
+            typeof parsed.album !== 'string' ||
+            typeof parsed.releaseYear !== 'number' ||
+            typeof parsed.durationMs !== 'number' ||
+            typeof parsed.artworkUrl !== 'string' ||
+            typeof parsed.trackUrl !== 'string'
+        ) {
+            return null;
+        }
+
+        return parsed as SongPreview;
+    } catch {
+        return null;
+    }
+};
+
 const shuffle = <T>(arr: T[]): T[] => [...arr].sort(() => Math.random() - 0.5);
 
 const normalizeTitle = (value: string): string =>
@@ -473,12 +530,11 @@ export const getQuestion = async (_req: Request, res: Response): Promise<void> =
             : [];
         const { correct, options } = buildQuestionWithExclusion(songs, excludeSongIds, cacheKey);
         rememberCorrectSong(cacheKey, correct.id);
-        const signedId = hmacSign(correct.id);
 
         res.json(successResponse({
             snippetUrl: correct.snippetUrl,
             options,
-            songId: `${correct.id}:${signedId}`,
+            songId: createSongToken(correct),
             artistName: correct.artist,
             filters,
         }));
@@ -496,8 +552,8 @@ export const submitAnswer = async (req: Request, res: Response): Promise<void> =
             return;
         }
 
-        const [id, sig] = String(songId).split(':');
-        if (!id || !hmacVerify(id, sig ?? '')) {
+        const song = decodeSongToken(String(songId));
+        if (!song) {
             res.status(400).json(errorResponse('Invalid song token'));
             return;
         }
@@ -508,12 +564,6 @@ export const submitAnswer = async (req: Request, res: Response): Promise<void> =
             difficulty: req.body.difficulty,
             artist: req.body.artist,
         });
-        const songs = await getSongPool(filters);
-        const song = songs.find((item) => item.id === id);
-        if (!song) {
-            res.status(404).json(errorResponse('Song no longer available, fetch a new round'));
-            return;
-        }
 
         const correct = matchesGuess(String(answer), song);
         const streak = Number(req.body.streak) || 0;
@@ -574,7 +624,7 @@ export const submitAnswer = async (req: Request, res: Response): Promise<void> =
             album: song.album,
             artworkUrl: song.artworkUrl,
             trackUrl: song.trackUrl,
-            trackId: `${song.id}:${hmacSign(song.id)}`,
+            trackId: createSongToken(song),
             xpEarned,
             pointsAwarded,
             speedBonus,
@@ -598,22 +648,9 @@ export const rateTrack = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        const [id, sig] = String(trackId).split(':');
-        if (!id || !hmacVerify(id, sig ?? '')) {
-            res.status(400).json(errorResponse('Invalid track token'));
-            return;
-        }
-
-        const filters = parseFilters({
-            genre: req.body.genre,
-            language: req.body.language,
-            difficulty: req.body.difficulty,
-            artist: req.body.artist,
-        });
-        const songs = await getSongPool(filters);
-        const song = songs.find((item) => item.id === id);
+        const song = decodeSongToken(String(trackId));
         if (!song) {
-            res.status(404).json(errorResponse('Track no longer available'));
+            res.status(400).json(errorResponse('Invalid track token'));
             return;
         }
 
