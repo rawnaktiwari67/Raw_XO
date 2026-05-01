@@ -22,31 +22,65 @@ const allowedOrigins = env.CLIENT_ORIGIN
     .map((origin) => origin.trim())
     .filter(Boolean);
 
-if (env.CLERK_SECRET_KEY) {
-    app.use(clerkMiddleware());
-}
+// ─── CORS ─────────────────────────────────────────────────────────────────────
+// MUST come BEFORE clerkMiddleware so preflight OPTIONS requests receive the
+// correct CORS headers before Clerk attempts to verify auth tokens.
+app.use(helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 
-// Security
-app.use(helmet());
-app.use(cors({
+const corsOptions: cors.CorsOptions = {
     origin: (origin, callback) => {
-        if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+        // No origin = same-origin or server-to-server — always allow
+        if (!origin) {
+            callback(null, true);
+            return;
+        }
+        // If no explicit origins configured, allow all (open/dev mode)
+        if (allowedOrigins.length === 0) {
+            callback(null, true);
+            return;
+        }
+        // Allow explicitly configured origins
+        if (allowedOrigins.includes(origin)) {
+            callback(null, true);
+            return;
+        }
+        // Allow Vercel deployment and preview URLs (*.vercel.app)
+        if (origin.endsWith('.vercel.app')) {
             callback(null, true);
             return;
         }
         callback(new Error('Origin not allowed by CORS'));
     },
     credentials: true,
-}));
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+};
 
-// Parsing
+app.use(cors(corsOptions));
+
+// Explicitly respond to all OPTIONS preflight requests before any auth check
+app.options('*', cors(corsOptions));
+
+// ─── Clerk ────────────────────────────────────────────────────────────────────
+if (env.CLERK_SECRET_KEY && env.CLERK_PUBLISHABLE_KEY) {
+    app.use(clerkMiddleware({
+        publishableKey: env.CLERK_PUBLISHABLE_KEY,
+        secretKey: env.CLERK_SECRET_KEY,
+    }));
+} else if (env.CLERK_SECRET_KEY || env.CLERK_PUBLISHABLE_KEY) {
+    console.warn('Clerk is partially configured. Set both CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY to enable authenticated API routes.');
+}
+
+// ─── Parsing ──────────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10kb' }));
 app.use(cookieParser());
 
-// Global rate limit
+// ─── Rate limiting ────────────────────────────────────────────────────────────
 app.use('/api', apiLimiter);
 
-// Routes
+// ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/threads', threadRoutes);
 app.use('/api/v1/comments', commentRoutes);
@@ -56,10 +90,10 @@ app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/eras', eraRoutes);
 app.use('/api/v1/culture', cultureRoutes);
 
-// Health check
+// ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date() }));
 
-// Error handler (must be last)
+// ─── Error handler (must be last) ─────────────────────────────────────────────
 app.use(errorHandler);
 
 export default app;

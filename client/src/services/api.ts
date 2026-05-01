@@ -1,14 +1,5 @@
 import axios from 'axios';
-
-declare global {
-    interface Window {
-        Clerk?: {
-            session?: {
-                getToken: () => Promise<string | null>;
-            };
-        };
-    }
-}
+import { getClerkToken } from './clerkToken';
 
 const api = axios.create({
     baseURL: import.meta.env.VITE_API_URL || '/api/v1',
@@ -17,7 +8,7 @@ const api = axios.create({
 });
 
 api.interceptors.request.use(async (config) => {
-    const token = await window.Clerk?.session?.getToken();
+    const token = await getClerkToken();
 
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
@@ -31,11 +22,26 @@ api.interceptors.response.use(
     (err) => {
         const requestUrl = err.config?.url || '';
         const isAuthRequest = requestUrl.includes('/auth/');
-        const isAuthPage = window.location.pathname === '/login' || window.location.pathname === '/register';
+        const isAuthPage =
+            window.location.pathname === '/login' ||
+            window.location.pathname === '/register';
 
-        if (err.response?.status === 401 && !isAuthRequest && !isAuthPage) {
+        // Only redirect on 401 for truly protected (non-optional) routes.
+        // Game routes (/game/*) use optionalProtect — they return 401 only
+        // for the /auth/* endpoints. Avoid redirect loops when Clerk is active.
+        const isGameRoute = requestUrl.includes('/game/');
+        const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+
+        if (
+            err.response?.status === 401 &&
+            !isAuthRequest &&
+            !isAuthPage &&
+            !isGameRoute &&
+            !clerkEnabled
+        ) {
             window.location.href = '/login';
         }
+
         return Promise.reject(err);
     }
 );
