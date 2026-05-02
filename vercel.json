@@ -1,15 +1,18 @@
 {
+  "framework": null,
   "installCommand": "npm ci --include=dev",
   "buildCommand": "npm run build:apps",
   "outputDirectory": "client/dist",
   "functions": {
     "api/index.ts": {
-      "includeFiles": "server/src/**"
+      "includeFiles": "server/src/**",
+      "memory": 512,
+      "maxDuration": 30
     }
   },
   "rewrites": [
     {
-      "source": "/api/(.*)",
+      "source": "/api/:path*",
       "destination": "/api/index.ts"
     },
     {
