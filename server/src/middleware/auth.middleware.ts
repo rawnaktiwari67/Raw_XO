@@ -13,7 +13,7 @@ declare global {
 
 export const protect = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        if (!env.CLERK_SECRET_KEY) {
+        if (!env.CLERK_SECRET_KEY || !env.CLERK_PUBLISHABLE_KEY) {
             res.status(401).json({ success: false, error: 'Clerk is not configured on the server' });
             return;
         }
@@ -38,7 +38,7 @@ export const protect = async (req: Request, res: Response, next: NextFunction): 
 
 export const optionalProtect = async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     try {
-        if (!env.CLERK_SECRET_KEY) {
+        if (!env.CLERK_SECRET_KEY || !env.CLERK_PUBLISHABLE_KEY) {
             req.userId = undefined;
             next();
             return;
