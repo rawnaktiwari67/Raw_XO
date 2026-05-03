@@ -1,18 +1,26 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import app from '../server/src/app';
 import { connectDB } from '../server/src/config/db';
+import { validateEnv } from '../server/src/config/env';
 
-let dbConnectionPromise: Promise<void> | null = null;
+let bootstrapPromise: Promise<void> | null = null;
 
-const ensureDbConnection = async () => {
-    if (!dbConnectionPromise) {
-        dbConnectionPromise = connectDB();
-    }
+const startBackgroundBootstrap = () => {
+    if (bootstrapPromise) return;
 
-    await dbConnectionPromise;
+    bootstrapPromise = (async () => {
+        try {
+            validateEnv();
+        } catch (error) {
+            console.error('[api/bootstrap] Environment validation failed:', error);
+        }
+        await connectDB();
+    })().catch((error) => {
+        console.error('[api/bootstrap] Startup checks failed:', error);
+    });
 };
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
-    await ensureDbConnection();
+    startBackgroundBootstrap();
     return app(req as any, res as any);
 }

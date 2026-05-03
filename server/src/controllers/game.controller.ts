@@ -53,7 +53,15 @@ type ArtistProfile = {
 const ITUNES_SEARCH_ENDPOINT = 'https://itunes.apple.com/search';
 const ITUNES_TRACK_LIMIT = Math.min(
     200,
-    Math.max(20, Number.parseInt(env.GAME_ITUNES_LIMIT, 10) || 80)
+    Math.max(20, Number.parseInt(env.GAME_ITUNES_LIMIT, 10) || 40)
+);
+const ITUNES_TIMEOUT_MS = Math.min(
+    10_000,
+    Math.max(1500, Number.parseInt(env.GAME_ITUNES_TIMEOUT_MS, 10) || 4500)
+);
+const MAX_QUERY_TERMS = Math.min(
+    12,
+    Math.max(2, Number.parseInt(env.GAME_MAX_QUERY_TERMS, 10) || 6)
 );
 const TRACK_CACHE_MS = Math.max(
     60_000,
@@ -253,6 +261,12 @@ const dedupeQueries = (queries: string[]): string[] => {
     });
 };
 
+const selectQueryTerms = (queries: string[]): string[] => {
+    const deduped = dedupeQueries(queries);
+    if (deduped.length <= MAX_QUERY_TERMS) return deduped;
+    return shuffle(deduped).slice(0, MAX_QUERY_TERMS);
+};
+
 const parseFilters = (source: Partial<Record<'genre' | 'language' | 'difficulty' | 'artist', unknown>>): GameFilters => {
     const genreValue = typeof source.genre === 'string' ? source.genre.toLowerCase() : 'all';
     const languageValue = typeof source.language === 'string' ? source.language.toLowerCase() : 'all';
@@ -380,14 +394,22 @@ const matchesGuess = (guess: string, song: SongPreview): boolean => {
 };
 
 const getJson = async (url: string): Promise<unknown> => {
-    const response = await fetch(url, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-    });
-    if (!response.ok) {
-        throw new Error(`iTunes API request failed (${response.status})`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), ITUNES_TIMEOUT_MS);
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { Accept: 'application/json' },
+            signal: controller.signal,
+        });
+        if (!response.ok) {
+            throw new Error(`iTunes API request failed (${response.status})`);
+        }
+        return response.json();
+    } finally {
+        clearTimeout(timeout);
     }
-    return response.json();
 };
 
 const fetchItunesSongPool = async (
@@ -395,8 +417,8 @@ const fetchItunesSongPool = async (
     country: string,
     selectedArtist?: string
 ): Promise<SongPreview[]> => {
-    const payloads = await Promise.all(
-        dedupeQueries(queries).map(async (term) => {
+    const payloads = await Promise.allSettled(
+        selectQueryTerms(queries).map(async (term) => {
             const params = new URLSearchParams({
                 term,
                 media: 'music',
@@ -411,7 +433,11 @@ const fetchItunesSongPool = async (
         })
     );
 
-    const results = payloads.flatMap((payload) => Array.isArray(payload.results) ? payload.results : []);
+    const results = payloads.flatMap((payload) =>
+        payload.status === 'fulfilled' && Array.isArray(payload.value.results)
+            ? payload.value.results
+            : []
+    );
     const seen = new Set<string>();
     const songs: SongPreview[] = [];
 
