@@ -233,6 +233,11 @@ const artistTokens = (value: string): string[] =>
         .map((token) => token.trim())
         .filter((token) => token.length >= 2 && token !== 'the');
 
+const titleTokens = (value: string): string[] =>
+    normalizeTrackTitleKey(value)
+        .split(' ')
+        .filter((token) => token.length >= 3);
+
 const isLikelySameArtist = (requestedArtist: string, candidateArtist: string): boolean => {
     const requestedTokens = artistTokens(requestedArtist);
     if (requestedTokens.length === 0) return true;
@@ -412,6 +417,75 @@ const getJson = async (url: string): Promise<unknown> => {
     }
 };
 
+const songWeight = (song: SongPreview, difficulty: GameDifficulty): number => {
+    const currentYear = new Date().getFullYear();
+    const age = song.releaseYear > 0 ? Math.max(0, currentYear - song.releaseYear) : 8;
+    const durationMinutes = song.durationMs > 0 ? song.durationMs / 60000 : 3.5;
+
+    if (difficulty === 'easy') {
+        return Math.max(1, 18 - age) + Math.max(0, 5 - Math.abs(durationMinutes - 3.4));
+    }
+
+    if (difficulty === 'hard') {
+        return Math.max(1, age + Math.min(durationMinutes, 7));
+    }
+
+    return Math.max(1, 12 - Math.abs(age - 6)) + Math.max(0, 4 - Math.abs(durationMinutes - 3.6));
+};
+
+const pickWeightedSong = (songs: SongPreview[], difficulty: GameDifficulty): SongPreview => {
+    const weights = songs.map((song) => songWeight(song, difficulty));
+    const total = weights.reduce((sum, weight) => sum + weight, 0);
+    let cursor = Math.random() * total;
+
+    for (let index = 0; index < songs.length; index += 1) {
+        cursor -= weights[index];
+        if (cursor <= 0) return songs[index];
+    }
+
+    return songs[songs.length - 1];
+};
+
+const titleOverlapScore = (left: string, right: string): number => {
+    const leftTokens = titleTokens(left);
+    if (leftTokens.length === 0) return 0;
+    const rightTokenSet = new Set(titleTokens(right));
+    return leftTokens.filter((token) => rightTokenSet.has(token)).length;
+};
+
+const distractorScore = (candidate: SongPreview, correct: SongPreview, difficulty: GameDifficulty): number => {
+    const sameArtist = normalizeArtistKey(candidate.artist) === normalizeArtistKey(correct.artist) ? 14 : 0;
+    const sameEra = candidate.releaseYear && correct.releaseYear
+        ? Math.max(0, 8 - Math.abs(candidate.releaseYear - correct.releaseYear))
+        : 1;
+    const titlePenalty = titleOverlapScore(candidate.title, correct.title) * 8;
+
+    if (difficulty === 'easy') {
+        return sameEra - sameArtist - titlePenalty;
+    }
+
+    if (difficulty === 'hard') {
+        return sameArtist + sameEra * 1.2 - titlePenalty;
+    }
+
+    return sameArtist * 0.4 + sameEra - titlePenalty;
+};
+
+const pickDistractors = (songs: SongPreview[], correct: SongPreview, difficulty: GameDifficulty): SongPreview[] => {
+    const seenTitles = new Set([normalizeTrackTitleKey(correct.title)]);
+    const eligible = songs.filter((song) => {
+        if (song.id === correct.id) return false;
+        const titleKey = normalizeTrackTitleKey(song.title);
+        if (!titleKey || seenTitles.has(titleKey)) return false;
+        seenTitles.add(titleKey);
+        return true;
+    });
+
+    return shuffle(eligible)
+        .sort((a, b) => distractorScore(b, correct, difficulty) - distractorScore(a, correct, difficulty))
+        .slice(0, 3);
+};
+
 const fetchItunesSongPool = async (
     queries: string[],
     country: string,
@@ -531,6 +605,7 @@ const buildQuestionWithExclusion = (songs: SongPreview[], excludeSongIds: string
     correct: SongPreview;
     options: string[];
 } => {
+    const difficulty = (cacheKey.split(':')[2] || 'medium') as GameDifficulty;
     const explicitExcluded = new Set(
         excludeSongIds
             .map((token) => token.split(':')[0]?.trim())
@@ -545,19 +620,16 @@ const buildQuestionWithExclusion = (songs: SongPreview[], excludeSongIds: string
         : fallbackWithoutExplicitExclusions.length >= 4
             ? fallbackWithoutExplicitExclusions
             : songs;
-    const correct = source[Math.floor(Math.random() * source.length)];
+    const correct = pickWeightedSong(source, difficulty);
 
-    let others = shuffle(
-        source.filter(
-            (song) =>
-                song.id !== correct.id &&
-                normalizeTitle(song.title) !== normalizeTitle(correct.title)
-        )
-    ).slice(0, 3);
-
+    let others = pickDistractors(source, correct, difficulty);
     if (others.length < 3) {
         const remaining = shuffle(
-            source.filter((song) => song.id !== correct.id && !others.some((other) => other.id === song.id))
+            songs.filter((song) =>
+                song.id !== correct.id &&
+                normalizeTrackTitleKey(song.title) !== normalizeTrackTitleKey(correct.title) &&
+                !others.some((other) => other.id === song.id)
+            )
         ).slice(0, 3 - others.length);
         others = [...others, ...remaining];
     }

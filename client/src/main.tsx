@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { ClerkProvider } from '@clerk/clerk-react';
 import App from './App';
 import './index.css';
+import { shouldUseClerk } from './services/authMode';
 
 const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -14,7 +15,7 @@ document.body.appendChild(grain);
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
-        {clerkPublishableKey ? (
+        {shouldUseClerk ? (
             <ClerkProvider
                 publishableKey={clerkPublishableKey}
                 signInFallbackRedirectUrl="/"

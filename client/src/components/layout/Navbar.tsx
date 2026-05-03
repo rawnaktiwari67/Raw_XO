@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, useMotionValueEvent, useScroll } from 'framer-motion';
 import { UserButton, useClerk } from '@clerk/clerk-react';
 import { useAuthStore } from '../../stores/authStore';
+import { shouldUseClerk } from '../../services/authMode';
 
 const LINKS = [
     { to: '/', label: 'Play' },
@@ -69,7 +70,7 @@ export default function Navbar() {
                                 >
                                     {user.username}
                                 </Link>
-                                {import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ? (
+                                {shouldUseClerk ? (
                                     <ClerkSignedInControls
                                         onAfterSignOut={() => {
                                             clearSession();
