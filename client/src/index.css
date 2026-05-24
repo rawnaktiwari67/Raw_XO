@@ -82,6 +82,26 @@ body {
 }
 
 /* Layer 2 — warm radial light, top-right (directional cinematic light) */
+body.gameplay-locked {
+  height: 100vh;
+  overflow: hidden;
+}
+
+body.gameplay-locked #root > div > header.fixed,
+body.gameplay-locked #root > div > main + footer {
+  display: none;
+  pointer-events: none;
+}
+
+body.gameplay-locked #root {
+  height: 100vh;
+  overflow: hidden;
+}
+
+body.gameplay-locked .vignette-overlay {
+  display: none;
+}
+
 body::before {
   content: '';
   position: fixed;

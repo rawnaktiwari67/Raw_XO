@@ -5,7 +5,9 @@
     "client"
   ],
   "scripts": {
+    "typecheck:vercel": "tsc --noEmit -p tsconfig.json",
     "build:apps": "npm run build --workspace xo-universe-server && npm run build --workspace xo-universe-client",
+    "build:vercel": "npm run typecheck:vercel && npm run build:apps",
     "build": "npm run build:apps",
     "dev:server": "npm run dev --workspace xo-universe-server",
     "dev:client": "npm run dev --workspace xo-universe-client -- --host 127.0.0.1"

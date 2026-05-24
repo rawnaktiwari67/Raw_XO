@@ -10,6 +10,8 @@ export const errorHandler = (
     console.error(`[Error] ${err.message}`);
     res.status(statusCode).json({
         success: false,
-        error: err.message || 'Internal Server Error',
+        error: process.env.NODE_ENV === 'production' && statusCode >= 500
+            ? 'Internal Server Error'
+            : err.message || 'Internal Server Error',
     });
 };

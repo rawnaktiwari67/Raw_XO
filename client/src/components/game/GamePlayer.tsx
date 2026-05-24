@@ -38,6 +38,30 @@ function getLiveMultiplier(streak: number) {
     return Math.min(1 + Math.floor(streak / 3) * 0.25, 2);
 }
 
+function getRatingTone(value: number, selectedRating: number | null) {
+    const active = selectedRating === value;
+    if (value <= 2) {
+        return active
+            ? 'bg-rose-400 text-ch-0 ring-1 ring-rose-200/70'
+            : 'bg-rose-400/10 text-rose-100 ring-1 ring-rose-300/18 hover:bg-rose-400/18';
+    }
+    if (value === 3) {
+        return active
+            ? 'bg-amber text-ch-0 ring-1 ring-amber/70'
+            : 'bg-amber/10 text-amber-100 ring-1 ring-amber/18 hover:bg-amber/18';
+    }
+    return active
+        ? 'bg-emerald-300 text-ch-0 ring-1 ring-emerald-100/70'
+        : 'bg-emerald-400/10 text-emerald-100 ring-1 ring-emerald-300/18 hover:bg-emerald-400/18';
+}
+
+function getRatingMessage(value: number | null) {
+    if (!value) return 'Rate it fast.';
+    if (value <= 2) return 'Not your lane.';
+    if (value === 3) return 'Solid, but not sacred.';
+    return "Guess it's one of your favorites.";
+}
+
 function AnimatedValue({ value }: { value: number }) {
     const [displayValue, setDisplayValue] = useState(value);
 
@@ -80,38 +104,38 @@ function FilterRail<T extends string>({
     const selectedOption = options.find((option) => option.value === value);
 
     return (
-        <div className="space-y-2">
-            <div className="space-y-2">
-                <p className="label-xs">{label}</p>
-                <div className="flex h-12 items-center justify-between rounded-2xl bg-white/[0.03] px-4 text-sm text-text-1">
-                    <span className="truncate">{selectedOption?.label ?? label}</span>
-                    <span className="text-[10px] uppercase tracking-[0.14em] text-text-4">Select</span>
+        <div className="min-h-[174px] rounded-[1.1rem] bg-white/[0.025] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+            <div className="mb-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="label-xs">{label}</p>
+                    <p className="mt-2 truncate text-sm font-semibold text-text-1">{selectedOption?.label ?? label}</p>
                 </div>
+                <span className="rounded-full bg-white/[0.035] px-3 py-1.5 text-[9px] uppercase tracking-[0.14em] text-text-4">
+                    Select
+                </span>
             </div>
-            <div className="overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <div className="flex min-w-max gap-2">
-                    {options.map((option) => {
-                        const active = option.value === value;
+            <div className="flex flex-wrap gap-2">
+                {options.map((option) => {
+                    const active = option.value === value;
 
-                        return (
-                            <motion.button
-                                key={option.value}
-                                type="button"
-                                whileHover={disabled ? undefined : { y: -1, scale: 1.01 }}
-                                whileTap={disabled ? undefined : { scale: 0.99 }}
-                                onClick={() => onChange(option.value)}
-                                disabled={disabled}
-                                className={`rounded-full px-4 py-2 text-[11px] uppercase tracking-[0.12em] transition-all duration-300 ${
-                                    active
-                                        ? 'bg-[linear-gradient(180deg,rgba(244,162,97,0.20),rgba(244,162,97,0.08))] text-text-1'
-                                        : 'bg-white/[0.03] text-text-3 hover:text-text-1'
-                                } disabled:opacity-60`}
-                            >
-                                {option.label}
-                            </motion.button>
-                        );
-                    })}
-                </div>
+                    return (
+                        <motion.button
+                            key={option.value}
+                            type="button"
+                            whileHover={disabled ? undefined : { y: -1, scale: 1.01 }}
+                            whileTap={disabled ? undefined : { scale: 0.99 }}
+                            onClick={() => onChange(option.value)}
+                            disabled={disabled}
+                            className={`min-h-10 rounded-[0.85rem] px-4 py-2 text-[11px] uppercase tracking-[0.12em] transition-all duration-300 ${
+                                active
+                                    ? 'bg-[linear-gradient(180deg,rgba(244,162,97,0.24),rgba(244,162,97,0.09))] text-text-1 ring-1 ring-amber/20'
+                                    : 'bg-white/[0.035] text-text-3 hover:text-text-1'
+                            } disabled:opacity-60`}
+                        >
+                            {option.label}
+                        </motion.button>
+                    );
+                })}
             </div>
         </div>
     );
@@ -144,10 +168,10 @@ function ArtistPicker({
             if (!normalizedQuery) return true;
             return artist.label.toLowerCase().includes(normalizedQuery.toLowerCase());
         })
-        .slice(0, normalizedQuery ? 10 : 18);
+        .slice(0, normalizedQuery ? 8 : 7);
     const filteredArtists = [...filteredPresetArtists, ...liveArtists]
         .filter((artist, index, list) => list.findIndex((item) => item.value === artist.value) === index)
-        .slice(0, normalizedQuery ? 14 : 18);
+        .slice(0, normalizedQuery ? 10 : 7);
     const canUseCustomArtist = normalizedQuery.length >= 2 && !exactPreset;
 
     const applyCustomArtist = () => {
@@ -191,11 +215,11 @@ function ArtistPicker({
     }, [language, normalizedQuery]);
 
     return (
-        <div className="rounded-[1.25rem] bg-white/[0.025] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
-            <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="min-h-[174px] rounded-[1.1rem] bg-white/[0.025] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+            <div className="mb-3 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <p className="label-xs">Artist Pool</p>
-                    <p className="mt-2 truncate text-sm font-medium text-text-1">
+                    <p className="mt-2 truncate text-sm font-semibold text-text-1">
                         {selectedArtist ? selectedArtist.label : 'All available artists'}
                     </p>
                 </div>
@@ -204,7 +228,7 @@ function ArtistPicker({
                         type="button"
                         onClick={() => selectArtist('all')}
                         disabled={disabled}
-                        className="rounded-full bg-white/[0.04] px-3 py-2 text-[10px] uppercase tracking-[0.12em] text-text-3 transition-colors hover:text-text-1 disabled:opacity-50"
+                        className="rounded-full bg-white/[0.04] px-3 py-1.5 text-[9px] uppercase tracking-[0.14em] text-text-3 transition-colors hover:text-text-1 disabled:opacity-50"
                     >
                         Clear
                     </button>
@@ -221,18 +245,18 @@ function ArtistPicker({
                 }}
                 placeholder="Search any artist"
                 disabled={disabled}
-                className="h-12 w-full rounded-[1rem] bg-black/15 px-4 text-sm text-text-1 outline-none ring-1 ring-white/[0.04] transition-all placeholder:text-text-4 focus:bg-black/20 focus:ring-amber/30"
+                className="h-10 w-full rounded-[0.85rem] bg-black/15 px-3 text-sm text-text-1 outline-none ring-1 ring-white/[0.04] transition-all placeholder:text-text-4 focus:bg-black/20 focus:ring-amber/30"
             />
 
-            <div className="mt-4 max-h-[15rem] overflow-y-auto pr-1 [scrollbar-width:thin]">
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-2">
+            <div className="mt-3 max-h-[82px] overflow-y-auto pr-1 [scrollbar-width:thin]">
+                <div className="flex flex-wrap gap-2">
                     <motion.button
                         type="button"
                         whileHover={disabled ? undefined : { y: -1, scale: 1.01 }}
                         whileTap={disabled ? undefined : { scale: 0.99 }}
                         onClick={() => selectArtist('all')}
                         disabled={disabled}
-                        className={`min-h-11 rounded-[0.9rem] px-3 py-2 text-left text-[11px] uppercase tracking-[0.11em] transition-all duration-300 ${
+                        className={`min-h-9 rounded-[0.8rem] px-3 py-2 text-left text-[10px] uppercase tracking-[0.11em] transition-all duration-300 ${
                             value === 'all'
                                 ? 'bg-[linear-gradient(180deg,rgba(244,162,97,0.22),rgba(244,162,97,0.08))] text-text-1 ring-1 ring-amber/20'
                                 : 'bg-white/[0.03] text-text-3 hover:text-text-1'
@@ -248,7 +272,7 @@ function ArtistPicker({
                             whileTap={disabled ? undefined : { scale: 0.99 }}
                             onClick={applyCustomArtist}
                             disabled={disabled}
-                            className="min-h-11 rounded-[0.9rem] bg-amber/10 px-3 py-2 text-left text-[11px] uppercase tracking-[0.11em] text-text-1 ring-1 ring-amber/20 transition-all duration-300 disabled:opacity-60"
+                            className="min-h-9 rounded-[0.8rem] bg-amber/10 px-3 py-2 text-left text-[10px] uppercase tracking-[0.11em] text-text-1 ring-1 ring-amber/20 transition-all duration-300 disabled:opacity-60"
                         >
                             Use {normalizedQuery}
                         </motion.button>
@@ -265,7 +289,7 @@ function ArtistPicker({
                                 whileTap={disabled ? undefined : { scale: 0.99 }}
                                 onClick={() => selectArtist(artist.value)}
                                 disabled={disabled}
-                                className={`min-h-11 rounded-[0.9rem] px-3 py-2 text-left text-[11px] uppercase tracking-[0.11em] transition-all duration-300 ${
+                                className={`min-h-9 max-w-[150px] rounded-[0.8rem] px-3 py-2 text-left text-[10px] uppercase tracking-[0.11em] transition-all duration-300 ${
                                     active
                                         ? 'bg-[linear-gradient(180deg,rgba(244,162,97,0.22),rgba(244,162,97,0.08))] text-text-1 ring-1 ring-amber/20'
                                         : 'bg-white/[0.03] text-text-3 hover:text-text-1'
@@ -278,7 +302,7 @@ function ArtistPicker({
                 </div>
 
                 {filteredArtists.length === 0 && !canUseCustomArtist ? (
-                    <p className="py-6 text-center text-sm text-text-4">No artists found.</p>
+                    <p className="py-3 text-sm text-text-4">No artists found.</p>
                 ) : null}
             </div>
         </div>
@@ -287,21 +311,16 @@ function ArtistPicker({
 
 function PulseBars({ active, urgent }: { active: boolean; urgent: boolean }) {
     return (
-        <div className="flex h-12 items-end gap-1.5">
+        <div className="flex h-12 items-end gap-1.5" aria-hidden>
             {[38, 64, 42, 80, 36, 58, 44, 74].map((height, index) => (
-                <motion.span
+                <span
                     key={`${height}-${index}`}
                     className={`w-2 rounded-full ${
                         urgent
                             ? 'bg-gradient-to-t from-orange-300/85 via-amber/85 to-white/70'
                             : 'bg-gradient-to-t from-amber/85 via-white/70 to-white/25'
                     }`}
-                    animate={
-                        active
-                            ? { height: [`${height}%`, `${Math.max(26, height - 22)}%`, `${height}%`] }
-                            : { height: `${Math.max(24, height - 20)}%` }
-                    }
-                    transition={{ duration: 1.1 + index * 0.07, repeat: active ? Infinity : 0, ease: 'easeInOut' }}
+                    style={{ height: `${active ? height : Math.max(24, height - 20)}%` }}
                 />
             ))}
         </div>
@@ -322,8 +341,6 @@ export default function GamePlayer() {
         lastBrokenStreak,
         sessionScore,
         roundsPlayedInSession,
-        sessionSummary,
-        isSummaryVisible,
         isLoading,
         isRating,
         error,
@@ -513,23 +530,236 @@ export default function GamePlayer() {
             ? 'Five seconds, four options, one instinct.'
             : 'Pick an artist or leave it open, then hit play.';
 
+    if (phase !== 'idle' || isLoading) {
+        return (
+            <div className="guess-immersive relative flex h-[100svh] min-h-[100svh] items-center justify-center overflow-hidden px-2 py-2 sm:px-4 sm:py-4">
+                {question ? <audio key={question.songId} ref={audioRef} src={question.snippetUrl} preload="auto" /> : null}
+
+                <div
+                    aria-hidden
+                    className={`absolute inset-0 transition-colors duration-500 ${
+                        isResult
+                            ? isCorrect
+                                ? 'bg-[radial-gradient(circle_at_50%_26%,rgba(16,185,129,0.20),transparent_38%),linear-gradient(180deg,#07100d_0%,#09090d_100%)]'
+                                : 'bg-[radial-gradient(circle_at_50%_26%,rgba(244,63,94,0.20),transparent_38%),linear-gradient(180deg,#12080b_0%,#09090d_100%)]'
+                            : 'bg-[radial-gradient(circle_at_50%_22%,rgba(244,162,97,0.16),transparent_40%),linear-gradient(180deg,#111014_0%,#07070a_100%)]'
+                    }`}
+                />
+                <div aria-hidden className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.42)_76%)]" />
+
+                <motion.section
+                    initial={{ opacity: 0, scale: 0.985 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+                    className="relative grid h-full w-full max-w-[1060px] grid-rows-[auto_minmax(0,1fr)_auto] gap-2 sm:gap-3"
+                >
+                    <header className="flex min-h-[64px] items-center justify-between gap-2 rounded-[0.85rem] bg-white/[0.035] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:min-h-[72px] sm:px-4">
+                        <div className="min-w-0">
+                            <p className="label-xs">Guess Round</p>
+                            <div className="mt-1 h-2 w-[34vw] max-w-[420px] overflow-hidden rounded-full bg-white/[0.08] sm:w-[30vw]">
+                                <motion.div
+                                    className={`h-full ${isUrgent ? 'bg-orange-300' : isResult && isCorrect ? 'bg-emerald-300' : isResult ? 'bg-rose-300' : 'bg-amber'}`}
+                                    initial={false}
+                                    animate={{ width: `${(timeLeft / TOTAL_SECONDS) * 100}%` }}
+                                    transition={{ duration: 0.18, ease: 'linear' }}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-3 text-right sm:gap-5">
+                            <div>
+                                <p className="label-xs">Time</p>
+                                <p className={`font-heading text-[1.55rem] leading-none sm:text-[2.2rem] ${isUrgent ? 'text-orange-100' : 'text-text-1'}`}>
+                                    {phase === 'playing' ? timeLeft : isResult ? formatResponseTime(result?.responseTimeMs) : '--'}
+                                </p>
+                            </div>
+                            <div>
+                                <p className="label-xs">Streak</p>
+                                <p className="font-heading text-[1.25rem] leading-none text-text-1 sm:text-[1.75rem]">
+                                    <AnimatedValue value={streak} />
+                                </p>
+                            </div>
+                            <div>
+                                <p className="label-xs">Score</p>
+                                <p className="font-heading text-[1.25rem] leading-none text-accent sm:text-[1.75rem]">
+                                    <AnimatedValue value={sessionScore} />
+                                </p>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main className="grid min-h-0 grid-rows-[minmax(116px,0.62fr)_minmax(0,1fr)] gap-2 sm:grid-rows-[minmax(128px,0.58fr)_minmax(0,1fr)] sm:gap-3">
+                        <div className="relative flex min-h-0 items-center justify-center overflow-hidden rounded-[0.95rem] bg-white/[0.03] px-3 py-3 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.045)] sm:px-4">
+                            <div className="absolute inset-x-0 bottom-0 h-px bg-white/[0.06]" />
+                            {isLoading && !question ? (
+                                <div className="space-y-3">
+                                    <PulseBars active urgent={false} />
+                                    <div className="space-y-1">
+                                        <p className="label-xs">Loading</p>
+                                        <h2 className="font-heading text-[clamp(1.9rem,7vw,3.8rem)] leading-[0.9] text-text-1">
+                                            Finding the next clip
+                                        </h2>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className={`grid w-full max-w-[900px] items-center gap-4 sm:gap-5 ${isResult && result?.artworkUrl ? 'grid-cols-[116px_minmax(0,1fr)] text-left sm:grid-cols-[164px_minmax(0,1fr)]' : 'grid-cols-1 text-center'}`}>
+                                    {isResult && result?.artworkUrl ? (
+                                        <img
+                                            src={result.artworkUrl}
+                                            alt=""
+                                            className="aspect-square w-full rounded-[0.85rem] object-cover shadow-[0_18px_42px_rgba(0,0,0,0.30)]"
+                                        />
+                                    ) : (
+                                        <PulseBars active={timerActive && phase === 'playing'} urgent={isUrgent} />
+                                    )}
+                                    <div className="min-w-0 space-y-2">
+                                    <p className={`label-xs ${isResult ? (isCorrect ? 'text-emerald-200/85' : 'text-rose-200/85') : ''}`}>
+                                        {isResult ? (isCorrect ? 'Correct' : 'Wrong') : phase === 'answered' ? 'Checking' : 'Listen'}
+                                    </p>
+                                    <h2 className="mx-auto max-w-[680px] line-clamp-2 font-heading text-[clamp(1.45rem,5vw,2.85rem)] leading-[0.98] text-text-1">
+                                        {isResult && result ? result.correctAnswer : 'What track is this?'}
+                                    </h2>
+                                    <p className="mx-auto min-h-5 max-w-[620px] truncate text-sm leading-snug text-text-3 sm:text-base">
+                                        {isResult && result
+                                            ? `${result.correctArtist || 'Unknown artist'}${result.album ? ` · ${result.album}` : ''}`
+                                            : 'Five seconds. Four options. One instinct.'}
+                                    </p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="grid min-h-0 grid-cols-1 gap-2 sm:grid-cols-2">
+                            {question?.options.map((option, index) => {
+                                const isSelected = selectedOption === option;
+                                const isCorrectOption = isResult && result?.correctAnswer === option;
+                                const isWrongOption = isResult && isSelected && !isCorrectOption;
+
+                                return (
+                                    <motion.button
+                                        key={`${question.songId}-${option}`}
+                                        type="button"
+                                        initial={{ opacity: 0, y: 12 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ duration: 0.28, delay: index * 0.035, ease: [0.22, 1, 0.36, 1] }}
+                                        whileHover={phase === 'playing' && !selectedOption ? { y: -2, scale: 1.005 } : undefined}
+                                        whileTap={phase === 'playing' && !selectedOption ? { scale: 0.99 } : undefined}
+                                        onClick={() => handleSelectOption(option)}
+                                        disabled={!!selectedOption || phase !== 'playing'}
+                                        className={`min-h-[48px] rounded-[0.85rem] px-3 py-2 text-left text-text-1 transition-all duration-300 sm:min-h-[78px] sm:px-4 ${
+                                            isCorrectOption
+                                                ? 'bg-emerald-400/18 ring-1 ring-emerald-300/55 shadow-[0_18px_45px_rgba(16,185,129,0.14)]'
+                                                : isWrongOption
+                                                  ? 'bg-rose-400/18 ring-1 ring-rose-300/55 shadow-[0_18px_45px_rgba(244,63,94,0.14)]'
+                                                  : isSelected
+                                                    ? 'bg-amber/16 ring-1 ring-amber/30'
+                                                    : 'bg-white/[0.045] ring-1 ring-white/[0.04] hover:bg-white/[0.07]'
+                                        } disabled:opacity-100`}
+                                    >
+                                        <span className="mb-1 block text-[9px] font-semibold uppercase tracking-[0.12em] text-white/42 sm:text-[10px]">
+                                            Option {index + 1}
+                                        </span>
+                                        <span className="line-clamp-2 block text-[clamp(0.9rem,3.5vw,1.2rem)] font-semibold leading-tight">
+                                            {option}
+                                        </span>
+                                    </motion.button>
+                                );
+                            })}
+                        </div>
+                    </main>
+
+                    <footer className="min-h-[58px] rounded-[0.85rem] bg-white/[0.04] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:px-4">
+                        {error ? (
+                            <p className="text-sm text-rose-100/90">{error}</p>
+                        ) : isLoading && !question ? (
+                            <div className="flex h-full items-center justify-between gap-3">
+                                <p className="truncate text-sm font-semibold text-text-2">Loading next round...</p>
+                                <div className="h-2 w-24 overflow-hidden rounded-full bg-white/[0.08]">
+                                    <div className="h-full w-1/2 rounded-full bg-amber" />
+                                </div>
+                            </div>
+                        ) : isResult && result ? (
+                            <div className="flex items-center justify-between gap-2">
+                                <div className="min-w-0">
+                                    <p className={`text-sm font-semibold ${isCorrect ? 'text-emerald-100' : 'text-rose-100'}`}>
+                                        {isCorrect ? `+${result.pointsAwarded} points` : 'Missed this one'}
+                                    </p>
+                                    <p className="hidden truncate text-xs text-text-3 sm:block">
+                                        {selectedOption ? `You picked ${selectedOption}.` : 'No answer locked in.'}
+                                    </p>
+                                    <p className={`truncate text-xs font-semibold ${
+                                        rating ? (rating >= 4 ? 'text-emerald-100' : rating <= 2 ? 'text-rose-100' : 'text-amber-100') : 'text-text-4'
+                                    }`}>
+                                        {getRatingMessage(rating)}
+                                    </p>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+                                    {[1, 2, 3, 4, 5].map((value) => (
+                                        <button
+                                            key={value}
+                                            type="button"
+                                            onClick={() => void handleRate(value)}
+                                            disabled={isRating}
+                                            className={`h-8 w-8 rounded-[0.6rem] text-xs font-semibold transition-all sm:h-10 sm:w-10 sm:text-sm ${getRatingTone(value, rating)} disabled:opacity-70`}
+                                        >
+                                            {value}
+                                        </button>
+                                    ))}
+                                    <motion.button
+                                        whileHover={{ scale: 1.02, y: -1 }}
+                                        whileTap={{ scale: 0.98 }}
+                                        onClick={handleNext}
+                                        disabled={isLoading}
+                                        className="btn-primary ml-1 min-h-9 rounded-[0.75rem] px-3 py-2 text-xs disabled:opacity-60 sm:min-h-11 sm:px-5"
+                                    >
+                                        {isLoading ? 'Loading' : 'Next Clip'}
+                                    </motion.button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex items-center justify-between gap-3">
+                                <p className="text-sm font-semibold text-text-2">
+                                    {phase === 'answered' ? 'Answer locked. Resolving...' : selectedOption ? 'Answer locked.' : 'Tap an answer.'}
+                                </p>
+                                <div className="flex shrink-0 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => void playClip(true)}
+                                        className="btn-secondary min-h-11 rounded-[0.85rem] px-4 py-3 text-xs"
+                                    >
+                                        {clipBlocked ? 'Play' : 'Replay'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleReveal}
+                                        className="btn-secondary min-h-11 rounded-[0.85rem] px-4 py-3 text-xs"
+                                    >
+                                        Reveal
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </footer>
+                </motion.section>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-8">
             {question ? <audio key={question.songId} ref={audioRef} src={question.snippetUrl} preload="auto" /> : null}
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)] xl:items-start">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <ArtistPicker
                     artists={artistOptions}
                     value={filters.artist}
                     onChange={handleArtistChange}
-                    disabled={phase === 'answered' || isLoading}
+                    disabled={isLoading}
                     language={filters.language}
                 />
-                <div className="grid gap-6 md:grid-cols-3">
-                    <FilterRail label="Genre" options={GENRE_OPTIONS} value={filters.genre} onChange={handleGenreChange} disabled={phase === 'answered' || isLoading} />
-                    <FilterRail label="Language" options={LANGUAGE_OPTIONS} value={filters.language} onChange={handleLanguageChange} disabled={phase === 'answered' || isLoading} />
-                    <FilterRail label="Difficulty" options={DIFFICULTY_OPTIONS} value={filters.difficulty} onChange={handleDifficultyChange} disabled={phase === 'answered' || isLoading} />
-                </div>
+                <FilterRail label="Genre" options={GENRE_OPTIONS} value={filters.genre} onChange={handleGenreChange} disabled={isLoading} />
+                <FilterRail label="Language" options={LANGUAGE_OPTIONS} value={filters.language} onChange={handleLanguageChange} disabled={isLoading} />
+                <FilterRail label="Difficulty" options={DIFFICULTY_OPTIONS} value={filters.difficulty} onChange={handleDifficultyChange} disabled={isLoading} />
             </div>
 
             <motion.section
@@ -872,45 +1102,6 @@ export default function GamePlayer() {
                 </div>
             </motion.section>
 
-            <AnimatePresence>
-                {isSummaryVisible && sessionSummary ? (
-                    <motion.div
-                        initial={{ opacity: 0, y: 16 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -12 }}
-                        className="rounded-[1.25rem] bg-white/[0.03] p-6"
-                    >
-                        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-                            <div className="space-y-4">
-                                <p className="label-xs">Run Summary</p>
-                                <h3 className="font-heading text-[2rem] leading-[0.92] text-text-1">
-                                    {sessionSummary.roundsPlayed} songs down. Keep the run alive.
-                                </h3>
-                                <p className="text-sm text-text-3">
-                                    Accuracy {sessionSummary.accuracy}% · Score {sessionSummary.totalScore} · Best streak {sessionSummary.bestStreak}
-                                </p>
-                            </div>
-
-                            <div className="flex flex-wrap gap-4">
-                                <button
-                                    type="button"
-                                    onClick={dismissSessionSummary}
-                                    className="btn-secondary rounded-[1rem] px-6 py-4"
-                                >
-                                    Keep Playing
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleNext}
-                                    className="btn-primary rounded-[1rem] px-6 py-4"
-                                >
-                                    Next 6
-                                </button>
-                            </div>
-                        </div>
-                    </motion.div>
-                ) : null}
-            </AnimatePresence>
         </div>
     );
 }

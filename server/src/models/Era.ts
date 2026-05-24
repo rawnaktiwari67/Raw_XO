@@ -20,7 +20,6 @@ const EraSchema = new Schema<IEra>({
     order: { type: Number, default: 0 },
 });
 
-EraSchema.index({ slug: 1 });
 EraSchema.index({ order: 1 });
 
 export default mongoose.model<IEra>('Era', EraSchema);

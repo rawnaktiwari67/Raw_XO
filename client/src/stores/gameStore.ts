@@ -103,7 +103,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     startRound: async () => {
         const { filters, recentSongIds } = get();
-        const excludeSongIds = recentSongIds.slice(0, 12);
+        const excludeSongIds = recentSongIds.slice(0, 40);
         set({ isLoading: true, question: null, result: null, selectedAnswer: null, phase: 'idle', error: null, lastBrokenStreak: null });
         try {
             const res = await gameService.getQuestion(filters, excludeSongIds);
@@ -140,21 +140,10 @@ export const useGameStore = create<GameState>((set, get) => ({
                 sessionScore: s.sessionScore + (result.pointsAwarded ?? 0),
                 roundsPlayedInSession: s.roundsPlayedInSession + 1,
                 correctAnswersInSession: s.correctAnswersInSession + (result.correct ? 1 : 0),
-                recentSongIds: result.songKey ? [result.songKey, ...s.recentSongIds.filter((item) => item !== result.songKey)].slice(0, 18) : s.recentSongIds,
+                recentSongIds: result.correct && result.songKey
+                    ? [result.songKey, ...s.recentSongIds.filter((item) => item !== result.songKey)].slice(0, 60)
+                    : s.recentSongIds,
             }));
-            const nextState = get();
-            if (nextState.roundsPlayedInSession > 0 && nextState.roundsPlayedInSession % 6 === 0) {
-                set({
-                    isSummaryVisible: true,
-                    sessionSummary: {
-                        roundsPlayed: nextState.roundsPlayedInSession,
-                        correctAnswers: nextState.correctAnswersInSession,
-                        accuracy: Math.round((nextState.correctAnswersInSession / nextState.roundsPlayedInSession) * 100),
-                        totalScore: nextState.sessionScore,
-                        bestStreak: nextState.bestSessionStreak,
-                    },
-                });
-            }
             get().fetchStats();
             get().fetchHistory();
             get().fetchLeaderboard(get().leaderboardPeriod);

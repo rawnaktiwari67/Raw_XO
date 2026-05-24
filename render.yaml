@@ -19,8 +19,20 @@ services:
         value: 80
       - key: GAME_TRACK_CACHE_MS
         value: 600000
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      - key: GAME_SPOTIFY_MARKET
+        value: US
+      - key: GAME_SPOTIFY_TRACK_SEARCH
+        value: "false"
       - key: CLIENT_ORIGIN
         value: https://your-frontend-domain.onrender.com
+      - key: ADMIN_USER_IDS
+        value: your_mongo_user_id
+      - key: REQUIRE_AUTH_FOR_CULTURE_WRITES
+        value: "true"
 
   - type: static
     name: raw-xo-web

@@ -1,7 +1,7 @@
 {
   "name": "xo-universe-server",
   "version": "1.0.0",
-  "description": "XO Universe API — The Weeknd fan community backend",
+  "description": "Afterglow FM API for music guessing and culture features",
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",

@@ -17,6 +17,4 @@ const CultureSignalSchema = new Schema<ICultureSignal>(
     { timestamps: true }
 );
 
-CultureSignalSchema.index({ trackId: 1 }, { unique: true });
-
 export default mongoose.model<ICultureSignal>('CultureSignal', CultureSignalSchema);

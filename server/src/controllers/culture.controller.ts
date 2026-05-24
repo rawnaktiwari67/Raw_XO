@@ -12,6 +12,11 @@ const sanitizeSignal = (signal: { trackId: string; meaningVotes?: Record<string,
     reactions: signal.reactions || {},
 });
 
+const cleanText = (value: unknown, maxLength: number): string =>
+    typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
+
+const safeKeyPattern = /^[a-zA-Z0-9:_-]{1,120}$/;
+
 const getResolvedUsername = async (userId?: string, authorName?: string): Promise<string> => {
     if (authorName && authorName.trim()) return authorName.trim().slice(0, 40);
     if (!userId) return 'guest';
@@ -48,9 +53,14 @@ export const getSignals = async (req: Request, res: Response): Promise<void> => 
 
 export const voteMeaning = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { trackId, meaningId } = req.body as { trackId?: string; meaningId?: string };
+        const trackId = cleanText(req.body.trackId, 120);
+        const meaningId = cleanText(req.body.meaningId, 120);
         if (!trackId || !meaningId) {
             res.status(400).json(errorResponse('trackId and meaningId are required'));
+            return;
+        }
+        if (!safeKeyPattern.test(trackId) || !safeKeyPattern.test(meaningId)) {
+            res.status(400).json(errorResponse('Invalid vote payload'));
             return;
         }
 
@@ -77,9 +87,14 @@ export const voteMeaning = async (req: Request, res: Response): Promise<void> =>
 
 export const reactToTrack = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { trackId, reactionId } = req.body as { trackId?: string; reactionId?: string };
+        const trackId = cleanText(req.body.trackId, 120);
+        const reactionId = cleanText(req.body.reactionId, 120);
         if (!trackId || !reactionId) {
             res.status(400).json(errorResponse('trackId and reactionId are required'));
+            return;
+        }
+        if (!safeKeyPattern.test(trackId) || !safeKeyPattern.test(reactionId)) {
+            res.status(400).json(errorResponse('Invalid reaction payload'));
             return;
         }
 
@@ -124,28 +139,21 @@ export const getReviews = async (req: Request, res: Response): Promise<void> => 
 
 export const createReview = async (req: Request, res: Response): Promise<void> => {
     try {
-        const {
-            trackId,
-            title,
-            artist,
-            albumArt,
-            rating,
-            moodTag,
-            take,
-            authorName,
-        } = req.body as {
-            trackId?: string;
-            title?: string;
-            artist?: string;
-            albumArt?: string;
-            rating?: number;
-            moodTag?: string;
-            take?: string;
-            authorName?: string;
-        };
+        const trackId = cleanText(req.body.trackId, 120);
+        const title = cleanText(req.body.title, 160);
+        const artist = cleanText(req.body.artist, 120);
+        const albumArt = cleanText(req.body.albumArt, 500);
+        const rating = Number(req.body.rating);
+        const moodTag = cleanText(req.body.moodTag, 40);
+        const take = cleanText(req.body.take, 220);
+        const authorName = cleanText(req.body.authorName, 40);
 
         if (!trackId || !title || !artist || !rating || !moodTag || !take) {
             res.status(400).json(errorResponse('trackId, title, artist, rating, moodTag, and take are required'));
+            return;
+        }
+        if (!Number.isInteger(rating) || rating < 1 || rating > 5 || take.length < 8) {
+            res.status(400).json(errorResponse('Invalid review payload'));
             return;
         }
 

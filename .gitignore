@@ -51,6 +51,7 @@ desktop.ini
 # ========================
 .vscode/
 .idea/
+.vercel/
 *.suo
 *.ntvs*
 *.njsproj

@@ -2,7 +2,7 @@ import { SignUp } from '@clerk/clerk-react';
 import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authService } from '../services/authService';
-import { clerkDisabledReason, shouldUseClerk } from '../services/authMode';
+import { clerkDisabledReason, clerkSignInUrl, shouldUseClerk } from '../services/authMode';
 import { useAuthStore } from '../stores/authStore';
 
 const getErrorMessage = (error: unknown, fallback: string) => {
@@ -46,7 +46,8 @@ export default function Register() {
                 <SignUp
                     routing="path"
                     path="/register"
-                    signInUrl="/login"
+                    signInUrl={clerkSignInUrl}
+                    forceRedirectUrl="/"
                     fallbackRedirectUrl="/"
                     appearance={{
                         elements: {
@@ -74,7 +75,7 @@ export default function Register() {
                     className="w-full max-w-[440px] rounded-[1.6rem] bg-[linear-gradient(180deg,rgba(16,16,20,0.96),rgba(12,12,16,0.96))] p-8 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_28px_80px_rgba(0,0,0,0.32)]"
                 >
                     <div className="space-y-3">
-                        <h1 className="font-heading text-[2.3rem] leading-[0.92] text-text-1">Join Raw_XO</h1>
+                        <h1 className="font-heading text-[2.3rem] leading-[0.92] text-text-1">Join Afterglow FM</h1>
                         <p className="text-sm text-text-3">Create an email account for saved scores and profile progress.</p>
                     </div>
 

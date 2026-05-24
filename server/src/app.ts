@@ -17,6 +17,7 @@ import eraRoutes from './routes/era.routes';
 import cultureRoutes from './routes/culture.routes';
 
 const app = express();
+app.set('trust proxy', 1);
 const allowedOrigins = env.CLIENT_ORIGIN
     .split(',')
     .map((origin) => origin.trim())
@@ -51,6 +52,11 @@ const corsOptions: cors.CorsOptions = {
             callback(null, true);
             return;
         }
+        // Allow Vite fallback ports in local development.
+        if (env.NODE_ENV !== 'production' && /^http:\/\/127\.0\.0\.1:517\d$/.test(origin)) {
+            callback(null, true);
+            return;
+        }
         callback(new Error('Origin not allowed by CORS'));
     },
     credentials: true,
@@ -74,7 +80,7 @@ if (env.CLERK_SECRET_KEY && env.CLERK_PUBLISHABLE_KEY) {
 }
 
 // ─── Parsing ──────────────────────────────────────────────────────────────────
-app.use(express.json({ limit: '10kb' }));
+app.use(express.json({ limit: '8kb' }));
 app.use(cookieParser());
 
 // ─── Rate limiting ────────────────────────────────────────────────────────────

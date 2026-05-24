@@ -1,6 +1,8 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+const vercelOrigin = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '';
+
 const getEnv = () => ({
     PORT: process.env.PORT || '5000',
     MONGODB_URI: process.env.MONGODB_URI || '',
@@ -14,8 +16,12 @@ const getEnv = () => ({
     GAME_ITUNES_TIMEOUT_MS: process.env.GAME_ITUNES_TIMEOUT_MS || '4500',
     GAME_MAX_QUERY_TERMS: process.env.GAME_MAX_QUERY_TERMS || '6',
     GAME_TRACK_CACHE_MS: process.env.GAME_TRACK_CACHE_MS || '600000',
+    SPOTIFY_CLIENT_ID: process.env.SPOTIFY_CLIENT_ID || '',
+    SPOTIFY_CLIENT_SECRET: process.env.SPOTIFY_CLIENT_SECRET || '',
+    GAME_SPOTIFY_MARKET: process.env.GAME_SPOTIFY_MARKET || 'US',
+    GAME_SPOTIFY_TRACK_SEARCH: process.env.GAME_SPOTIFY_TRACK_SEARCH === 'true',
     NODE_ENV: process.env.NODE_ENV || 'development',
-    CLIENT_ORIGIN: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
+    CLIENT_ORIGIN: process.env.CLIENT_ORIGIN || vercelOrigin || 'http://localhost:5173',
     ADMIN_USER_IDS: process.env.ADMIN_USER_IDS || '',
     REQUIRE_AUTH_FOR_CULTURE_WRITES: process.env.REQUIRE_AUTH_FOR_CULTURE_WRITES === 'true',
 });
@@ -39,10 +45,14 @@ export const validateEnv = (): void => {
     assertProductionSecret('GAME_SECRET', env.GAME_SECRET, ['change-me-game']);
 
     if (!env.CLIENT_ORIGIN || env.CLIENT_ORIGIN.includes('your-frontend-domain')) {
-        throw new Error('CLIENT_ORIGIN must be set to your deployed frontend origin in production.');
+        throw new Error('CLIENT_ORIGIN must be set to your deployed frontend origin in production, or VERCEL_URL must be available.');
     }
 
     if (!env.CLERK_PUBLISHABLE_KEY || !env.CLERK_SECRET_KEY) {
         throw new Error('Both CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY are required in production.');
+    }
+
+    if (env.CLERK_PUBLISHABLE_KEY.startsWith('pk_test_') || env.CLERK_SECRET_KEY.startsWith('sk_test_')) {
+        throw new Error('Use Clerk production keys in production deploys.');
     }
 };

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getClerkToken } from './clerkToken';
+import { shouldUseClerk } from './authMode';
 
 const api = axios.create({
     baseURL: import.meta.env.VITE_API_URL || '/api/v1',
@@ -30,14 +31,12 @@ api.interceptors.response.use(
         // Game routes (/game/*) use optionalProtect — they return 401 only
         // for the /auth/* endpoints. Avoid redirect loops when Clerk is active.
         const isGameRoute = requestUrl.includes('/game/');
-        const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-
         if (
             err.response?.status === 401 &&
             !isAuthRequest &&
             !isAuthPage &&
             !isGameRoute &&
-            !clerkEnabled
+            !shouldUseClerk
         ) {
             window.location.href = '/login';
         }

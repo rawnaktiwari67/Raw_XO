@@ -4,6 +4,9 @@ import Thread from '../models/Thread';
 import Comment from '../models/Comment';
 import { successResponse, errorResponse } from '../utils/apiResponse';
 
+const cleanText = (value: unknown, maxLength: number): string | undefined =>
+    typeof value === 'string' ? value.trim().slice(0, maxLength) : undefined;
+
 // GET /users/:username
 export const getProfile = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -21,7 +24,8 @@ export const getProfile = async (req: Request, res: Response): Promise<void> => 
 // PUT /users/me
 export const updateMe = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { avatar, bio } = req.body;
+        const avatar = cleanText(req.body.avatar, 500);
+        const bio = cleanText(req.body.bio, 300);
         const user = await User.findByIdAndUpdate(
             req.userId,
             { ...(avatar !== undefined && { avatar }), ...(bio !== undefined && { bio }) },

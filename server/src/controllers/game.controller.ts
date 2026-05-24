@@ -51,6 +51,8 @@ type ArtistProfile = {
 };
 
 const ITUNES_SEARCH_ENDPOINT = 'https://itunes.apple.com/search';
+const SPOTIFY_TOKEN_ENDPOINT = 'https://accounts.spotify.com/api/token';
+const SPOTIFY_SEARCH_ENDPOINT = 'https://api.spotify.com/v1/search';
 const ITUNES_TRACK_LIMIT = Math.min(
     200,
     Math.max(20, Number.parseInt(env.GAME_ITUNES_LIMIT, 10) || 40)
@@ -67,6 +69,10 @@ const TRACK_CACHE_MS = Math.max(
     60_000,
     Number.parseInt(env.GAME_TRACK_CACHE_MS, 10) || 10 * 60_000
 );
+const SPOTIFY_CACHE_MS = Math.min(TRACK_CACHE_MS, 5 * 60_000);
+const SPOTIFY_MARKET = env.GAME_SPOTIFY_MARKET.trim().toUpperCase() || 'US';
+const hasSpotifyCredentials = Boolean(env.SPOTIFY_CLIENT_ID && env.SPOTIFY_CLIENT_SECRET);
+const shouldUseSpotifyTrackSearch = hasSpotifyCredentials && env.GAME_SPOTIFY_TRACK_SEARCH;
 const ARTIST_QUERIES = env.GAME_ARTIST_QUERY
     .split(',')
     .map((value) => value.trim())
@@ -123,6 +129,38 @@ type ItunesArtistSearchResult = {
     artistId?: number;
     artistName?: string;
 };
+type SpotifyImage = {
+    url?: string;
+    height?: number | null;
+    width?: number | null;
+};
+type SpotifyArtist = {
+    id?: string;
+    name?: string;
+};
+type SpotifyAlbum = {
+    name?: string;
+    release_date?: string;
+    images?: SpotifyImage[];
+};
+type SpotifyTrack = {
+    id?: string;
+    name?: string;
+    artists?: SpotifyArtist[];
+    album?: SpotifyAlbum;
+    duration_ms?: number;
+    preview_url?: string | null;
+    external_urls?: { spotify?: string };
+    popularity?: number;
+};
+type SpotifySearchPayload = {
+    tracks?: { items?: SpotifyTrack[] };
+    artists?: { items?: SpotifyArtist[] };
+};
+type SpotifyTokenPayload = {
+    access_token?: string;
+    expires_in?: number;
+};
 const INDIA_FOCUSED_LANGUAGES: GameLanguage[] = ['hindi', 'punjabi'];
 const INDIA_FOCUSED_ARTISTS = [
     'arijit singh',
@@ -137,7 +175,14 @@ const INDIA_FOCUSED_ARTISTS = [
 
 const songPoolCache = new Map<string, { songs: SongPreview[]; fetchedAt: number }>();
 const inFlightSongPools = new Map<string, Promise<SongPreview[]>>();
-const recentCorrectByCacheKey = new Map<string, string[]>();
+type CorrectSongMemory = {
+    id: string;
+    titleKey: string;
+    artistKey: string;
+};
+
+const recentCorrectByCacheKey = new Map<string, CorrectSongMemory[]>();
+let spotifyTokenCache: { token: string; expiresAt: number } | null = null;
 
 const hmacSign = (data: string): string =>
     crypto.createHmac('sha256', env.GAME_SECRET).update(data).digest('hex');
@@ -221,8 +266,9 @@ const normalizeArtistKey = (value: string): string =>
 const normalizeTrackTitleKey = (value: string): string =>
     normalizeTitle(value)
         .replace(/\s*(feat\.?|ft\.?|featuring)\s+.+$/i, '')
+        .replace(/\s*[\(\[]\s*(feat\.?|ft\.?|featuring)\s+.*?[\)\]]/gi, '')
         .replace(/\s*[\(\[].*?(remaster|live|acoustic|version|edit|mix|mono|stereo|deluxe).*?[\)\]]/gi, '')
-        .replace(/\s+-\s*(remaster|live|acoustic|version|edit|mix).*/gi, '')
+        .replace(/\s+-\s*(remaster|live|acoustic|version|edit|mix|feat\.?|ft\.?|featuring).*/gi, '')
         .replace(/[^\p{L}\p{N}\s]/gu, ' ')
         .replace(/\s+/g, ' ')
         .trim();
@@ -237,6 +283,9 @@ const titleTokens = (value: string): string[] =>
     normalizeTrackTitleKey(value)
         .split(' ')
         .filter((token) => token.length >= 3);
+
+const isAlternateTrackVersion = (value: string): boolean =>
+    /\b(live|remaster(?:ed)?|acoustic|version|edit|mix|karaoke|instrumental|sped up|slowed|nightcore)\b/i.test(value);
 
 const isLikelySameArtist = (requestedArtist: string, candidateArtist: string): boolean => {
     const requestedTokens = artistTokens(requestedArtist);
@@ -320,9 +369,52 @@ const getQueryTerms = (filters: GameFilters): string[] => {
 
 const filtersCacheKey = (filters: GameFilters): string => `${filters.genre}:${filters.language}:${filters.difficulty}:${filters.artist}`;
 
-const rememberCorrectSong = (cacheKey: string, songId: string) => {
+const songMemory = (song: SongPreview): CorrectSongMemory => ({
+    id: song.id,
+    titleKey: normalizeTrackTitleKey(song.title),
+    artistKey: normalizeArtistKey(song.artist),
+});
+
+const encodeSongMemory = (song: SongPreview): string => {
+    const memory = songMemory(song);
+    return [
+        encodeURIComponent(memory.id),
+        encodeURIComponent(memory.titleKey),
+        encodeURIComponent(memory.artistKey),
+    ].join('~');
+};
+
+const parseSongMemory = (token: string): CorrectSongMemory | null => {
+    const trimmed = token.trim();
+    if (!trimmed) return null;
+
+    const [rawId, rawTitleKey = '', rawArtistKey = ''] = trimmed.split('~');
+    try {
+        return {
+            id: decodeURIComponent(rawId || ''),
+            titleKey: decodeURIComponent(rawTitleKey),
+            artistKey: decodeURIComponent(rawArtistKey),
+        };
+    } catch {
+        return {
+            id: rawId,
+            titleKey: rawTitleKey,
+            artistKey: rawArtistKey,
+        };
+    }
+};
+
+const rememberCorrectSong = (cacheKey: string, song: SongPreview) => {
+    const memory = songMemory(song);
     const existing = recentCorrectByCacheKey.get(cacheKey) ?? [];
-    const next = [songId, ...existing.filter((id) => id !== songId)].slice(0, 16);
+    const next = [
+        memory,
+        ...existing.filter((item) =>
+            item.id !== memory.id &&
+            item.titleKey !== memory.titleKey &&
+            `${item.titleKey}::${item.artistKey}` !== `${memory.titleKey}::${memory.artistKey}`
+        ),
+    ].slice(0, 40);
     recentCorrectByCacheKey.set(cacheKey, next);
 };
 
@@ -337,25 +429,30 @@ const shouldUseIndiaCatalog = (filters: GameFilters): boolean => {
 const getCatalogCountry = (filters: GameFilters): string =>
     shouldUseIndiaCatalog(filters) ? 'in' : env.GAME_ITUNES_COUNTRY;
 
+const getSpotifyMarket = (filters: GameFilters): string =>
+    shouldUseIndiaCatalog(filters) ? 'IN' : SPOTIFY_MARKET;
+
 const applyDifficulty = (songs: SongPreview[], difficulty: GameDifficulty): SongPreview[] => {
-    const byRecent = [...songs].sort((a, b) => b.releaseYear - a.releaseYear);
-    const byOlderLongCuts = [...songs].sort((a, b) => {
+    const studioLeaningSongs = songs.filter((song) => !isAlternateTrackVersion(`${song.title} ${song.album}`));
+    const source = studioLeaningSongs.length >= 8 ? studioLeaningSongs : songs;
+    const byRecent = [...source].sort((a, b) => b.releaseYear - a.releaseYear);
+    const byOlderLongCuts = [...source].sort((a, b) => {
         if (a.releaseYear !== b.releaseYear) return a.releaseYear - b.releaseYear;
         return b.durationMs - a.durationMs;
     });
 
     if (difficulty === 'easy') {
         const recent = byRecent.filter((song) => song.releaseYear >= 2018);
-        return (recent.length >= 4 ? recent : byRecent).slice(0, Math.min(32, songs.length));
+        return (recent.length >= 4 ? recent : byRecent).slice(0, Math.min(48, source.length));
     }
 
     if (difficulty === 'hard') {
         const olderLongCuts = byOlderLongCuts.filter((song) => song.releaseYear <= 2015 && song.durationMs >= 240000);
-        return (olderLongCuts.length >= 4 ? olderLongCuts : byOlderLongCuts).slice(0, Math.min(28, songs.length));
+        return (olderLongCuts.length >= 4 ? olderLongCuts : byOlderLongCuts).slice(0, Math.min(44, source.length));
     }
 
     const medium = byRecent.filter((song) => song.releaseYear >= 2012);
-    return (medium.length >= 4 ? medium : byRecent).slice(0, Math.min(30, songs.length));
+    return (medium.length >= 4 ? medium : byRecent).slice(0, Math.min(54, source.length));
 };
 
 const calculateScorePayload = (correct: boolean, streak: number, responseTimeMs: number) => {
@@ -415,6 +512,124 @@ const getJson = async (url: string): Promise<unknown> => {
     } finally {
         clearTimeout(timeout);
     }
+};
+
+const sleep = (ms: number): Promise<void> =>
+    new Promise((resolve) => {
+        setTimeout(resolve, ms);
+    });
+
+const parseApiError = async (response: globalThis.Response, provider: string): Promise<string> => {
+    try {
+        const payload = await response.json() as {
+            error?: { message?: string; status?: number } | string;
+            error_description?: string;
+        };
+        if (typeof payload.error === 'string') {
+            return payload.error_description || payload.error;
+        }
+        return payload.error?.message || `${provider} API request failed (${response.status})`;
+    } catch {
+        return `${provider} API request failed (${response.status})`;
+    }
+};
+
+const getSpotifyAccessToken = async (): Promise<string> => {
+    if (!hasSpotifyCredentials) {
+        throw new Error('Spotify credentials are not configured');
+    }
+
+    if (spotifyTokenCache && Date.now() < spotifyTokenCache.expiresAt) {
+        return spotifyTokenCache.token;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), ITUNES_TIMEOUT_MS);
+
+    try {
+        const credentials = Buffer.from(`${env.SPOTIFY_CLIENT_ID}:${env.SPOTIFY_CLIENT_SECRET}`).toString('base64');
+        const response = await fetch(SPOTIFY_TOKEN_ENDPOINT, {
+            method: 'POST',
+            headers: {
+                Authorization: `Basic ${credentials}`,
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({ grant_type: 'client_credentials' }),
+            signal: controller.signal,
+        });
+
+        if (!response.ok) {
+            throw new Error(await parseApiError(response, 'Spotify token'));
+        }
+
+        const payload = await response.json() as SpotifyTokenPayload;
+        if (!payload.access_token) {
+            throw new Error('Spotify token response did not include an access token');
+        }
+
+        spotifyTokenCache = {
+            token: payload.access_token,
+            expiresAt: Date.now() + Math.max(60, (payload.expires_in ?? 3600) - 60) * 1000,
+        };
+
+        return spotifyTokenCache.token;
+    } finally {
+        clearTimeout(timeout);
+    }
+};
+
+const getSpotifyJson = async (url: string): Promise<unknown> => {
+    const token = await getSpotifyAccessToken();
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), ITUNES_TIMEOUT_MS);
+
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    Accept: 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                signal: controller.signal,
+            });
+
+            if (response.ok) {
+                return response.json();
+            }
+
+            if (response.status === 429 && attempt < 2) {
+                const retryAfter = Number.parseInt(response.headers.get('retry-after') ?? '', 10);
+                const backoffMs = Number.isFinite(retryAfter)
+                    ? Math.max(1000, retryAfter * 1000)
+                    : 500 * (2 ** attempt);
+                await sleep(backoffMs);
+                continue;
+            }
+
+            throw new Error(await parseApiError(response, 'Spotify'));
+        } catch (error) {
+            lastError = error instanceof Error ? error : new Error('Spotify API request failed');
+            if (attempt >= 2) break;
+            await sleep(500 * (2 ** attempt));
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+
+    throw lastError ?? new Error('Spotify API request failed');
+};
+
+const bestSpotifyImage = (images: SpotifyImage[] = []): string => {
+    const sorted = [...images].sort((a, b) => (b.width ?? 0) - (a.width ?? 0));
+    return sorted.find((image) => image.url)?.url ?? '';
+};
+
+const spotifyReleaseYear = (releaseDate?: string): number => {
+    const year = Number.parseInt(String(releaseDate ?? '').slice(0, 4), 10);
+    return Number.isFinite(year) ? year : 0;
 };
 
 const songWeight = (song: SongPreview, difficulty: GameDifficulty): number => {
@@ -486,6 +701,71 @@ const pickDistractors = (songs: SongPreview[], correct: SongPreview, difficulty:
         .slice(0, 3);
 };
 
+const fetchSpotifySongPool = async (
+    queries: string[],
+    market: string,
+    selectedArtist?: string
+): Promise<SongPreview[]> => {
+    if (!hasSpotifyCredentials) return [];
+
+    const spotifyQueries = selectedArtist ? [selectedArtist] : selectQueryTerms(queries);
+    const payloads = await Promise.allSettled(
+        spotifyQueries.map(async (term) => {
+            const spotifyArtistFilter = selectedArtist
+                ? `artist:"${selectedArtist.replace(/"/g, '').trim()}"`
+                : term;
+            const params = new URLSearchParams({
+                q: spotifyArtistFilter,
+                type: 'track',
+                limit: '50',
+                market,
+            });
+
+            return getSpotifyJson(`${SPOTIFY_SEARCH_ENDPOINT}?${params.toString()}`) as Promise<SpotifySearchPayload>;
+        })
+    );
+
+    const results = payloads.flatMap((payload) =>
+        payload.status === 'fulfilled' && Array.isArray(payload.value.tracks?.items)
+            ? payload.value.tracks.items
+            : []
+    );
+    const seen = new Set<string>();
+    const songs: SongPreview[] = [];
+
+    for (const item of results) {
+        const artists = item.artists?.map((artist) => artist.name?.trim()).filter(Boolean) as string[] | undefined;
+        const primaryArtist = artists?.[0] ?? '';
+        if (!item.id || !item.name || !primaryArtist || !item.preview_url) {
+            continue;
+        }
+
+        const title = item.name.trim();
+        const artist = artists?.join(', ') ?? primaryArtist;
+        if (selectedArtist && !isLikelySameArtist(selectedArtist, artist)) {
+            continue;
+        }
+
+        const dedupeKey = `${normalizeTrackTitleKey(title)}::${normalizeArtistKey(artist)}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+
+        songs.push({
+            id: `spotify:${item.id}`,
+            title,
+            artist,
+            album: item.album?.name?.trim() ?? '',
+            releaseYear: spotifyReleaseYear(item.album?.release_date),
+            durationMs: item.duration_ms ?? 0,
+            snippetUrl: item.preview_url,
+            artworkUrl: bestSpotifyImage(item.album?.images),
+            trackUrl: item.external_urls?.spotify ?? '',
+        });
+    }
+
+    return songs;
+};
+
 const fetchItunesSongPool = async (
     queries: string[],
     country: string,
@@ -545,23 +825,109 @@ const fetchItunesSongPool = async (
     return songs;
 };
 
+const fetchSpotifyArtists = async (query: string, market: string): Promise<ArtistProfile[]> => {
+    if (!hasSpotifyCredentials) return [];
+
+    const params = new URLSearchParams({
+        q: query,
+        type: 'artist',
+        limit: '20',
+        market,
+    });
+    const payload = await getSpotifyJson(`${SPOTIFY_SEARCH_ENDPOINT}?${params.toString()}`) as SpotifySearchPayload;
+    const rawResults = Array.isArray(payload.artists?.items) ? payload.artists.items : [];
+    const seen = new Set<string>();
+
+    return rawResults
+        .filter((item) => typeof item.name === 'string' && item.name.trim().length > 0)
+        .map((item) => item.name!.trim())
+        .filter((name) => isLikelySameArtist(query, name))
+        .filter((name) => {
+            const key = normalizeArtistKey(name);
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        })
+        .slice(0, 15)
+        .map((name) => ({
+            label: name,
+            value: normalizeTitle(name),
+            language: 'all' as GameLanguage,
+        }));
+};
+
+const fetchItunesArtists = async (query: string, country: string): Promise<ArtistProfile[]> => {
+    const params = new URLSearchParams({
+        term: query,
+        entity: 'musicArtist',
+        limit: '30',
+        country,
+    });
+
+    const payload = await getJson(`${ITUNES_SEARCH_ENDPOINT}?${params.toString()}`) as {
+        results?: ItunesArtistSearchResult[];
+    };
+    const rawResults = Array.isArray(payload.results) ? payload.results : [];
+    const seen = new Set<string>();
+
+    return rawResults
+        .filter((item) => typeof item.artistName === 'string' && item.artistName.trim().length > 0)
+        .map((item) => item.artistName!.trim())
+        .filter((name) => isLikelySameArtist(query, name))
+        .filter((name) => {
+            const key = normalizeArtistKey(name);
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        })
+        .slice(0, 15)
+        .map((name) => ({
+            label: name,
+            value: normalizeTitle(name),
+            language: 'all' as GameLanguage,
+        }));
+};
+
 const getSongPool = async (filters: GameFilters): Promise<SongPreview[]> => {
     const cacheKey = filtersCacheKey(filters);
     const cached = songPoolCache.get(cacheKey);
+    const cacheTtl = shouldUseSpotifyTrackSearch ? SPOTIFY_CACHE_MS : TRACK_CACHE_MS;
     const isFresh =
         !!cached &&
         cached.songs.length >= 4 &&
-        Date.now() - cached.fetchedAt < TRACK_CACHE_MS;
+        Date.now() - cached.fetchedAt < cacheTtl;
 
     if (isFresh && cached) return cached.songs;
     if (inFlightSongPools.has(cacheKey)) return inFlightSongPools.get(cacheKey)!;
 
     const queryTerms = getQueryTerms(filters);
     const country = getCatalogCountry(filters);
+    const spotifyMarket = getSpotifyMarket(filters);
 
-    const nextFetch = fetchItunesSongPool(queryTerms, country, filters.artist !== 'all' ? filters.artist : undefined)
+    const spotifySongPoolPromise = shouldUseSpotifyTrackSearch
+        ? fetchSpotifySongPool(queryTerms, spotifyMarket, filters.artist !== 'all' ? filters.artist : undefined)
+        : Promise.resolve([]);
+    const nextFetch = Promise.allSettled([
+        spotifySongPoolPromise,
+        fetchItunesSongPool(queryTerms, country, filters.artist !== 'all' ? filters.artist : undefined),
+    ])
         .then((songs) => {
-            const preparedSongs = applyDifficulty(songs, filters.difficulty);
+            const spotifySongs = songs[0].status === 'fulfilled' ? songs[0].value : [];
+            const itunesSongs = songs[1].status === 'fulfilled' ? songs[1].value : [];
+            const mergedSongs = [...spotifySongs, ...itunesSongs].sort((a, b) => {
+                const alternateDelta = Number(isAlternateTrackVersion(`${a.title} ${a.album}`)) -
+                    Number(isAlternateTrackVersion(`${b.title} ${b.album}`));
+                if (alternateDelta !== 0) return alternateDelta;
+                return b.releaseYear - a.releaseYear;
+            });
+            const seen = new Set<string>();
+            const uniqueSongs = mergedSongs.filter((song) => {
+                const key = `${normalizeTrackTitleKey(song.title)}::${normalizeArtistKey(song.artist)}`;
+                if (!key || seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+            const preparedSongs = applyDifficulty(uniqueSongs, filters.difficulty);
             if (preparedSongs.length >= 4) {
                 songPoolCache.set(cacheKey, { songs: preparedSongs, fetchedAt: Date.now() });
                 return preparedSongs;
@@ -606,20 +972,25 @@ const buildQuestionWithExclusion = (songs: SongPreview[], excludeSongIds: string
     options: string[];
 } => {
     const difficulty = (cacheKey.split(':')[2] || 'medium') as GameDifficulty;
-    const explicitExcluded = new Set(
-        excludeSongIds
-            .map((token) => token.split(':')[0]?.trim())
-            .filter(Boolean)
+    const explicitExcluded = excludeSongIds
+        .map(parseSongMemory)
+        .filter((item): item is CorrectSongMemory => Boolean(item));
+    const excluded = [...explicitExcluded, ...(recentCorrectByCacheKey.get(cacheKey) ?? [])];
+    const excludedIds = new Set(excluded.map((item) => item.id).filter(Boolean));
+    const excludedTitles = new Set(excluded.map((item) => item.titleKey).filter(Boolean));
+    const excludedTitleArtists = new Set(
+        excluded
+            .filter((item) => item.titleKey && item.artistKey)
+            .map((item) => `${item.titleKey}::${item.artistKey}`)
     );
-    const recentCorrect = new Set(recentCorrectByCacheKey.get(cacheKey) ?? []);
-    const excludedIds = new Set([...explicitExcluded, ...recentCorrect]);
-    const candidates = songs.filter((song) => !excludedIds.has(song.id));
-    const fallbackWithoutExplicitExclusions = songs.filter((song) => !explicitExcluded.has(song.id));
-    const source = candidates.length >= 4
-        ? candidates
-        : fallbackWithoutExplicitExclusions.length >= 4
-            ? fallbackWithoutExplicitExclusions
-            : songs;
+    const candidates = songs.filter((song) => {
+        const titleKey = normalizeTrackTitleKey(song.title);
+        const artistKey = normalizeArtistKey(song.artist);
+        return !excludedIds.has(song.id) &&
+            !excludedTitles.has(titleKey) &&
+            !excludedTitleArtists.has(`${titleKey}::${artistKey}`);
+    });
+    const source = candidates.length > 0 ? candidates : songs;
     const correct = pickWeightedSong(source, difficulty);
 
     let others = pickDistractors(source, correct, difficulty);
@@ -657,8 +1028,6 @@ export const getQuestion = async (_req: Request, res: Response): Promise<void> =
             ? _req.query.excludeSongIds.split(',').map((item) => item.trim()).filter(Boolean)
             : [];
         const { correct, options } = buildQuestionWithExclusion(songs, excludeSongIds, cacheKey);
-        rememberCorrectSong(cacheKey, correct.id);
-
         res.json(successResponse({
             snippetUrl: correct.snippetUrl,
             options,
@@ -698,6 +1067,9 @@ export const submitAnswer = async (req: Request, res: Response): Promise<void> =
         const responseTimeMs = Math.max(0, Math.min(5000, Number(req.body.responseTimeMs) || 0));
         const { pointsAwarded, speedBonus, multiplier } = calculateScorePayload(correct, streak, responseTimeMs);
         const xpEarned = calculateGameXP(correct, streak) + Math.round(speedBonus * 0.5);
+        if (correct) {
+            rememberCorrectSong(filtersCacheKey(filters), song);
+        }
 
         if (req.userId && isDbConnected()) {
             await GameScore.create({
@@ -753,7 +1125,7 @@ export const submitAnswer = async (req: Request, res: Response): Promise<void> =
             artworkUrl: song.artworkUrl,
             trackUrl: song.trackUrl,
             trackId: createSongToken(song),
-            songKey: song.id,
+            songKey: encodeSongMemory(song),
             xpEarned,
             pointsAwarded,
             speedBonus,
@@ -839,35 +1211,22 @@ export const searchArtists = async (req: Request, res: Response): Promise<void> 
         }
 
         const country = (language === 'hindi' || language === 'punjabi') ? 'in' : env.GAME_ITUNES_COUNTRY;
-        const params = new URLSearchParams({
-            term: query,
-            entity: 'musicArtist',
-            limit: '30',
-            country,
-        });
-
-        const payload = await getJson(`${ITUNES_SEARCH_ENDPOINT}?${params.toString()}`) as {
-            results?: ItunesArtistSearchResult[];
-        };
-        const rawResults = Array.isArray(payload.results) ? payload.results : [];
-
+        const spotifyMarket = (language === 'hindi' || language === 'punjabi') ? 'IN' : SPOTIFY_MARKET;
+        const [spotifyResult, itunesResult] = await Promise.allSettled([
+            fetchSpotifyArtists(query, spotifyMarket),
+            fetchItunesArtists(query, country),
+        ]);
+        const spotifyArtists = spotifyResult.status === 'fulfilled' ? spotifyResult.value : [];
+        const itunesArtists = itunesResult.status === 'fulfilled' ? itunesResult.value : [];
         const seen = new Set<string>();
-        const artists = rawResults
-            .filter((item) => typeof item.artistName === 'string' && item.artistName.trim().length > 0)
-            .map((item) => item.artistName!.trim())
-            .filter((name) => isLikelySameArtist(query, name))
-            .filter((name) => {
-                const key = normalizeArtistKey(name);
+        const artists = [...spotifyArtists, ...itunesArtists]
+            .filter((artist) => {
+                const key = normalizeArtistKey(artist.label);
                 if (!key || seen.has(key)) return false;
                 seen.add(key);
                 return true;
             })
-            .slice(0, 15)
-            .map((name) => ({
-                label: name,
-                value: normalizeTitle(name),
-                language: 'all' as GameLanguage,
-            }));
+            .slice(0, 15);
 
         res.json(successResponse(artists));
     } catch {

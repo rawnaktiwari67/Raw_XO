@@ -46,7 +46,8 @@ function HistoryItem({ item }: { item: GameSession }) {
 
 export default function Game() {
     const { isAuthenticated, user } = useAuthStore();
-    const { stats, history, fetchStats, fetchHistory } = useGameStore();
+    const { stats, history, phase, isLoading, fetchStats, fetchHistory } = useGameStore();
+    const isGameplayActive = phase !== 'idle' || isLoading;
 
     useEffect(() => {
         if (isAuthenticated) {
@@ -54,6 +55,22 @@ export default function Game() {
             fetchHistory();
         }
     }, [fetchHistory, fetchStats, isAuthenticated]);
+
+    useEffect(() => {
+        document.body.classList.toggle('gameplay-locked', isGameplayActive);
+
+        return () => {
+            document.body.classList.remove('gameplay-locked');
+        };
+    }, [isGameplayActive]);
+
+    if (isGameplayActive) {
+        return (
+            <div className="gameplay-page relative h-screen overflow-hidden">
+                <GamePlayer />
+            </div>
+        );
+    }
 
     return (
         <div className="relative overflow-hidden">
@@ -95,15 +112,15 @@ export default function Game() {
                 }}
             />
 
-            <div className="relative mx-auto max-w-[1160px] px-4 pb-16 pt-16 md:px-8">
+            <div className="relative mx-auto max-w-[1160px] px-4 pb-16 pt-24 md:px-8 md:pt-28">
                 <motion.section
                     initial={{ opacity: 0, y: 18 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.58, ease: [0.22, 1, 0.36, 1] }}
-                    className="mb-12 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between"
+                    className="mb-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between"
                 >
                     <div className="max-w-2xl">
-                        <p className="label-xs mb-2">Raw XO</p>
+                        <p className="label-xs mb-2">Afterglow FM</p>
                         <h1 className="font-heading text-[clamp(2.2rem,5vw,3.8rem)] leading-[0.9] text-text-1">
                             5 seconds. Pick it before it disappears.
                         </h1>

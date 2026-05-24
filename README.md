@@ -1,6 +1,6 @@
-# Raw XO
+# Afterglow FM
 
-Raw XO is a cinematic music culture platform with:
+Afterglow FM is a cinematic music culture platform with:
 
 - a 5-second guess game
 - a culture page with lyric meaning, reactions, reviews, and lyric guessing
@@ -63,6 +63,9 @@ Important values:
 - `JWT_SECRET`
 - `GAME_SECRET`
 - `CLIENT_ORIGIN`
+- `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` if you want Spotify-backed public catalog search for game and artist search
+
+Spotify is used only for public catalog search through Client Credentials. Artist search can use Spotify when credentials are present. Game track search stays on iTunes previews by default for speed; set `GAME_SPOTIFY_TRACK_SEARCH=true` only if you want to test Spotify preview URLs. Do not put `SPOTIFY_CLIENT_SECRET` in frontend code. If you later add user-specific Spotify features, use Authorization Code with PKCE or backend Authorization Code flow with the minimum scopes needed.
 
 `CLIENT_ORIGIN` supports comma-separated values, for example:
 
@@ -70,9 +73,88 @@ Important values:
 CLIENT_ORIGIN=http://localhost:5173,https://your-frontend-domain.onrender.com
 ```
 
+For production security, also set:
+
+- `ADMIN_USER_IDS` - comma-separated Mongo user ids allowed to create/update tour records
+- `REQUIRE_AUTH_FOR_CULTURE_WRITES=true` if meaning votes, reactions, and reviews should require sign-in
+
+Production deploys intentionally fail if `MONGODB_URI`, Clerk keys, `JWT_SECRET`, `GAME_SECRET`, or `CLIENT_ORIGIN` are missing or still using placeholder values. Clerk test keys (`pk_test_` / `sk_test_`) are blocked in production.
+
 If MongoDB is unavailable in development, the backend falls back to `server/dev-data.json`.
 
-## Deploy from GitHub
+## Deploy to Vercel
+
+This repo is Vercel-ready as a single project:
+
+- Frontend: Vite build from [client](C:/Raw_Xo/client)
+- Backend: Express API through [api/index.ts](C:/Raw_Xo/api/index.ts)
+- API base path: `/api/v1`
+
+Vercel should use the root project directory with these settings from [vercel.json](C:/Raw_Xo/vercel.json):
+
+```text
+Install command: npm ci --include=dev
+Build command: npm run build:vercel
+Output directory: client/dist
+```
+
+Required Vercel environment variables:
+
+```env
+NODE_ENV=production
+MONGODB_URI=your_mongodb_uri
+CLERK_PUBLISHABLE_KEY=pk_live_your_clerk_publishable_key
+CLERK_SECRET_KEY=sk_live_your_clerk_secret_key
+VITE_CLERK_PUBLISHABLE_KEY=pk_live_your_clerk_publishable_key
+JWT_SECRET=your_32_plus_character_jwt_secret
+GAME_SECRET=your_32_plus_character_game_secret
+GAME_ARTIST_QUERY=the weeknd, kanye west, travis scott, drake
+GAME_ITUNES_COUNTRY=us
+GAME_ITUNES_LIMIT=80
+GAME_ITUNES_TIMEOUT_MS=4500
+GAME_MAX_QUERY_TERMS=6
+GAME_TRACK_CACHE_MS=600000
+GAME_SPOTIFY_MARKET=US
+GAME_SPOTIFY_TRACK_SEARCH=false
+VITE_API_URL=/api/v1
+VITE_APPLE_MUSIC_COUNTRY=IN
+ADMIN_USER_IDS=your_mongo_user_id
+REQUIRE_AUTH_FOR_CULTURE_WRITES=true
+```
+
+Optional Spotify artist search:
+
+```env
+SPOTIFY_CLIENT_ID=your_spotify_client_id
+SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
+```
+
+### Clerk on Vercel
+
+If Vercel shows Clerk in "Development mode", the deployment is still using a `pk_test_` key. Use the live Clerk application keys in Vercel:
+
+- `VITE_CLERK_PUBLISHABLE_KEY=pk_live_...`
+- `CLERK_PUBLISHABLE_KEY=pk_live_...`
+- `CLERK_SECRET_KEY=sk_live_...`
+
+In the Clerk dashboard, add your Vercel production domain to the allowed origins and redirect URLs. Also check the Google social connection settings: first-time Google users need sign-up/account creation enabled, otherwise Clerk can return "The External Account was not found" when they try Google on the sign-in screen.
+
+`CLIENT_ORIGIN` is optional on Vercel because the backend can use Vercel's automatic `VERCEL_URL`. Set it manually only when you need to allow extra origins, for example a custom domain:
+
+```env
+CLIENT_ORIGIN=https://your-domain.com,https://your-project.vercel.app
+```
+
+Before pushing:
+
+```bash
+npm run build:vercel
+git status --short
+```
+
+Then push to GitHub and import the repo into Vercel. Use root directory `/`, not `client` or `server`.
+
+## Deploy from GitHub to Render
 
 The cleanest self-serve path for this repo is:
 
@@ -88,7 +170,7 @@ From the repo root:
 
 ```bash
 git add .
-git commit -m "Prepare Raw XO for deployment"
+git commit -m "polish login and prep vercel deploy"
 git branch -M main
 git remote add origin https://github.com/YOUR_NAME/raw-xo.git
 git push -u origin main
@@ -126,7 +208,13 @@ GAME_ARTIST_QUERY=the weeknd, kanye west, travis scott, drake
 GAME_ITUNES_COUNTRY=us
 GAME_ITUNES_LIMIT=80
 GAME_TRACK_CACHE_MS=600000
+SPOTIFY_CLIENT_ID=your_spotify_client_id
+SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
+GAME_SPOTIFY_MARKET=US
+GAME_SPOTIFY_TRACK_SEARCH=false
 CLIENT_ORIGIN=https://your-frontend-domain.onrender.com
+ADMIN_USER_IDS=your_mongo_user_id
+REQUIRE_AUTH_FOR_CULTURE_WRITES=true
 ```
 
 After deploy, copy the backend URL. It will look like:

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { getAuth } from '@clerk/express';
 import { env } from '../config/env';
 import { resolveClerkUser } from '../utils/clerkSync';
+import { verifyToken } from '../utils/jwtUtils';
 
 declare global {
     namespace Express {
@@ -13,24 +14,29 @@ declare global {
 
 export const protect = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        if (!env.CLERK_SECRET_KEY || !env.CLERK_PUBLISHABLE_KEY) {
-            res.status(401).json({ success: false, error: 'Clerk is not configured on the server' });
+        if (env.CLERK_SECRET_KEY && env.CLERK_PUBLISHABLE_KEY) {
+            const auth = getAuth(req);
+            if (auth.userId) {
+                req.userId = await resolveClerkUser(auth.userId) ?? undefined;
+                if (!req.userId) {
+                    res.status(401).json({ success: false, error: 'Unable to resolve user profile' });
+                    return;
+                }
+
+                next();
+                return;
+            }
+        }
+
+        const cookieToken = req.cookies?.token;
+        if (typeof cookieToken === 'string' && cookieToken) {
+            const payload = verifyToken(cookieToken);
+            req.userId = payload.id;
+            next();
             return;
         }
 
-        const auth = getAuth(req);
-        if (!auth.userId) {
-            res.status(401).json({ success: false, error: 'Not authenticated' });
-            return;
-        }
-
-        req.userId = await resolveClerkUser(auth.userId) ?? undefined;
-        if (!req.userId) {
-            res.status(401).json({ success: false, error: 'Unable to resolve user profile' });
-            return;
-        }
-
-        next();
+        res.status(401).json({ success: false, error: 'Not authenticated' });
     } catch {
         res.status(401).json({ success: false, error: 'Token invalid or expired' });
     }
@@ -38,19 +44,22 @@ export const protect = async (req: Request, res: Response, next: NextFunction): 
 
 export const optionalProtect = async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     try {
-        if (!env.CLERK_SECRET_KEY || !env.CLERK_PUBLISHABLE_KEY) {
-            req.userId = undefined;
+        if (env.CLERK_SECRET_KEY && env.CLERK_PUBLISHABLE_KEY) {
+            const auth = getAuth(req);
+            if (auth.userId) {
+                req.userId = await resolveClerkUser(auth.userId) ?? undefined;
+                next();
+                return;
+            }
+        }
+
+        const cookieToken = req.cookies?.token;
+        if (typeof cookieToken === 'string' && cookieToken) {
+            const payload = verifyToken(cookieToken);
+            req.userId = payload.id;
             next();
             return;
         }
-
-        const auth = getAuth(req);
-        if (!auth.userId) {
-            next();
-            return;
-        }
-
-        req.userId = await resolveClerkUser(auth.userId) ?? undefined;
     } catch {
         req.userId = undefined;
     }

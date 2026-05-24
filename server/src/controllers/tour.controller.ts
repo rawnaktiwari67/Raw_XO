@@ -39,6 +39,8 @@ const eventPattern =
 const decodeEscaped = (value: string): string => JSON.parse(`"${value.replace(/"/g, '\\"')}"`) as string;
 
 const normalizeCity = (value: string): string => value.toLowerCase().replace(/[^a-z]/g, '');
+const cleanText = (value: unknown, maxLength: number): string =>
+    typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
 
 const getDistrictKeys = (city?: string): string[] => {
     if (!city) return DISTRICT_CITY_PAGES.map((entry) => entry.key);
@@ -146,9 +148,19 @@ export const getTours = async (req: Request, res: Response): Promise<void> => {
 // POST /tours (admin only - no admin middleware in MVP, use env guard)
 export const createTour = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { eventName, city, country, venue, date, ticketsAvailable, ticketUrl } = req.body;
+        const eventName = cleanText(req.body.eventName, 160);
+        const city = cleanText(req.body.city, 80);
+        const country = cleanText(req.body.country, 80);
+        const venue = cleanText(req.body.venue, 160);
+        const ticketUrl = cleanText(req.body.ticketUrl, 500);
+        const date = new Date(String(req.body.date || ''));
+        const ticketsAvailable = Boolean(req.body.ticketsAvailable);
         if (!eventName || !city || !country || !date) {
             res.status(400).json(errorResponse('eventName, city, country, and date are required'));
+            return;
+        }
+        if (Number.isNaN(date.getTime())) {
+            res.status(400).json(errorResponse('Valid date is required'));
             return;
         }
         const tour = await Tour.create({ eventName, city, country, venue, date, ticketsAvailable, ticketUrl });
@@ -161,7 +173,24 @@ export const createTour = async (req: Request, res: Response): Promise<void> => 
 // PUT /tours/:id
 export const updateTour = async (req: Request, res: Response): Promise<void> => {
     try {
-        const tour = await Tour.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const updates: Record<string, unknown> = {};
+        for (const field of ['eventName', 'city', 'country', 'venue', 'ticketUrl'] as const) {
+            if (req.body[field] !== undefined) {
+                updates[field] = cleanText(req.body[field], field === 'ticketUrl' ? 500 : 160);
+            }
+        }
+        if (req.body.date !== undefined) {
+            const date = new Date(String(req.body.date));
+            if (Number.isNaN(date.getTime())) {
+                res.status(400).json(errorResponse('Valid date is required'));
+                return;
+            }
+            updates.date = date;
+        }
+        if (req.body.ticketsAvailable !== undefined) updates.ticketsAvailable = Boolean(req.body.ticketsAvailable);
+        if (req.body.isActive !== undefined) updates.isActive = Boolean(req.body.isActive);
+
+        const tour = await Tour.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
         if (!tour) {
             res.status(404).json(errorResponse('Tour not found'));
             return;

@@ -4,6 +4,18 @@ import Era from '../models/Era';
 import User from '../models/User';
 import { successResponse, errorResponse } from '../utils/apiResponse';
 import { calculateLevel, ACTION_XP } from '../utils/xpUtils';
+import mongoose from 'mongoose';
+
+const cleanText = (value: unknown, maxLength: number): string =>
+    typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
+
+const cleanTags = (value: unknown): string[] =>
+    Array.isArray(value)
+        ? value
+            .map((tag) => cleanText(tag, 30).toLowerCase())
+            .filter(Boolean)
+            .slice(0, 8)
+        : [];
 
 // GET /threads?era=&sort=&page=&limit=
 export const getThreads = async (req: Request, res: Response): Promise<void> => {
@@ -58,9 +70,16 @@ export const getThread = async (req: Request, res: Response): Promise<void> => {
 // POST /threads
 export const createThread = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { title, body, eraId, tags } = req.body;
+        const title = cleanText(req.body.title, 200);
+        const body = cleanText(req.body.body, 10000);
+        const eraId = cleanText(req.body.eraId, 80);
+        const tags = cleanTags(req.body.tags);
         if (!title || !body || !eraId) {
             res.status(400).json(errorResponse('Title, body, and era are required'));
+            return;
+        }
+        if (!mongoose.Types.ObjectId.isValid(eraId)) {
+            res.status(400).json(errorResponse('Invalid era id'));
             return;
         }
         const era = await Era.findById(eraId);
@@ -69,7 +88,7 @@ export const createThread = async (req: Request, res: Response): Promise<void> =
             return;
         }
         const thread = await Thread.create({
-            title, body, tags: tags || [],
+            title, body, tags,
             author: req.userId,
             era: era._id,
         });
@@ -104,10 +123,12 @@ export const updateThread = async (req: Request, res: Response): Promise<void> =
             res.status(403).json(errorResponse('Not authorized'));
             return;
         }
-        const { title, body, tags } = req.body;
+        const title = cleanText(req.body.title, 200);
+        const body = cleanText(req.body.body, 10000);
+        const tags = cleanTags(req.body.tags);
         if (title) thread.title = title;
         if (body) thread.body = body;
-        if (tags) thread.tags = tags;
+        if (Array.isArray(req.body.tags)) thread.tags = tags;
         await thread.save();
         res.json(successResponse(thread, 'Thread updated'));
     } catch {
@@ -139,6 +160,10 @@ export const deleteThread = async (req: Request, res: Response): Promise<void> =
 export const voteThread = async (req: Request, res: Response): Promise<void> => {
     try {
         const { type } = req.body; // 'up' | 'down'
+        if (type !== 'up' && type !== 'down') {
+            res.status(400).json(errorResponse('Vote type must be up or down'));
+            return;
+        }
         const thread = await Thread.findOne({ _id: req.params.id, isDeleted: false });
         if (!thread) {
             res.status(404).json(errorResponse('Thread not found'));
@@ -152,7 +177,7 @@ export const voteThread = async (req: Request, res: Response): Promise<void> => 
             if (upIdx > -1) {
                 thread.upvotes.splice(upIdx, 1);
             } else {
-                thread.upvotes.push(new (require('mongoose').Types.ObjectId)(userId));
+                thread.upvotes.push(new mongoose.Types.ObjectId(userId));
                 if (downIdx > -1) thread.downvotes.splice(downIdx, 1);
                 // Award XP to thread author
                 if (thread.author.toString() !== userId) {
@@ -163,7 +188,7 @@ export const voteThread = async (req: Request, res: Response): Promise<void> => 
             if (downIdx > -1) {
                 thread.downvotes.splice(downIdx, 1);
             } else {
-                thread.downvotes.push(new (require('mongoose').Types.ObjectId)(userId));
+                thread.downvotes.push(new mongoose.Types.ObjectId(userId));
                 if (upIdx > -1) thread.upvotes.splice(upIdx, 1);
             }
         }
