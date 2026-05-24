@@ -19,10 +19,11 @@ export const connectDB = async (): Promise<void> => {
         });
         console.log(`MongoDB connected: ${conn.connection.host}`);
     } catch (error) {
-        console.error('MongoDB connection failed:', error);
+        const message = error instanceof Error ? error.message : String(error);
         if (env.NODE_ENV === 'production') {
+            console.error('MongoDB connection failed:', error);
             throw error;
         }
-        console.warn('MongoDB is unavailable. Running with local dev-data.json fallback.');
+        console.warn(`MongoDB is unavailable. Running with dev-data fallback. ${message}`);
     }
 };
