@@ -5,6 +5,8 @@ const vercelOrigin = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}
 
 const getEnv = () => ({
     PORT: process.env.PORT || '5000',
+    VERCEL: process.env.VERCEL || '',
+    VERCEL_ENV: process.env.VERCEL_ENV || '',
     MONGODB_URI: process.env.MONGODB_URI || '',
     CLERK_PUBLISHABLE_KEY: process.env.CLERK_PUBLISHABLE_KEY || '',
     CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY || '',
@@ -28,6 +30,9 @@ const getEnv = () => ({
 
 export const env = getEnv();
 
+const isHostedDeploy = env.VERCEL === '1' || Boolean(env.VERCEL_ENV);
+const shouldValidateProduction = env.NODE_ENV === 'production' || isHostedDeploy;
+
 const assertProductionSecret = (name: string, value: string, unsafeDefaults: string[]): void => {
     if (value.length < 32 || unsafeDefaults.includes(value)) {
         throw new Error(`${name} must be set to a strong unique value in production.`);
@@ -35,7 +40,7 @@ const assertProductionSecret = (name: string, value: string, unsafeDefaults: str
 };
 
 export const validateEnv = (): void => {
-    if (env.NODE_ENV !== 'production') return;
+    if (!shouldValidateProduction) return;
 
     if (!env.MONGODB_URI) {
         throw new Error('MONGODB_URI is required in production.');

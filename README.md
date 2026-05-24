@@ -137,7 +137,11 @@ If Vercel shows Clerk in "Development mode", the deployment is still using a `pk
 - `CLERK_PUBLISHABLE_KEY=pk_live_...`
 - `CLERK_SECRET_KEY=sk_live_...`
 
+Do not leave these variables as blank strings in Vercel. A blank `VITE_CLERK_PUBLISHABLE_KEY` means the browser cannot boot Clerk, and a blank `CLERK_PUBLISHABLE_KEY` means the API cannot verify Clerk sessions.
+
 In the Clerk dashboard, add your Vercel production domain to the allowed origins and redirect URLs. Also check the Google social connection settings: first-time Google users need sign-up/account creation enabled, otherwise Clerk can return "The External Account was not found" when they try Google on the sign-in screen.
+
+If a Vercel URL returns `401 Unauthorized` before the app loads, check Vercel Project Settings -> Deployment Protection. That is Vercel blocking the deployment before React or Clerk runs.
 
 `CLIENT_ORIGIN` is optional on Vercel because the backend can use Vercel's automatic `VERCEL_URL`. Set it manually only when you need to allow extra origins, for example a custom domain:
 
