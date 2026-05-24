@@ -144,7 +144,7 @@ const fallbackTracks = (): NormalizedMusicItem[] =>
         trackId: `fallback-${index + 1}`,
         title: seed.query.split(' ').slice(0, -2).join(' ') || seed.query,
         artist: seed.query.split(' ').slice(-2).join(' '),
-        album: 'Afterglow FM fallback',
+        album: 'Raw XO fallback',
         albumArt: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=800&q=80',
         previewUrl: '',
         trackUrl: 'https://music.apple.com',

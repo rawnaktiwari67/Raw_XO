@@ -9,7 +9,7 @@ validateEnv();
 
 connectDB().then(() => {
     app.listen(PORT, () => {
-        console.log(`Afterglow FM API running on port ${PORT}`);
+        console.log(`Raw XO API running on port ${PORT}`);
         console.log(`🌍 Environment: ${env.NODE_ENV}`);
     });
 });

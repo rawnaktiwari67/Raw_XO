@@ -1,6 +1,6 @@
-# Afterglow FM
+# Raw XO
 
-Afterglow FM is a cinematic music culture platform with:
+Raw XO is a cinematic music culture platform with:
 
 - a 5-second guess game
 - a culture page with lyric meaning, reactions, reviews, and lyric guessing

@@ -1,5 +1,5 @@
 /**
- * Afterglow FM - Database Seed Script
+ * Raw XO - Database Seed Script
  * Run: npm run seed
  * Seeds: 6 Album Eras + sample tour dates
  */

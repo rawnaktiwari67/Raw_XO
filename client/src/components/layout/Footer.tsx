@@ -25,7 +25,7 @@ export default function Footer() {
             <div className="max-w-[1280px] mx-auto px-6 md:px-12 py-16">
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-12">
                     <div className="md:col-span-5">
-                        <p className="brand-mark text-[2.15rem] leading-none text-gradient-gold">Afterglow FM</p>
+                        <p className="brand-mark text-[2.15rem] leading-none text-gradient-gold">Raw XO</p>
                         <p className="text-text-3 text-sm max-w-sm mt-3 leading-relaxed">
                             Music instinct, album memory, and culture notes held in one late-night room.
                         </p>
@@ -50,7 +50,7 @@ export default function Footer() {
                 </div>
 
                 <div className="border-t border-white/[0.06] mt-12 pt-8 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-                    <p className="text-xs text-text-4">(c) {new Date().getFullYear()} Afterglow FM</p>
+                    <p className="text-xs text-text-4">(c) {new Date().getFullYear()} Raw XO</p>
                     <p className="text-xs text-text-4">Curated for people who care how songs feel in context.</p>
                 </div>
             </div>

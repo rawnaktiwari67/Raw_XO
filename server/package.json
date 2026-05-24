@@ -1,7 +1,7 @@
 {
   "name": "xo-universe-server",
   "version": "1.0.0",
-  "description": "Afterglow FM API for music guessing and culture features",
+  "description": "Raw XO API for music guessing and culture features",
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
