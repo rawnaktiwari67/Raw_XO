@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { getAuth } from '@clerk/express';
-import { env } from '../config/env';
+import { shouldUseClerkServer } from '../config/env';
 import { resolveClerkUser } from '../utils/clerkSync';
 import { verifyToken } from '../utils/jwtUtils';
 
@@ -14,7 +14,7 @@ declare global {
 
 export const protect = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        if (env.CLERK_SECRET_KEY && env.CLERK_PUBLISHABLE_KEY) {
+        if (shouldUseClerkServer) {
             const auth = getAuth(req);
             if (auth.userId) {
                 req.userId = await resolveClerkUser(auth.userId) ?? undefined;
@@ -44,7 +44,7 @@ export const protect = async (req: Request, res: Response, next: NextFunction): 
 
 export const optionalProtect = async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     try {
-        if (env.CLERK_SECRET_KEY && env.CLERK_PUBLISHABLE_KEY) {
+        if (shouldUseClerkServer) {
             const auth = getAuth(req);
             if (auth.userId) {
                 req.userId = await resolveClerkUser(auth.userId) ?? undefined;

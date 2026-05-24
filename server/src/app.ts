@@ -3,7 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { clerkMiddleware } from '@clerk/express';
-import { env } from './config/env';
+import { env, hasClerkKeys, shouldUseClerkServer } from './config/env';
 import { errorHandler } from './middleware/error.middleware';
 import { apiLimiter } from './middleware/rateLimiter';
 
@@ -70,13 +70,15 @@ app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
 // ─── Clerk ────────────────────────────────────────────────────────────────────
-if (env.CLERK_SECRET_KEY && env.CLERK_PUBLISHABLE_KEY) {
+if (shouldUseClerkServer) {
     app.use(clerkMiddleware({
         publishableKey: env.CLERK_PUBLISHABLE_KEY,
         secretKey: env.CLERK_SECRET_KEY,
     }));
+} else if (hasClerkKeys) {
+    console.warn('Clerk keys are present but not live production keys, so Clerk middleware is disabled.');
 } else if (env.CLERK_SECRET_KEY || env.CLERK_PUBLISHABLE_KEY) {
-    console.warn('Clerk is partially configured. Set both CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY to enable authenticated API routes.');
+    console.warn('Clerk is partially configured. Set both CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY to enable Clerk routes.');
 }
 
 // ─── Parsing ──────────────────────────────────────────────────────────────────

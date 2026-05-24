@@ -8,8 +8,8 @@ const getEnv = () => ({
     VERCEL: process.env.VERCEL || '',
     VERCEL_ENV: process.env.VERCEL_ENV || '',
     MONGODB_URI: process.env.MONGODB_URI || '',
-    CLERK_PUBLISHABLE_KEY: process.env.CLERK_PUBLISHABLE_KEY || '',
-    CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY || '',
+    CLERK_PUBLISHABLE_KEY: (process.env.CLERK_PUBLISHABLE_KEY || '').trim(),
+    CLERK_SECRET_KEY: (process.env.CLERK_SECRET_KEY || '').trim(),
     JWT_SECRET: process.env.JWT_SECRET || 'change-me',
     GAME_SECRET: process.env.GAME_SECRET || 'change-me-game',
     GAME_ARTIST_QUERY: process.env.GAME_ARTIST_QUERY || 'the weeknd, kanye west, travis scott, drake',
@@ -32,6 +32,10 @@ export const env = getEnv();
 
 const isHostedDeploy = env.VERCEL === '1' || Boolean(env.VERCEL_ENV);
 const shouldValidateProduction = env.NODE_ENV === 'production' || isHostedDeploy;
+export const hasClerkKeys = Boolean(env.CLERK_PUBLISHABLE_KEY && env.CLERK_SECRET_KEY);
+export const hasClerkTestKeys = env.CLERK_PUBLISHABLE_KEY.startsWith('pk_test_')
+    || env.CLERK_SECRET_KEY.startsWith('sk_test_');
+export const shouldUseClerkServer = hasClerkKeys && !hasClerkTestKeys;
 
 const assertProductionSecret = (name: string, value: string, unsafeDefaults: string[]): void => {
     if (value.length < 32 || unsafeDefaults.includes(value)) {
@@ -53,11 +57,7 @@ export const validateEnv = (): void => {
         throw new Error('CLIENT_ORIGIN must be set to your deployed frontend origin in production, or VERCEL_URL must be available.');
     }
 
-    if (!env.CLERK_PUBLISHABLE_KEY || !env.CLERK_SECRET_KEY) {
-        throw new Error('Both CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY are required in production.');
-    }
-
-    if (env.CLERK_PUBLISHABLE_KEY.startsWith('pk_test_') || env.CLERK_SECRET_KEY.startsWith('sk_test_')) {
-        throw new Error('Use Clerk production keys in production deploys.');
+    if (!shouldUseClerkServer) {
+        console.warn('Clerk server auth is disabled. Add CLERK_PUBLISHABLE_KEY=pk_live_... and CLERK_SECRET_KEY=sk_live_... in Vercel to enable Clerk sessions.');
     }
 };
