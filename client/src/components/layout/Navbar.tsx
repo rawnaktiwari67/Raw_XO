@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { motion, useMotionValueEvent, useScroll } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValueEvent, useScroll } from 'framer-motion';
 import { UserButton, useClerk } from '@clerk/clerk-react';
 import { useAuthStore } from '../../stores/authStore';
 import { shouldUseClerk } from '../../services/authMode';
@@ -12,14 +12,14 @@ const LINKS = [
     { to: '/leaderboard', label: 'Rank' },
 ];
 
-function NavLink({ to, label }: { to: string; label: string }) {
+function NavLink({ to, label, onClick }: { to: string; label: string; onClick?: () => void }) {
     const { pathname } = useLocation();
     const active = to === '/'
         ? pathname === '/' || pathname === '/game'
         : pathname === to;
 
     return (
-        <Link to={to} className={`nav-link ${active ? 'nav-link-active' : ''}`}>
+        <Link to={to} onClick={onClick} className={`nav-link ${active ? 'nav-link-active' : ''}`}>
             {label}
         </Link>
     );
@@ -30,6 +30,7 @@ export default function Navbar() {
     const navigate = useNavigate();
     const { scrollY } = useScroll();
     const [isScrolled, setIsScrolled] = useState(false);
+    const [mobileOpen, setMobileOpen] = useState(false);
 
     useMotionValueEvent(scrollY, 'change', (value) => setIsScrolled(value > 14));
 
@@ -50,9 +51,9 @@ export default function Navbar() {
                     borderBottom: isScrolled ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(255,255,255,0.03)',
                 }}
             >
-                <div className="mx-auto flex h-[76px] max-w-[1280px] items-center justify-between gap-6 px-6 md:px-12">
+                <div className="mx-auto flex h-[62px] max-w-[1280px] items-center justify-between gap-4 px-4 md:h-[76px] md:px-12">
                     <Link to="/" className="shrink-0">
-                        <span className="brand-mark text-[1.9rem] leading-none text-gradient-gold">Raw XO</span>
+                        <span className="brand-mark text-[1.6rem] leading-none text-gradient-gold md:text-[1.9rem]">Raw XO</span>
                     </Link>
 
                     <nav className="hidden items-center gap-8 md:flex lg:gap-10">
@@ -61,7 +62,7 @@ export default function Navbar() {
                         ))}
                     </nav>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 md:gap-3">
                         {isAuthenticated && user ? (
                             <>
                                 <Link
@@ -78,7 +79,7 @@ export default function Navbar() {
                                         }}
                                     />
                                 ) : (
-                                    <Link to="/login" className="btn-secondary rounded-[1.1rem] px-5 py-2 text-xs">
+                                    <Link to="/login" className="btn-secondary rounded-[1.1rem] px-4 py-2 text-[11px] md:px-5 md:text-xs">
                                         Sign In
                                     </Link>
                                 )}
@@ -91,13 +92,79 @@ export default function Navbar() {
                                 >
                                     Sign In
                                 </Link>
-                                <Link to="/register" className="btn-secondary rounded-[1.1rem] px-5 py-2 text-xs">
+                                <Link to="/register" className="btn-secondary rounded-[1.1rem] px-4 py-2 text-[11px] md:px-5 md:text-xs">
                                     Join
                                 </Link>
                             </>
                         )}
+
+                        {/* Mobile hamburger */}
+                        <button
+                            type="button"
+                            aria-label="Toggle menu"
+                            onClick={() => setMobileOpen((prev) => !prev)}
+                            className="flex h-9 w-9 flex-col items-center justify-center gap-[5px] rounded-[0.7rem] bg-white/[0.04] transition-colors hover:bg-white/[0.07] md:hidden"
+                        >
+                            <span
+                                className={`h-px w-5 bg-text-2 transition-all duration-300 ${
+                                    mobileOpen ? 'translate-y-[6px] rotate-45' : ''
+                                }`}
+                            />
+                            <span
+                                className={`h-px w-5 bg-text-2 transition-all duration-300 ${
+                                    mobileOpen ? 'opacity-0' : ''
+                                }`}
+                            />
+                            <span
+                                className={`h-px w-5 bg-text-2 transition-all duration-300 ${
+                                    mobileOpen ? '-translate-y-[6px] -rotate-45' : ''
+                                }`}
+                            />
+                        </button>
                     </div>
                 </div>
+
+                {/* Mobile dropdown menu */}
+                <AnimatePresence>
+                    {mobileOpen && (
+                        <motion.nav
+                            key="mobile-menu"
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                            className="overflow-hidden border-t border-white/[0.04] md:hidden"
+                        >
+                            <div className="flex flex-col gap-4 px-4 py-5">
+                                {LINKS.map((item) => (
+                                    <NavLink
+                                        key={item.to}
+                                        to={item.to}
+                                        label={item.label}
+                                        onClick={() => setMobileOpen(false)}
+                                    />
+                                ))}
+                                {isAuthenticated && user ? (
+                                    <Link
+                                        to={`/profile/${user.username}`}
+                                        onClick={() => setMobileOpen(false)}
+                                        className="mt-1 text-[11px] uppercase tracking-[0.14em] text-text-3 transition-colors hover:text-text-1"
+                                    >
+                                        {user.username}
+                                    </Link>
+                                ) : (
+                                    <Link
+                                        to="/login"
+                                        onClick={() => setMobileOpen(false)}
+                                        className="mt-1 text-[11px] uppercase tracking-[0.14em] text-text-3 transition-colors hover:text-text-1"
+                                    >
+                                        Sign In
+                                    </Link>
+                                )}
+                            </div>
+                        </motion.nav>
+                    )}
+                </AnimatePresence>
             </div>
         </motion.header>
     );
@@ -107,7 +174,7 @@ function ClerkSignedInControls({ onAfterSignOut }: { onAfterSignOut: () => void 
     const { signOut } = useClerk();
 
     return (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 md:gap-3">
             <UserButton
                 appearance={{
                     elements: {
@@ -121,7 +188,7 @@ function ClerkSignedInControls({ onAfterSignOut }: { onAfterSignOut: () => void 
                     await signOut();
                     onAfterSignOut();
                 }}
-                className="btn-secondary rounded-[1.1rem] px-5 py-2 text-xs"
+                className="btn-secondary rounded-[1.1rem] px-4 py-2 text-[11px] md:px-5 md:text-xs"
             >
                 Sign Out
             </button>
