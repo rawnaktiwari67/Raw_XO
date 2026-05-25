@@ -389,8 +389,8 @@ export default function LaserFlow({
         mesh.frustumCulled = false;
         scene.add(mesh);
 
-        const clock = new THREE.Clock();
-        let previousTime = 0;
+        const startTime = performance.now();
+        let previousTime = startTime;
         let fade = hasFadedRef.current ? 1 : 0;
 
         const mouseTarget = new THREE.Vector2(0, 0);
@@ -513,9 +513,10 @@ export default function LaserFlow({
             raf = requestAnimationFrame(animate);
             if (pausedRef.current || !inViewRef.current) return;
 
-            const time = clock.getElapsedTime();
-            const dt = Math.max(0, time - previousTime);
-            previousTime = time;
+            const now = performance.now();
+            const time = (now - startTime) / 1000;
+            const dt = Math.max(0, (now - previousTime) / 1000);
+            previousTime = now;
 
             const dtMs = dt * 1000;
             emaDtRef.current = emaDtRef.current * 0.9 + dtMs * 0.1;
@@ -541,7 +542,7 @@ export default function LaserFlow({
             (uniforms.iMouse.value as THREE.Vector4).set(mouseSmooth.x, mouseSmooth.y, 0, 0);
 
             renderer.render(scene, camera);
-            adjustDprIfNeeded(performance.now());
+            adjustDprIfNeeded(now);
         };
 
         animate();

@@ -35,7 +35,7 @@ const shouldValidateProduction = env.NODE_ENV === 'production' || isHostedDeploy
 export const hasClerkKeys = Boolean(env.CLERK_PUBLISHABLE_KEY && env.CLERK_SECRET_KEY);
 export const hasClerkTestKeys = env.CLERK_PUBLISHABLE_KEY.startsWith('pk_test_')
     || env.CLERK_SECRET_KEY.startsWith('sk_test_');
-export const shouldUseClerkServer = hasClerkKeys && !hasClerkTestKeys;
+export const shouldUseClerkServer = hasClerkKeys && !(shouldValidateProduction && hasClerkTestKeys);
 
 const assertProductionSecret = (name: string, value: string, unsafeDefaults: string[]): void => {
     if (value.length < 32 || unsafeDefaults.includes(value)) {
@@ -58,6 +58,6 @@ export const validateEnv = (): void => {
     }
 
     if (!shouldUseClerkServer) {
-        console.warn('Clerk server auth is disabled. Add CLERK_PUBLISHABLE_KEY=pk_live_... and CLERK_SECRET_KEY=sk_live_... in Vercel to enable Clerk sessions.');
+        console.warn('Clerk server auth is disabled. Add live CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY values in Vercel to enable Clerk sessions.');
     }
 };

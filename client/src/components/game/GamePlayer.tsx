@@ -471,6 +471,12 @@ export default function GamePlayer() {
         await startRound();
     };
 
+    const handleBackToSetup = () => {
+        resetPlaybackState();
+        dismissSessionSummary();
+        resetRound();
+    };
+
     const resetFilterSession = () => {
         resetPlaybackState();
         if (phase !== 'idle') resetRound();
@@ -532,7 +538,7 @@ export default function GamePlayer() {
 
     if (phase !== 'idle' || isLoading) {
         return (
-            <div className="guess-immersive relative flex h-[100svh] min-h-[100svh] items-center justify-center overflow-hidden px-2 py-2 sm:px-4 sm:py-4">
+            <div className="guess-immersive relative flex h-[100svh] min-h-[100svh] items-center justify-center overflow-hidden px-1.5 py-1.5 sm:px-4 sm:py-4">
                 {question ? <audio key={question.songId} ref={audioRef} src={question.snippetUrl} preload="auto" /> : null}
 
                 <div
@@ -551,12 +557,24 @@ export default function GamePlayer() {
                     initial={{ opacity: 0, scale: 0.985 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
-                    className="relative grid h-full w-full max-w-[1060px] grid-rows-[auto_minmax(0,1fr)_auto] gap-2 sm:gap-3"
+                    className="relative grid h-full w-full max-w-[1060px] grid-rows-[auto_minmax(0,1fr)_auto] gap-1.5 sm:gap-3"
                 >
-                    <header className="flex min-h-[64px] items-center justify-between gap-2 rounded-[0.85rem] bg-white/[0.035] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:min-h-[72px] sm:px-4">
+                    <header className="grid min-h-[48px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[0.75rem] bg-white/[0.035] px-2 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:min-h-[72px] sm:gap-3 sm:rounded-[0.85rem] sm:px-4">
+                        <button
+                            type="button"
+                            onClick={handleBackToSetup}
+                            className="min-h-8 rounded-[0.65rem] border border-white/[0.08] bg-white/[0.04] px-2.5 text-[10px] font-bold uppercase tracking-[0.08em] text-text-2 transition-colors hover:bg-white/[0.07] hover:text-text-1 sm:min-h-10 sm:px-4 sm:text-xs"
+                        >
+                            Back
+                        </button>
                         <div className="min-w-0">
-                            <p className="label-xs">Guess Round</p>
-                            <div className="mt-1 h-2 w-[34vw] max-w-[420px] overflow-hidden rounded-full bg-white/[0.08] sm:w-[30vw]">
+                            <div className="flex min-w-0 items-center gap-2">
+                                <p className="label-xs truncate">Guess Round</p>
+                                <span className="hidden truncate text-[10px] font-semibold uppercase tracking-[0.10em] text-text-4 sm:inline">
+                                    {selectedArtistLabel}
+                                </span>
+                            </div>
+                            <div className="mt-1 h-1.5 w-full max-w-[420px] overflow-hidden rounded-full bg-white/[0.08] sm:h-2">
                                 <motion.div
                                     className={`h-full ${isUrgent ? 'bg-orange-300' : isResult && isCorrect ? 'bg-emerald-300' : isResult ? 'bg-rose-300' : 'bg-amber'}`}
                                     initial={false}
@@ -566,30 +584,30 @@ export default function GamePlayer() {
                             </div>
                         </div>
 
-                        <div className="flex shrink-0 items-center gap-3 text-right sm:gap-5">
+                        <div className="grid shrink-0 grid-cols-3 gap-1.5 text-right sm:gap-5">
                             <div>
-                                <p className="label-xs">Time</p>
-                                <p className={`font-heading text-[1.55rem] leading-none sm:text-[2.2rem] ${isUrgent ? 'text-orange-100' : 'text-text-1'}`}>
+                                <p className="text-[8px] font-semibold uppercase tracking-[0.10em] text-text-3 sm:text-[0.6875rem] sm:tracking-[0.12em]">Time</p>
+                                <p className={`font-heading text-[1rem] leading-none sm:text-[2.2rem] ${isUrgent ? 'text-orange-100' : 'text-text-1'}`}>
                                     {phase === 'playing' ? timeLeft : isResult ? formatResponseTime(result?.responseTimeMs) : '--'}
                                 </p>
                             </div>
                             <div>
-                                <p className="label-xs">Streak</p>
-                                <p className="font-heading text-[1.25rem] leading-none text-text-1 sm:text-[1.75rem]">
+                                <p className="text-[8px] font-semibold uppercase tracking-[0.10em] text-text-3 sm:text-[0.6875rem] sm:tracking-[0.12em]">Streak</p>
+                                <p className="font-heading text-[0.95rem] leading-none text-text-1 sm:text-[1.75rem]">
                                     <AnimatedValue value={streak} />
                                 </p>
                             </div>
                             <div>
-                                <p className="label-xs">Score</p>
-                                <p className="font-heading text-[1.25rem] leading-none text-accent sm:text-[1.75rem]">
+                                <p className="text-[8px] font-semibold uppercase tracking-[0.10em] text-text-3 sm:text-[0.6875rem] sm:tracking-[0.12em]">Score</p>
+                                <p className="font-heading text-[0.95rem] leading-none text-accent sm:text-[1.75rem]">
                                     <AnimatedValue value={sessionScore} />
                                 </p>
                             </div>
                         </div>
                     </header>
 
-                    <main className="grid min-h-0 grid-rows-[minmax(116px,0.62fr)_minmax(0,1fr)] gap-2 sm:grid-rows-[minmax(128px,0.58fr)_minmax(0,1fr)] sm:gap-3">
-                        <div className="relative flex min-h-0 items-center justify-center overflow-hidden rounded-[0.95rem] bg-white/[0.03] px-3 py-3 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.045)] sm:px-4">
+                    <main className="grid min-h-0 grid-rows-[minmax(74px,0.42fr)_minmax(0,1fr)] gap-1.5 sm:grid-rows-[minmax(128px,0.58fr)_minmax(0,1fr)] sm:gap-3">
+                        <div className="relative flex min-h-0 items-center justify-center overflow-hidden rounded-[0.8rem] bg-white/[0.03] px-2 py-2 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.045)] sm:rounded-[0.95rem] sm:px-4 sm:py-3">
                             <div className="absolute inset-x-0 bottom-0 h-px bg-white/[0.06]" />
                             {isLoading && !question ? (
                                 <div className="space-y-3">
@@ -602,34 +620,34 @@ export default function GamePlayer() {
                                     </div>
                                 </div>
                             ) : (
-                                <div className={`grid w-full max-w-[900px] items-center gap-4 sm:gap-5 ${isResult && result?.artworkUrl ? 'grid-cols-[116px_minmax(0,1fr)] text-left sm:grid-cols-[164px_minmax(0,1fr)]' : 'grid-cols-1 text-center'}`}>
+                                <div className={`grid w-full max-w-[900px] items-center gap-2 sm:gap-5 ${isResult && result?.artworkUrl ? 'grid-cols-[64px_minmax(0,1fr)] text-left sm:grid-cols-[164px_minmax(0,1fr)]' : 'grid-cols-1 text-center'}`}>
                                     {isResult && result?.artworkUrl ? (
                                         <img
                                             src={result.artworkUrl}
                                             alt=""
-                                            className="aspect-square w-full rounded-[0.85rem] object-cover shadow-[0_18px_42px_rgba(0,0,0,0.30)]"
+                                            className="aspect-square w-full rounded-[0.7rem] object-cover shadow-[0_18px_42px_rgba(0,0,0,0.30)] sm:rounded-[0.85rem]"
                                         />
                                     ) : (
                                         <PulseBars active={timerActive && phase === 'playing'} urgent={isUrgent} />
                                     )}
-                                    <div className="min-w-0 space-y-2">
-                                    <p className={`label-xs ${isResult ? (isCorrect ? 'text-emerald-200/85' : 'text-rose-200/85') : ''}`}>
-                                        {isResult ? (isCorrect ? 'Correct' : 'Wrong') : phase === 'answered' ? 'Checking' : 'Listen'}
-                                    </p>
-                                    <h2 className="mx-auto max-w-[680px] line-clamp-2 font-heading text-[clamp(1.45rem,5vw,2.85rem)] leading-[0.98] text-text-1">
-                                        {isResult && result ? result.correctAnswer : 'What track is this?'}
-                                    </h2>
-                                    <p className="mx-auto min-h-5 max-w-[620px] truncate text-sm leading-snug text-text-3 sm:text-base">
-                                        {isResult && result
+                                    <div className="min-w-0 space-y-1 sm:space-y-2">
+                                        <p className={`label-xs ${isResult ? (isCorrect ? 'text-emerald-200/85' : 'text-rose-200/85') : ''}`}>
+                                            {isResult ? (isCorrect ? 'Correct' : 'Wrong') : phase === 'answered' ? 'Checking' : 'Listen'}
+                                        </p>
+                                        <h2 className="mx-auto max-w-[680px] line-clamp-2 font-heading text-[clamp(1rem,4.2vw,2.85rem)] leading-[0.98] text-text-1">
+                                            {isResult && result ? result.correctAnswer : 'What track is this?'}
+                                        </h2>
+                                        <p className="mx-auto min-h-4 max-w-[620px] line-clamp-1 text-[11px] leading-snug text-text-3 sm:text-sm sm:line-clamp-none sm:min-h-5">
+                                            {isResult && result
                                             ? `${result.correctArtist || 'Unknown artist'}${result.album ? ` · ${result.album}` : ''}`
-                                            : 'Five seconds. Four options. One instinct.'}
-                                    </p>
+                                                : 'Five seconds. Four options. One instinct.'}
+                                        </p>
                                     </div>
                                 </div>
                             )}
                         </div>
 
-                        <div className="grid min-h-0 grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div className="grid min-h-0 grid-cols-2 gap-1.5 sm:gap-2">
                             {question?.options.map((option, index) => {
                                 const isSelected = selectedOption === option;
                                 const isCorrectOption = isResult && result?.correctAnswer === option;
@@ -646,7 +664,7 @@ export default function GamePlayer() {
                                         whileTap={phase === 'playing' && !selectedOption ? { scale: 0.99 } : undefined}
                                         onClick={() => handleSelectOption(option)}
                                         disabled={!!selectedOption || phase !== 'playing'}
-                                        className={`min-h-[48px] rounded-[0.85rem] px-3 py-2 text-left text-text-1 transition-all duration-300 sm:min-h-[78px] sm:px-4 ${
+                                        className={`min-h-[42px] rounded-[0.75rem] px-2 py-2 text-left text-text-1 transition-all duration-300 sm:min-h-[78px] sm:rounded-[0.85rem] sm:px-4 ${
                                             isCorrectOption
                                                 ? 'bg-emerald-400/18 ring-1 ring-emerald-300/55 shadow-[0_18px_45px_rgba(16,185,129,0.14)]'
                                                 : isWrongOption
@@ -656,10 +674,10 @@ export default function GamePlayer() {
                                                     : 'bg-white/[0.045] ring-1 ring-white/[0.04] hover:bg-white/[0.07]'
                                         } disabled:opacity-100`}
                                     >
-                                        <span className="mb-1 block text-[9px] font-semibold uppercase tracking-[0.12em] text-white/42 sm:text-[10px]">
+                                        <span className="mb-0.5 block text-[7px] font-semibold uppercase tracking-[0.09em] text-white/42 sm:mb-1 sm:text-[10px] sm:tracking-[0.12em]">
                                             Option {index + 1}
                                         </span>
-                                        <span className="line-clamp-2 block text-[clamp(0.9rem,3.5vw,1.2rem)] font-semibold leading-tight">
+                                        <span className="line-clamp-2 block text-[clamp(0.78rem,3vw,1.2rem)] font-semibold leading-tight">
                                             {option}
                                         </span>
                                     </motion.button>
@@ -668,7 +686,7 @@ export default function GamePlayer() {
                         </div>
                     </main>
 
-                    <footer className="min-h-[58px] rounded-[0.85rem] bg-white/[0.04] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:px-4">
+                    <footer className="min-h-[50px] rounded-[0.75rem] bg-white/[0.04] px-2 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:min-h-[58px] sm:rounded-[0.85rem] sm:px-4">
                         {error ? (
                             <p className="text-sm text-rose-100/90">{error}</p>
                         ) : isLoading && !question ? (
@@ -679,28 +697,25 @@ export default function GamePlayer() {
                                 </div>
                             </div>
                         ) : isResult && result ? (
-                            <div className="flex items-center justify-between gap-2">
+                            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 sm:gap-2">
                                 <div className="min-w-0">
-                                    <p className={`text-sm font-semibold ${isCorrect ? 'text-emerald-100' : 'text-rose-100'}`}>
-                                        {isCorrect ? `+${result.pointsAwarded} points` : 'Missed this one'}
+                                    <p className={`text-xs font-semibold sm:text-sm ${isCorrect ? 'text-emerald-100' : 'text-rose-100'}`}>
+                                        {isCorrect ? `+${result.pointsAwarded} pts` : 'Missed this one'}
                                     </p>
-                                    <p className="hidden truncate text-xs text-text-3 sm:block">
-                                        {selectedOption ? `You picked ${selectedOption}.` : 'No answer locked in.'}
-                                    </p>
-                                    <p className={`truncate text-xs font-semibold ${
+                                    <p className={`truncate text-[10px] font-semibold sm:text-xs ${
                                         rating ? (rating >= 4 ? 'text-emerald-100' : rating <= 2 ? 'text-rose-100' : 'text-amber-100') : 'text-text-4'
                                     }`}>
                                         {getRatingMessage(rating)}
                                     </p>
                                 </div>
-                                <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+                                <div className="flex shrink-0 items-center gap-1 sm:gap-2">
                                     {[1, 2, 3, 4, 5].map((value) => (
                                         <button
                                             key={value}
                                             type="button"
                                             onClick={() => void handleRate(value)}
                                             disabled={isRating}
-                                            className={`h-8 w-8 rounded-[0.6rem] text-xs font-semibold transition-all sm:h-10 sm:w-10 sm:text-sm ${getRatingTone(value, rating)} disabled:opacity-70`}
+                                            className={`h-7 w-7 rounded-[0.45rem] text-[10px] font-semibold transition-all sm:h-10 sm:w-10 sm:rounded-[0.6rem] sm:text-sm ${getRatingTone(value, rating)} disabled:opacity-70`}
                                         >
                                             {value}
                                         </button>
@@ -710,29 +725,29 @@ export default function GamePlayer() {
                                         whileTap={{ scale: 0.98 }}
                                         onClick={handleNext}
                                         disabled={isLoading}
-                                        className="btn-primary ml-1 min-h-9 rounded-[0.75rem] px-3 py-2 text-xs disabled:opacity-60 sm:min-h-11 sm:px-5"
+                                        className="btn-primary ml-1 min-h-8 rounded-[0.6rem] px-2 py-1.5 text-[10px] disabled:opacity-60 sm:min-h-11 sm:px-5 sm:text-xs"
                                     >
-                                        {isLoading ? 'Loading' : 'Next Clip'}
+                                        {isLoading ? '...' : 'Next'}
                                     </motion.button>
                                 </div>
                             </div>
                         ) : (
-                            <div className="flex items-center justify-between gap-3">
-                                <p className="text-sm font-semibold text-text-2">
-                                    {phase === 'answered' ? 'Answer locked. Resolving...' : selectedOption ? 'Answer locked.' : 'Tap an answer.'}
+                            <div className="flex items-center justify-between gap-2">
+                                <p className="text-xs font-semibold text-text-2 sm:text-sm">
+                                    {phase === 'answered' ? 'Resolving...' : selectedOption ? 'Locked.' : 'Tap an answer.'}
                                 </p>
-                                <div className="flex shrink-0 gap-2">
+                                <div className="flex shrink-0 gap-1.5 sm:gap-2">
                                     <button
                                         type="button"
                                         onClick={() => void playClip(true)}
-                                        className="btn-secondary min-h-11 rounded-[0.85rem] px-4 py-3 text-xs"
+                                        className="btn-secondary min-h-8 rounded-[0.75rem] px-3 py-2 text-[10px] sm:min-h-11 sm:rounded-[0.85rem] sm:px-4 sm:py-3 sm:text-xs"
                                     >
                                         {clipBlocked ? 'Play' : 'Replay'}
                                     </button>
                                     <button
                                         type="button"
                                         onClick={handleReveal}
-                                        className="btn-secondary min-h-11 rounded-[0.85rem] px-4 py-3 text-xs"
+                                        className="btn-secondary min-h-8 rounded-[0.75rem] px-3 py-2 text-[10px] sm:min-h-11 sm:rounded-[0.85rem] sm:px-4 sm:py-3 sm:text-xs"
                                     >
                                         Reveal
                                     </button>

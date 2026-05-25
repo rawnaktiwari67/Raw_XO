@@ -8,7 +8,7 @@ import { useAuthStore } from './stores/authStore';
 
 function AppShell() {
     return (
-        <BrowserRouter>
+        <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
             <AnimatePresence mode="wait">
                 <AppRouter />
             </AnimatePresence>
