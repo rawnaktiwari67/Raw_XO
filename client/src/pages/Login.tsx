@@ -42,28 +42,36 @@ export default function Login() {
     return shouldUseClerk ? (
         <div className="min-h-screen px-6 py-24">
             <div className="mx-auto flex max-w-[1180px] items-start justify-center">
-                <SignIn
-                    routing="path"
-                    path="/login"
-                    signUpUrl={clerkSignUpUrl}
-                    forceRedirectUrl="/"
-                    fallbackRedirectUrl="/"
-                    appearance={{
-                        elements: {
-                            rootBox: 'w-full',
-                            cardBox: 'w-full max-w-[440px]',
-                            card: 'rounded-[1.6rem] border-0 bg-[linear-gradient(180deg,rgba(16,16,20,0.96),rgba(12,12,16,0.96))] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_28px_80px_rgba(0,0,0,0.32)]',
-                            headerTitle: 'font-heading text-[2.3rem] leading-[0.92] text-text-1',
-                            headerSubtitle: 'text-sm text-text-3',
-                            socialButtonsBlockButton: 'rounded-[1rem] border border-white/10 bg-white/[0.03] text-text-1',
-                            formButtonPrimary: 'rounded-[1rem] bg-white text-black hover:bg-white/90',
-                            formFieldInput: 'rounded-[1rem] border border-white/10 bg-white/[0.03] text-text-1',
-                            footerActionLink: 'text-accent hover:text-text-1',
-                            identityPreviewText: 'text-text-2',
-                            formFieldLabel: 'text-text-3 uppercase tracking-[0.12em] text-[11px]',
-                        },
-                    }}
-                />
+                <div className="w-full max-w-[440px]">
+                    <div className="mb-4 flex items-center justify-between gap-4 rounded-[1rem] border border-white/[0.06] bg-white/[0.025] px-4 py-3 text-xs text-text-3">
+                        <span>New Google account?</span>
+                        <Link to="/register" className="font-semibold text-accent hover:text-text-1">
+                            Create account
+                        </Link>
+                    </div>
+                    <SignIn
+                        routing="path"
+                        path="/login"
+                        signUpUrl={clerkSignUpUrl}
+                        forceRedirectUrl="/"
+                        fallbackRedirectUrl="/"
+                        appearance={{
+                            elements: {
+                                rootBox: 'w-full',
+                                cardBox: 'w-full',
+                                card: 'rounded-[1.4rem] border-0 bg-[linear-gradient(180deg,rgba(16,16,20,0.96),rgba(12,12,16,0.96))] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_22px_60px_rgba(0,0,0,0.24)]',
+                                headerTitle: 'font-heading text-[2.3rem] leading-[0.92] text-text-1',
+                                headerSubtitle: 'text-sm text-text-3',
+                                socialButtonsBlockButton: 'rounded-[1rem] border border-white/10 bg-white/[0.03] text-text-1',
+                                formButtonPrimary: 'rounded-[1rem] bg-white text-black hover:bg-white/90',
+                                formFieldInput: 'rounded-[1rem] border border-white/10 bg-white/[0.03] text-text-1',
+                                footerActionLink: 'text-accent hover:text-text-1',
+                                identityPreviewText: 'text-text-2',
+                                formFieldLabel: 'text-text-3 uppercase tracking-[0.12em] text-[11px]',
+                            },
+                        }}
+                    />
+                </div>
             </div>
         </div>
     ) : (

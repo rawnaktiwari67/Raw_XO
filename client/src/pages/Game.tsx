@@ -77,6 +77,7 @@ export default function Game() {
             <div aria-hidden className="absolute inset-x-0 top-0 h-[34rem] opacity-[0.16]">
                 <LaserFlow
                     color="#F4A261"
+                    dpr={0.85}
                     horizontalBeamOffset={0.08}
                     verticalBeamOffset={-0.02}
                     horizontalSizing={0.92}

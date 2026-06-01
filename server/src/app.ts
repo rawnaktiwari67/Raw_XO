@@ -52,8 +52,8 @@ const corsOptions: cors.CorsOptions = {
             callback(null, true);
             return;
         }
-        // Allow Vite fallback ports in local development.
-        if (env.NODE_ENV !== 'production' && /^http:\/\/127\.0\.0\.1:517\d$/.test(origin)) {
+        // Allow Vite fallback ports in local development for either loopback hostname.
+        if (env.NODE_ENV !== 'production' && /^http:\/\/(?:localhost|127\.0\.0\.1):517\d$/.test(origin)) {
             callback(null, true);
             return;
         }

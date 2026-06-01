@@ -473,7 +473,9 @@ export default function LaserFlow({
         canvas.addEventListener('webglcontextrestored', onContextRestored, false);
 
         let raf = 0;
+        let lastRender = 0;
         let lastDprChange = 0;
+        const targetFrameMs = 1000 / 30;
         const dprFloor = 0.6;
         const lowerThreshold = 50;
         const upperThreshold = 58;
@@ -514,6 +516,8 @@ export default function LaserFlow({
             if (pausedRef.current || !inViewRef.current) return;
 
             const now = performance.now();
+            if (now - lastRender < targetFrameMs) return;
+            lastRender = now;
             const time = (now - startTime) / 1000;
             const dt = Math.max(0, (now - previousTime) / 1000);
             previousTime = now;

@@ -111,7 +111,6 @@ body::before {
   height: 90vw;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(244, 162, 97, 0.06) 0%, transparent 60%);
-  filter: blur(120px);
   pointer-events: none;
   z-index: 0;
 }

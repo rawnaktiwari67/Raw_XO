@@ -1,17 +1,32 @@
 import { useEffect, useRef } from 'react';
 import { BrowserRouter } from 'react-router-dom';
-import { AnimatePresence } from 'framer-motion';
 import { useAuth } from '@clerk/clerk-react';
 import AppRouter from './router/AppRouter';
+import Cursor from './components/effects/Cursor';
 import { setClerkTokenGetter } from './services/clerkToken';
 import { useAuthStore } from './stores/authStore';
+
+const waitForToken = async (getToken: () => Promise<string | null>) => {
+    const delays = [0, 150, 350, 700, 1200];
+
+    for (const delay of delays) {
+        if (delay > 0) {
+            await new Promise((resolve) => {
+                window.setTimeout(resolve, delay);
+            });
+        }
+
+        const token = await getToken();
+        if (token) return token;
+    }
+
+    return null;
+};
 
 function AppShell() {
     return (
         <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
-            <AnimatePresence mode="wait">
-                <AppRouter />
-            </AnimatePresence>
+            <AppRouter />
         </BrowserRouter>
     );
 }
@@ -38,12 +53,27 @@ function ClerkSessionBridge() {
             tokenGetterSetRef.current = true;
         }
 
+        let isCancelled = false;
+
         if (isSignedIn) {
-            void fetchMe();
-            return;
+            void (async () => {
+                const token = await waitForToken(getToken);
+                if (isCancelled) return;
+
+                if (token) {
+                    await fetchMe();
+                }
+            })();
+
+            return () => {
+                isCancelled = true;
+            };
         }
 
         clearSession();
+        return () => {
+            isCancelled = true;
+        };
     }, [clearSession, fetchMe, getToken, isLoaded, isSignedIn]);
 
     if (!isLoaded) {
@@ -61,8 +91,16 @@ function ClerkSessionBridge() {
 
 export default function App({ clerkEnabled = false }: { clerkEnabled?: boolean }) {
     if (!clerkEnabled) {
-        return <AppShell />;
+        return (
+            <Cursor>
+                <AppShell />
+            </Cursor>
+        );
     }
 
-    return <ClerkSessionBridge />;
+    return (
+        <Cursor>
+            <ClerkSessionBridge />
+        </Cursor>
+    );
 }
