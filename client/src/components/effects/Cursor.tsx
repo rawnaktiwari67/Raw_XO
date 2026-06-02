@@ -8,7 +8,7 @@ export default function Cursor({ children }: PropsWithChildren) {
     const dotRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        const precisePointer = window.matchMedia('(pointer: fine)');
+        const precisePointer = window.matchMedia('(any-pointer: fine)');
         if (!precisePointer.matches) return;
 
         const dot = dotRef.current;

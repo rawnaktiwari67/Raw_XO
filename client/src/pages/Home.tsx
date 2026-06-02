@@ -24,6 +24,24 @@ const chipMotion = {
 
 const moodOptions = ['after midnight', 'pressure', 'gloss and damage', 'devotion', 'night drive', 'cold heartbreak'];
 
+const cultureLanes = [
+    {
+        label: 'Decode',
+        title: 'Lyric meaning battles',
+        body: 'Pick the read that feels true, then watch the room tilt around it.',
+    },
+    {
+        label: 'React',
+        title: 'Mood and memory tags',
+        body: 'Short, sharp reactions that say why the track still lands.',
+    },
+    {
+        label: 'Replay',
+        title: 'Audio guessing loop',
+        body: 'Turn interpretation into a quick-fire listening game.',
+    },
+];
+
 export default function Home() {
     const { user } = useAuthStore();
     const [entries, setEntries] = useState<MeaningEntry[]>([]);
@@ -238,40 +256,40 @@ export default function Home() {
                     className="grid grid-cols-12 gap-8 items-start"
                 >
                     <div className="col-span-12 lg:col-span-5">
-                        <p className="label-xs mb-6">Culture System</p>
+                        <p className="label-xs mb-6">Culture Archive</p>
                         <h1 className="font-heading font-bold text-5xl md:text-7xl text-text-1 leading-[0.93] tracking-normal max-w-xl">
-                            The part of the song people keep arguing with.
+                            Songs are better when the room has a take.
                         </h1>
                         <p className="text-text-3 text-base leading-relaxed max-w-md mt-6">
-                            Trending tracks, lyric meaning battles, fast takes, and a guessing loop that turns context
-                            into replay.
+                            A tighter archive for lyric arguments, mood tags, quick reviews, and the context that makes
+                            a track feel bigger than a stream count.
                         </p>
                         <div className="flex flex-wrap gap-3 mt-8">
                             <a href="#trending" className="btn-primary rounded-2xl">
-                                See what is moving
+                                Enter the archive
                             </a>
                             <Link to="/" className="btn-secondary rounded-2xl">
-                                Main guess game
+                                Play the game
                             </Link>
                         </div>
                         {error ? <p className="text-sm text-amber mt-6">{error}</p> : null}
                     </div>
 
-                    <div className="col-span-12 lg:col-span-7 rounded-3xl border border-white/10 bg-white/[0.035] p-6 md:p-8">
+                    <div className="col-span-12 lg:col-span-7 rounded-[1.2rem] border border-white/10 bg-white/[0.035] p-5 md:p-7">
                         <div className="flex items-center justify-between gap-4">
                             <div>
-                                <p className="label-xs mb-3">Live pulse</p>
+                                <p className="label-xs mb-3">Now decoding</p>
                                 <p className="font-heading font-bold text-3xl text-text-1 leading-tight">
-                                    Discover. Interpret. React. Guess. Rate.
+                                    Trending tracks, but with actual memory attached.
                                 </p>
                             </div>
                             <div className="hidden md:flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-4 py-2 text-xs text-text-3">
                                 <span className="inline-block h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                                Apple-fed music data
+                                Live music data
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-12 gap-4 mt-8">
+                        <div className="grid grid-cols-12 gap-3 mt-7">
                             {entries.slice(0, 3).map((entry, index) => (
                                 <motion.button
                                     key={entry.trackId}
@@ -281,9 +299,15 @@ export default function Home() {
                                         setActiveTrackId(entry.trackId);
                                         setReviewMood(entry.mood);
                                     }}
-                                    className={`${index === 0 ? 'col-span-12 md:col-span-6' : 'col-span-12 md:col-span-3'} text-left rounded-2xl overflow-hidden border border-white/10 bg-black/20`}
+                                    className={`${index === 0 ? 'col-span-12 md:col-span-6' : 'col-span-12 md:col-span-3'} group text-left rounded-[1rem] overflow-hidden border border-white/10 bg-black/20 transition-colors hover:border-amber/25`}
                                 >
-                                    <img src={entry.albumArt} alt={entry.title} className="h-44 w-full object-cover" />
+                                    <div className="relative">
+                                        <img src={entry.albumArt} alt={entry.title} className="h-44 w-full object-cover transition duration-500 group-hover:scale-[1.03]" />
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                                        <span className="absolute bottom-3 left-3 rounded-full bg-black/55 px-3 py-1 text-[10px] uppercase tracking-[0.14em] text-text-2">
+                                            {entry.mood}
+                                        </span>
+                                    </div>
                                     <div className="p-4">
                                         <p className="text-xs uppercase tracking-[0.22em] text-text-4">{entry.artist}</p>
                                         <p className="font-heading font-bold text-xl text-text-1 mt-3 leading-tight">
@@ -297,21 +321,37 @@ export default function Home() {
                     </div>
                 </motion.section>
 
+                <section className="mt-8 grid grid-cols-1 gap-3 md:grid-cols-3">
+                    {cultureLanes.map((lane, index) => (
+                        <motion.article
+                            key={lane.label}
+                            initial={{ opacity: 0, y: 14 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.45, delay: 0.08 + index * 0.05 }}
+                            className="rounded-[1rem] border border-white/10 bg-black/20 p-5"
+                        >
+                            <p className="text-xs uppercase tracking-[0.18em] text-amber">{lane.label}</p>
+                            <p className="mt-3 font-heading text-2xl font-bold leading-tight text-text-1">{lane.title}</p>
+                            <p className="mt-3 text-sm leading-relaxed text-text-3">{lane.body}</p>
+                        </motion.article>
+                    ))}
+                </section>
+
                 <motion.section
                     initial={{ opacity: 0, y: 20 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, margin: '-80px' }}
                     transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-                    className="mt-10 rounded-3xl border border-white/10 bg-white/[0.03] px-6 py-5"
+                    className="mt-10 rounded-[1.2rem] border border-white/10 bg-white/[0.03] px-6 py-5"
                 >
                     <div className="grid grid-cols-12 gap-4 items-start">
                         <div className="col-span-12 lg:col-span-4">
                             <p className="label-xs mb-3">Community</p>
                             <p className="font-heading font-bold text-3xl text-text-1 leading-tight">
-                                The room is already talking.
+                                The archive gets sharper as people vote.
                             </p>
                             <p className="text-text-3 text-sm mt-3 max-w-sm">
-                                Shared votes, live reactions, and the freshest takes are shaping what each line means.
+                                Meaning votes, reactions, and quick reviews turn each track into a living note.
                             </p>
                         </div>
 

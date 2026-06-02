@@ -640,6 +640,35 @@ h6 {
   background: rgba(255, 255, 255, 0.14);
 }
 
+.scrollbar-cinematic {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(244, 162, 97, 0.34) rgba(255, 255, 255, 0.025);
+}
+
+.scrollbar-cinematic::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollbar-cinematic::-webkit-scrollbar-track {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01));
+  border-radius: 999px;
+}
+
+.scrollbar-cinematic::-webkit-scrollbar-thumb {
+  background:
+    linear-gradient(180deg, rgba(248, 215, 174, 0.72), rgba(244, 162, 97, 0.36)),
+    rgba(244, 162, 97, 0.26);
+  border: 2px solid rgba(12, 12, 16, 0.94);
+  border-radius: 999px;
+  box-shadow: 0 0 10px rgba(244, 162, 97, 0.12);
+}
+
+.scrollbar-cinematic::-webkit-scrollbar-thumb:hover {
+  background:
+    linear-gradient(180deg, rgba(255, 230, 196, 0.82), rgba(244, 162, 97, 0.52)),
+    rgba(244, 162, 97, 0.36);
+}
+
 /* ─────────────────────────────
    Focus
    ───────────────────────────── */

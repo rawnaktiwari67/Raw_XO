@@ -248,7 +248,7 @@ function ArtistPicker({
                 className="h-10 w-full rounded-[0.85rem] bg-black/15 px-3 text-sm text-text-1 outline-none ring-1 ring-white/[0.04] transition-all placeholder:text-text-4 focus:bg-black/20 focus:ring-amber/30"
             />
 
-            <div className="mt-3 max-h-[82px] overflow-y-auto pr-1 [scrollbar-width:thin]">
+            <div className="scrollbar-cinematic mt-3 max-h-[82px] overflow-y-auto pr-2">
                 <div className="flex flex-wrap gap-2">
                     <motion.button
                         type="button"

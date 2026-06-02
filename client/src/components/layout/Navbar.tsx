@@ -52,8 +52,10 @@ export default function Navbar() {
                 }}
             >
                 <div className="mx-auto flex h-[62px] max-w-[1280px] items-center justify-between gap-4 px-4 md:h-[76px] md:px-12">
-                    <Link to="/" className="shrink-0">
-                        <span className="brand-mark text-[1.6rem] leading-none text-gradient-gold md:text-[1.9rem]">Raw XO</span>
+                    <Link to="/" className="shrink-0" aria-label="Raw XO home">
+                        <span className="brand-mark text-[1.6rem] leading-none text-gradient-gold md:text-[1.9rem]">
+                            Raw XO
+                        </span>
                     </Link>
 
                     <nav className="hidden items-center gap-8 md:flex lg:gap-10">

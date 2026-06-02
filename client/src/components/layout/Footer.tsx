@@ -25,7 +25,11 @@ export default function Footer() {
             <div className="max-w-[1280px] mx-auto px-6 md:px-12 py-16">
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-12">
                     <div className="md:col-span-5">
-                        <p className="brand-mark text-[2.15rem] leading-none text-gradient-gold">Raw XO</p>
+                        <Link to="/" aria-label="Raw XO home">
+                            <span className="brand-mark text-[2.15rem] leading-none text-gradient-gold">
+                                Raw XO
+                            </span>
+                        </Link>
                         <p className="text-text-3 text-sm max-w-sm mt-3 leading-relaxed">
                             Music instinct, album memory, and culture notes held in one late-night room.
                         </p>
