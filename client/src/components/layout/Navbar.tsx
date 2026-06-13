@@ -4,6 +4,7 @@ import { motion, AnimatePresence, useMotionValueEvent, useScroll } from 'framer-
 import { UserButton, useClerk } from '@clerk/clerk-react';
 import { useAuthStore } from '../../stores/authStore';
 import { shouldUseClerk } from '../../services/authMode';
+import { authService } from '../../services/authService';
 
 const LINKS = [
     { to: '/', label: 'Play' },
@@ -33,6 +34,16 @@ export default function Navbar() {
     const [mobileOpen, setMobileOpen] = useState(false);
 
     useMotionValueEvent(scrollY, 'change', (value) => setIsScrolled(value > 14));
+
+    const handleLocalSignOut = async () => {
+        try {
+            await authService.logout();
+        } finally {
+            clearSession();
+            setMobileOpen(false);
+            navigate('/');
+        }
+    };
 
     return (
         <motion.header
@@ -74,16 +85,27 @@ export default function Navbar() {
                                     {user.username}
                                 </Link>
                                 {shouldUseClerk ? (
-                                    <ClerkSignedInControls
-                                        onAfterSignOut={() => {
-                                            clearSession();
-                                            navigate('/');
-                                        }}
-                                    />
+                                    <div className="hidden sm:block">
+                                        <ClerkSignedInControls
+                                            onAfterSignOut={() => {
+                                                clearSession();
+                                                setMobileOpen(false);
+                                                navigate('/');
+                                            }}
+                                        />
+                                    </div>
                                 ) : (
-                                    <Link to="/login" className="btn-secondary rounded-[1.1rem] px-4 py-2 text-[11px] md:px-5 md:text-xs">
-                                        Sign In
-                                    </Link>
+                                    <div className="hidden sm:block">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                void handleLocalSignOut();
+                                            }}
+                                            className="btn-secondary rounded-[1.1rem] px-4 py-2 text-[11px] md:px-5 md:text-xs"
+                                        >
+                                            Sign Out
+                                        </button>
+                                    </div>
                                 )}
                             </>
                         ) : (
@@ -147,13 +169,37 @@ export default function Navbar() {
                                     />
                                 ))}
                                 {isAuthenticated && user ? (
-                                    <Link
-                                        to={`/profile/${user.username}`}
-                                        onClick={() => setMobileOpen(false)}
-                                        className="mt-1 text-[11px] uppercase tracking-[0.14em] text-text-3 transition-colors hover:text-text-1"
-                                    >
-                                        {user.username}
-                                    </Link>
+                                    <div className="mt-1 rounded-[0.95rem] bg-white/[0.035] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <Link
+                                                to={`/profile/${user.username}`}
+                                                onClick={() => setMobileOpen(false)}
+                                                className="min-w-0 text-[11px] uppercase tracking-[0.14em] text-text-3 transition-colors hover:text-text-1"
+                                            >
+                                                <span className="block truncate">{user.username}</span>
+                                            </Link>
+                                            {shouldUseClerk ? (
+                                                <ClerkSignedInControls
+                                                    compact
+                                                    onAfterSignOut={() => {
+                                                        clearSession();
+                                                        setMobileOpen(false);
+                                                        navigate('/');
+                                                    }}
+                                                />
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        void handleLocalSignOut();
+                                                    }}
+                                                    className="btn-secondary shrink-0 rounded-[0.8rem] px-3 py-2 text-[10px]"
+                                                >
+                                                    Sign Out
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
                                 ) : (
                                     <Link
                                         to="/login"
@@ -172,7 +218,7 @@ export default function Navbar() {
     );
 }
 
-function ClerkSignedInControls({ onAfterSignOut }: { onAfterSignOut: () => void }) {
+function ClerkSignedInControls({ onAfterSignOut, compact = false }: { onAfterSignOut: () => void; compact?: boolean }) {
     const { signOut } = useClerk();
 
     return (
@@ -180,7 +226,7 @@ function ClerkSignedInControls({ onAfterSignOut }: { onAfterSignOut: () => void 
             <UserButton
                 appearance={{
                     elements: {
-                        avatarBox: 'h-9 w-9 ring-1 ring-white/10',
+                        avatarBox: compact ? 'h-8 w-8 ring-1 ring-white/10' : 'h-9 w-9 ring-1 ring-white/10',
                     },
                 }}
                 afterSignOutUrl="/"
@@ -190,7 +236,9 @@ function ClerkSignedInControls({ onAfterSignOut }: { onAfterSignOut: () => void 
                     await signOut();
                     onAfterSignOut();
                 }}
-                className="btn-secondary rounded-[1.1rem] px-4 py-2 text-[11px] md:px-5 md:text-xs"
+                className={compact
+                    ? 'btn-secondary rounded-[0.8rem] px-3 py-2 text-[10px]'
+                    : 'btn-secondary rounded-[1.1rem] px-4 py-2 text-[11px] md:px-5 md:text-xs'}
             >
                 Sign Out
             </button>

@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
 import AppRouter from './router/AppRouter';
-import Cursor from './components/effects/Cursor';
 import { setClerkTokenGetter } from './services/clerkToken';
 import { useAuthStore } from './stores/authStore';
 
@@ -21,6 +20,23 @@ const waitForToken = async (getToken: () => Promise<string | null>) => {
     }
 
     return null;
+};
+
+const syncProfileWithRetry = async (fetchMe: () => Promise<unknown>) => {
+    const delays = [0, 250, 600, 1200];
+
+    for (const delay of delays) {
+        if (delay > 0) {
+            await new Promise((resolve) => {
+                window.setTimeout(resolve, delay);
+            });
+        }
+
+        const user = await fetchMe();
+        if (user) return true;
+    }
+
+    return false;
 };
 
 function AppShell() {
@@ -61,7 +77,7 @@ function ClerkSessionBridge() {
                 if (isCancelled) return;
 
                 if (token) {
-                    await fetchMe();
+                    await syncProfileWithRetry(fetchMe);
                 }
             })();
 
@@ -91,16 +107,8 @@ function ClerkSessionBridge() {
 
 export default function App({ clerkEnabled = false }: { clerkEnabled?: boolean }) {
     if (!clerkEnabled) {
-        return (
-            <Cursor>
-                <AppShell />
-            </Cursor>
-        );
+        return <AppShell />;
     }
 
-    return (
-        <Cursor>
-            <ClerkSessionBridge />
-        </Cursor>
-    );
+    return <ClerkSessionBridge />;
 }

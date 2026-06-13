@@ -8,7 +8,11 @@ const getEnv = () => ({
     VERCEL: process.env.VERCEL || '',
     VERCEL_ENV: process.env.VERCEL_ENV || '',
     MONGODB_URI: process.env.MONGODB_URI || '',
-    CLERK_PUBLISHABLE_KEY: (process.env.CLERK_PUBLISHABLE_KEY || '').trim(),
+    CLERK_PUBLISHABLE_KEY: (
+        process.env.CLERK_PUBLISHABLE_KEY
+        || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+        || ''
+    ).trim(),
     CLERK_SECRET_KEY: (process.env.CLERK_SECRET_KEY || '').trim(),
     JWT_SECRET: process.env.JWT_SECRET || 'change-me',
     GAME_SECRET: process.env.GAME_SECRET || 'change-me-game',

@@ -7,7 +7,8 @@ interface AuthState {
     isAuthenticated: boolean;
     isLoading: boolean;
     error: string | null;
-    fetchMe: () => Promise<void>;
+    fetchMe: () => Promise<User | null>;
+    setSession: (user: User) => void;
     clearSession: () => void;
     clearError: () => void;
 }
@@ -19,15 +20,19 @@ export const useAuthStore = create<AuthState>((set) => ({
     error: null,
 
     fetchMe: async () => {
-        set({ isLoading: true });
+        set({ isLoading: true, error: null });
         try {
             const res = await authService.getMe();
-            set({ user: res.data.data, isAuthenticated: true, isLoading: false });
+            const user = res.data.data as User;
+            set({ user, isAuthenticated: true, isLoading: false, error: null });
+            return user;
         } catch {
-            set({ user: null, isAuthenticated: false, isLoading: false });
+            set({ user: null, isAuthenticated: false, isLoading: false, error: 'Not authenticated' });
+            return null;
         }
     },
 
+    setSession: (user) => set({ user, isAuthenticated: true, isLoading: false, error: null }),
     clearSession: () => set({ user: null, isAuthenticated: false, isLoading: false, error: null }),
     clearError: () => set({ error: null }),
 }));

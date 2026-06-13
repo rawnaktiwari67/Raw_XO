@@ -17,7 +17,7 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 
 export default function Login() {
     const navigate = useNavigate();
-    const { fetchMe } = useAuthStore();
+    const { setSession } = useAuthStore();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -29,8 +29,8 @@ export default function Login() {
         setIsSubmitting(true);
 
         try {
-            await authService.login({ email, password });
-            await fetchMe();
+            const res = await authService.login({ email, password });
+            setSession(res.data.data);
             navigate('/');
         } catch (err) {
             setError(getErrorMessage(err, 'Could not sign in with those details.'));
@@ -40,10 +40,10 @@ export default function Login() {
     };
 
     return shouldUseClerk ? (
-        <div className="min-h-screen px-6 py-24">
+        <div className="min-h-screen px-3 pb-10 pt-20 sm:px-6 sm:py-24">
             <div className="mx-auto flex max-w-[1180px] items-start justify-center">
                 <div className="w-full max-w-[440px]">
-                    <div className="mb-4 flex items-center justify-between gap-4 rounded-[1rem] border border-white/[0.06] bg-white/[0.025] px-4 py-3 text-xs text-text-3">
+                    <div className="mb-3 flex items-center justify-between gap-3 rounded-[0.9rem] border border-white/[0.06] bg-white/[0.025] px-3 py-3 text-xs text-text-3 sm:mb-4 sm:rounded-[1rem] sm:px-4">
                         <span>New Google account?</span>
                         <Link to="/register" className="font-semibold text-accent hover:text-text-1">
                             Create account
@@ -59,12 +59,12 @@ export default function Login() {
                             elements: {
                                 rootBox: 'w-full',
                                 cardBox: 'w-full',
-                                card: 'rounded-[1.4rem] border-0 bg-[linear-gradient(180deg,rgba(16,16,20,0.96),rgba(12,12,16,0.96))] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_22px_60px_rgba(0,0,0,0.24)]',
-                                headerTitle: 'font-heading text-[2.3rem] leading-[0.92] text-text-1',
+                                card: 'w-full rounded-[1rem] border-0 bg-[linear-gradient(180deg,rgba(16,16,20,0.96),rgba(12,12,16,0.96))] px-3 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_22px_60px_rgba(0,0,0,0.24)] sm:rounded-[1.4rem] sm:px-8 sm:py-8',
+                                headerTitle: 'font-heading text-[1.9rem] leading-[0.96] text-text-1 sm:text-[2.3rem]',
                                 headerSubtitle: 'text-sm text-text-3',
-                                socialButtonsBlockButton: 'rounded-[1rem] border border-white/10 bg-white/[0.03] text-text-1',
-                                formButtonPrimary: 'rounded-[1rem] bg-white text-black hover:bg-white/90',
-                                formFieldInput: 'rounded-[1rem] border border-white/10 bg-white/[0.03] text-text-1',
+                                socialButtonsBlockButton: 'min-h-11 rounded-[0.85rem] border border-white/10 bg-white/[0.03] text-text-1 sm:rounded-[1rem]',
+                                formButtonPrimary: 'min-h-11 rounded-[0.85rem] bg-white text-black hover:bg-white/90 sm:rounded-[1rem]',
+                                formFieldInput: 'min-h-11 rounded-[0.85rem] border border-white/10 bg-white/[0.03] text-text-1 sm:rounded-[1rem]',
                                 footerActionLink: 'text-accent hover:text-text-1',
                                 identityPreviewText: 'text-text-2',
                                 formFieldLabel: 'text-text-3 uppercase tracking-[0.12em] text-[11px]',
@@ -75,14 +75,14 @@ export default function Login() {
             </div>
         </div>
     ) : (
-        <div className="min-h-screen px-6 py-24">
+        <div className="min-h-screen px-3 pb-10 pt-20 sm:px-6 sm:py-24">
             <div className="mx-auto flex max-w-[1180px] items-start justify-center">
                 <form
                     onSubmit={handleSubmit}
-                    className="w-full max-w-[440px] rounded-[1.6rem] bg-[linear-gradient(180deg,rgba(16,16,20,0.96),rgba(12,12,16,0.96))] p-8 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_28px_80px_rgba(0,0,0,0.32)]"
+                    className="w-full max-w-[440px] rounded-[1rem] bg-[linear-gradient(180deg,rgba(16,16,20,0.96),rgba(12,12,16,0.96))] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_28px_80px_rgba(0,0,0,0.32)] sm:rounded-[1.6rem] sm:p-8"
                 >
                     <div className="space-y-3">
-                        <h1 className="font-heading text-[2.3rem] leading-[0.92] text-text-1">Sign in to Raw XO</h1>
+                        <h1 className="font-heading text-[1.95rem] leading-[0.96] text-text-1 sm:text-[2.3rem]">Sign in to Raw XO</h1>
                         <p className="text-sm text-text-3">Use your email account to keep your runs and rank.</p>
                     </div>
 
