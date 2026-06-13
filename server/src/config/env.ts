@@ -37,9 +37,7 @@ export const env = getEnv();
 const isHostedDeploy = env.VERCEL === '1' || Boolean(env.VERCEL_ENV);
 const shouldValidateProduction = env.NODE_ENV === 'production' || isHostedDeploy;
 export const hasClerkKeys = Boolean(env.CLERK_PUBLISHABLE_KEY && env.CLERK_SECRET_KEY);
-export const hasClerkTestKeys = env.CLERK_PUBLISHABLE_KEY.startsWith('pk_test_')
-    || env.CLERK_SECRET_KEY.startsWith('sk_test_');
-export const shouldUseClerkServer = hasClerkKeys && !(shouldValidateProduction && hasClerkTestKeys);
+export const shouldUseClerkServer = hasClerkKeys;
 
 const assertProductionSecret = (name: string, value: string, unsafeDefaults: string[]): void => {
     if (value.length < 32 || unsafeDefaults.includes(value)) {
@@ -61,7 +59,7 @@ export const validateEnv = (): void => {
         throw new Error('CLIENT_ORIGIN must be set to your deployed frontend origin in production, or VERCEL_URL must be available.');
     }
 
-    if (!shouldUseClerkServer) {
-        console.warn('Clerk server auth is disabled. Add live CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY values in Vercel to enable Clerk sessions.');
+    if (!hasClerkKeys) {
+        console.warn('Clerk server auth is disabled. Add CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY values in Vercel to enable Clerk sessions.');
     }
 };

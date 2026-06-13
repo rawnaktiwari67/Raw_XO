@@ -76,7 +76,7 @@ if (shouldUseClerkServer) {
         secretKey: env.CLERK_SECRET_KEY,
     }));
 } else if (hasClerkKeys) {
-    console.warn('Clerk keys are present but not live production keys, so Clerk middleware is disabled.');
+    console.warn('Clerk keys are present but Clerk middleware is disabled.');
 } else if (env.CLERK_SECRET_KEY || env.CLERK_PUBLISHABLE_KEY) {
     console.warn('Clerk is partially configured. Set both CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY to enable Clerk routes.');
 }
