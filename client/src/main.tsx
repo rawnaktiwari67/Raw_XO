@@ -3,9 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { ClerkProvider } from '@clerk/clerk-react';
 import App from './App';
 import './index.css';
-import { clerkSignInUrl, clerkSignUpUrl, shouldUseClerk } from './services/authMode';
-
-const clerkPublishableKey = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || '').trim();
+import { clerkPublishableKey, clerkSignInUrl, clerkSignUpUrl, shouldUseClerk } from './services/authMode';
 
 // Mount film grain layer outside React tree — survives re-renders, no layout impact
 const grain = document.createElement('div');

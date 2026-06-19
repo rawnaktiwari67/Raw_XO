@@ -10,6 +10,7 @@ const getEnv = () => ({
     MONGODB_URI: process.env.MONGODB_URI || '',
     CLERK_PUBLISHABLE_KEY: (
         process.env.CLERK_PUBLISHABLE_KEY
+        || process.env.VITE_CLERK_PUBLISHABLE_KEY
         || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
         || ''
     ).trim(),
