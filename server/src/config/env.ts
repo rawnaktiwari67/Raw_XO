@@ -46,6 +46,20 @@ const assertProductionSecret = (name: string, value: string, unsafeDefaults: str
     }
 };
 
+const assertProductionClerkKeys = (): void => {
+    if (!env.CLERK_PUBLISHABLE_KEY || !env.CLERK_SECRET_KEY) {
+        throw new Error('CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY are required in production.');
+    }
+
+    if (env.CLERK_PUBLISHABLE_KEY.startsWith('pk_test_')) {
+        throw new Error('CLERK_PUBLISHABLE_KEY must be a live Clerk key (pk_live_) in production.');
+    }
+
+    if (env.CLERK_SECRET_KEY.startsWith('sk_test_')) {
+        throw new Error('CLERK_SECRET_KEY must be a live Clerk key (sk_live_) in production.');
+    }
+};
+
 export const validateEnv = (): void => {
     if (!shouldValidateProduction) return;
 
@@ -60,7 +74,5 @@ export const validateEnv = (): void => {
         throw new Error('CLIENT_ORIGIN must be set to your deployed frontend origin in production, or VERCEL_URL must be available.');
     }
 
-    if (!hasClerkKeys) {
-        console.warn('Clerk server auth is disabled. Add CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY values in Vercel to enable Clerk sessions.');
-    }
+    assertProductionClerkKeys();
 };
