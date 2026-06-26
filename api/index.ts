@@ -9,7 +9,10 @@ let dbConnectionPromise: Promise<void> | null = null;
 
 const ensureDbConnection = async () => {
     if (!dbConnectionPromise) {
-        dbConnectionPromise = connectDB();
+        dbConnectionPromise = connectDB().catch((err) => {
+            dbConnectionPromise = null;
+            throw err;
+        });
     }
     await dbConnectionPromise;
 };

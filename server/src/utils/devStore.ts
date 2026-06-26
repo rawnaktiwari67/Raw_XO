@@ -24,6 +24,10 @@ type DevGameScore = {
     artistName: string;
     artworkUrl: string;
     trackUrl: string;
+    genre?: string;
+    language?: string;
+    difficulty?: string;
+    artistFilter?: string;
     correct: boolean;
     responseTimeMs: number;
     score: number;
@@ -76,7 +80,10 @@ type DevCultureReview = {
     updatedAt: string;
 };
 
-const dbPath = path.resolve(process.cwd(), 'dev-data.json');
+// Vercel's filesystem is read-only except for /tmp
+const dbPath = process.env.VERCEL
+    ? '/tmp/dev-data.json'
+    : path.resolve(process.cwd(), 'dev-data.json');
 
 const emptyDb = (): DevDb => ({
     users: [],
@@ -302,16 +309,26 @@ export const devStore = {
         };
     },
 
-    getLeaderboard(period: 'daily' | 'all-time' = 'all-time', userId?: string) {
+    getLeaderboard(
+        period: 'daily' | 'all-time' = 'all-time',
+        userId?: string,
+        scope: 'global' | 'artist' | 'genre' = 'global',
+        scopeValue = ''
+    ) {
         const db = readDb();
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
+        const normalizedScopeValue = scopeValue.trim().toLowerCase();
 
         const ranked = db.users
             .map((user) => {
                 const scores = db.gameScores.filter((score) =>
                     score.user === user._id &&
-                    (period !== 'daily' || new Date(score.sessionDate).getTime() >= todayStart.getTime())
+                    (period !== 'daily' || new Date(score.sessionDate).getTime() >= todayStart.getTime()) &&
+                    (scope !== 'artist' || !normalizedScopeValue ||
+                        (score.artistFilter || '').toLowerCase() === normalizedScopeValue ||
+                        score.artistName.toLowerCase().includes(normalizedScopeValue)) &&
+                    (scope !== 'genre' || !normalizedScopeValue || (score.genre || 'all').toLowerCase() === normalizedScopeValue)
                 );
                 return {
                     _id: user._id,
@@ -331,6 +348,8 @@ export const devStore = {
             entries: ranked.slice(0, 50),
             userRank: userId ? ranked.findIndex((entry) => entry._id === userId) + 1 || null : null,
             period,
+            scope,
+            scopeValue,
         };
     },
 

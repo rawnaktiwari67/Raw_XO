@@ -1,0 +1,62 @@
+type GameLanguage = 'all' | 'english' | 'hindi' | 'punjabi' | 'korean' | 'spanish';
+type GameGenre = 'all' | 'hip-hop' | 'pop' | 'rnb' | 'dance';
+
+export type ArtistProfile = {
+    label: string;
+    value: string;
+    language: GameLanguage;
+};
+
+export const CURATED_ARTISTS: ArtistProfile[] = [
+    { label: 'The Weeknd', value: 'the weeknd', language: 'english' },
+    { label: 'Drake', value: 'drake', language: 'english' },
+    { label: 'Kanye West', value: 'kanye west', language: 'english' },
+    { label: 'Travis Scott', value: 'travis scott', language: 'english' },
+    { label: 'Kendrick Lamar', value: 'kendrick lamar', language: 'english' },
+    { label: 'Taylor Swift', value: 'taylor swift', language: 'english' },
+    { label: 'Billie Eilish', value: 'billie eilish', language: 'english' },
+    { label: 'Dua Lipa', value: 'dua lipa', language: 'english' },
+    { label: 'SZA', value: 'sza', language: 'english' },
+    { label: 'Frank Ocean', value: 'frank ocean', language: 'english' },
+    { label: 'Brent Faiyaz', value: 'brent faiyaz', language: 'english' },
+    { label: 'Post Malone', value: 'post malone', language: 'english' },
+    { label: 'Ariana Grande', value: 'ariana grande', language: 'english' },
+    { label: 'Doja Cat', value: 'doja cat', language: 'english' },
+    { label: 'Bad Bunny', value: 'bad bunny', language: 'spanish' },
+    { label: 'Karol G', value: 'karol g', language: 'spanish' },
+    { label: 'Rosalia', value: 'rosalia', language: 'spanish' },
+    { label: 'BTS', value: 'bts', language: 'korean' },
+    { label: 'BLACKPINK', value: 'blackpink', language: 'korean' },
+    { label: 'Jung Kook', value: 'jung kook', language: 'korean' },
+    { label: 'Arijit Singh', value: 'arijit singh', language: 'hindi' },
+    { label: 'Pritam', value: 'pritam', language: 'hindi' },
+    { label: 'Shreya Ghoshal', value: 'shreya ghoshal', language: 'hindi' },
+    { label: 'Atif Aslam', value: 'atif aslam', language: 'hindi' },
+    { label: 'Diljit Dosanjh', value: 'diljit dosanjh', language: 'punjabi' },
+    { label: 'Karan Aujla', value: 'karan aujla', language: 'punjabi' },
+    { label: 'AP Dhillon', value: 'ap dhillon', language: 'punjabi' },
+    { label: 'Shubh', value: 'shubh', language: 'punjabi' },
+];
+
+export const GENRE_QUERY_MAP: Record<GameGenre, string[]> = {
+    all: CURATED_ARTISTS.map((a) => a.value),
+    'hip-hop': ['kanye west', 'travis scott', 'drake', 'kendrick lamar', 'post malone', 'doja cat'],
+    pop: ['the weeknd', 'dua lipa', 'billie eilish', 'taylor swift', 'ariana grande', 'bad bunny'],
+    rnb: ['the weeknd', 'sza', 'frank ocean', 'brent faiyaz', 'ariana grande', 'drake'],
+    dance: ['dua lipa', 'calvin harris', 'david guetta', 'charli xcx', 'the weeknd', 'doja cat'],
+};
+
+export const LANGUAGE_QUERY_MAP: Record<GameLanguage, string[]> = {
+    all: [],
+    english: ['the weeknd', 'kanye west', 'travis scott', 'drake', 'sza', 'billie eilish', 'dua lipa', 'ariana grande'],
+    hindi: ['arijit singh', 'shreya ghoshal', 'pritam', 'atif aslam'],
+    punjabi: ['diljit dosanjh', 'karan aujla', 'ap dhillon', 'shubh'],
+    korean: ['bts', 'blackpink', 'newjeans', 'jung kook'],
+    spanish: ['bad bunny', 'karol g', 'rosalia', 'rauw alejandro'],
+};
+
+export const INDIA_FOCUSED_LANGUAGES: GameLanguage[] = ['hindi', 'punjabi'];
+export const INDIA_FOCUSED_ARTISTS = [
+    'arijit singh', 'pritam', 'shreya ghoshal', 'atif aslam',
+    'diljit dosanjh', 'karan aujla', 'ap dhillon', 'shubh',
+];

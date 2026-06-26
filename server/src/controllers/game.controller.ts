@@ -8,6 +8,14 @@ import { devStore } from '../utils/devStore';
 import { successResponse, errorResponse } from '../utils/apiResponse';
 import { calculateLevel, calculateGameXP } from '../utils/xpUtils';
 import { env } from '../config/env';
+import {
+    CURATED_ARTISTS,
+    GENRE_QUERY_MAP,
+    LANGUAGE_QUERY_MAP,
+    INDIA_FOCUSED_LANGUAGES,
+    INDIA_FOCUSED_ARTISTS,
+    type ArtistProfile,
+} from '../config/gameConstants';
 
 type ItunesSearchResult = {
     trackId?: number;
@@ -44,12 +52,6 @@ type GameFilters = {
     artist: string;
 };
 
-type ArtistProfile = {
-    label: string;
-    value: string;
-    language: GameLanguage;
-};
-
 const ITUNES_SEARCH_ENDPOINT = 'https://itunes.apple.com/search';
 const SPOTIFY_TOKEN_ENDPOINT = 'https://accounts.spotify.com/api/token';
 const SPOTIFY_SEARCH_ENDPOINT = 'https://api.spotify.com/v1/search';
@@ -77,54 +79,12 @@ const ARTIST_QUERIES = env.GAME_ARTIST_QUERY
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean);
-const CURATED_ARTISTS: ArtistProfile[] = [
-    { label: 'The Weeknd', value: 'the weeknd', language: 'english' },
-    { label: 'Drake', value: 'drake', language: 'english' },
-    { label: 'Kanye West', value: 'kanye west', language: 'english' },
-    { label: 'Travis Scott', value: 'travis scott', language: 'english' },
-    { label: 'Kendrick Lamar', value: 'kendrick lamar', language: 'english' },
-    { label: 'Taylor Swift', value: 'taylor swift', language: 'english' },
-    { label: 'Billie Eilish', value: 'billie eilish', language: 'english' },
-    { label: 'Dua Lipa', value: 'dua lipa', language: 'english' },
-    { label: 'SZA', value: 'sza', language: 'english' },
-    { label: 'Frank Ocean', value: 'frank ocean', language: 'english' },
-    { label: 'Brent Faiyaz', value: 'brent faiyaz', language: 'english' },
-    { label: 'Post Malone', value: 'post malone', language: 'english' },
-    { label: 'Ariana Grande', value: 'ariana grande', language: 'english' },
-    { label: 'Doja Cat', value: 'doja cat', language: 'english' },
-    { label: 'Bad Bunny', value: 'bad bunny', language: 'spanish' },
-    { label: 'Karol G', value: 'karol g', language: 'spanish' },
-    { label: 'Rosalia', value: 'rosalia', language: 'spanish' },
-    { label: 'BTS', value: 'bts', language: 'korean' },
-    { label: 'BLACKPINK', value: 'blackpink', language: 'korean' },
-    { label: 'Jung Kook', value: 'jung kook', language: 'korean' },
-    { label: 'Arijit Singh', value: 'arijit singh', language: 'hindi' },
-    { label: 'Pritam', value: 'pritam', language: 'hindi' },
-    { label: 'Shreya Ghoshal', value: 'shreya ghoshal', language: 'hindi' },
-    { label: 'Atif Aslam', value: 'atif aslam', language: 'hindi' },
-    { label: 'Diljit Dosanjh', value: 'diljit dosanjh', language: 'punjabi' },
-    { label: 'Karan Aujla', value: 'karan aujla', language: 'punjabi' },
-    { label: 'AP Dhillon', value: 'ap dhillon', language: 'punjabi' },
-    { label: 'Shubh', value: 'shubh', language: 'punjabi' },
-];
 const DEFAULT_ARTIST_QUERIES = ARTIST_QUERIES.length > 0
     ? ARTIST_QUERIES
     : CURATED_ARTISTS.map((artist) => artist.value);
-const GENRE_QUERY_MAP: Record<GameGenre, string[]> = {
-    all: DEFAULT_ARTIST_QUERIES,
-    'hip-hop': ['kanye west', 'travis scott', 'drake', 'kendrick lamar', 'post malone', 'doja cat'],
-    pop: ['the weeknd', 'dua lipa', 'billie eilish', 'taylor swift', 'ariana grande', 'bad bunny'],
-    rnb: ['the weeknd', 'sza', 'frank ocean', 'brent faiyaz', 'ariana grande', 'drake'],
-    dance: ['dua lipa', 'calvin harris', 'david guetta', 'charli xcx', 'the weeknd', 'doja cat'],
-};
-const LANGUAGE_QUERY_MAP: Record<GameLanguage, string[]> = {
-    all: [],
-    english: ['the weeknd', 'kanye west', 'travis scott', 'drake', 'sza', 'billie eilish', 'dua lipa', 'ariana grande'],
-    hindi: ['arijit singh', 'shreya ghoshal', 'pritam', 'atif aslam'],
-    punjabi: ['diljit dosanjh', 'karan aujla', 'ap dhillon', 'shubh'],
-    korean: ['bts', 'blackpink', 'newjeans', 'jung kook'],
-    spanish: ['bad bunny', 'karol g', 'rosalia', 'rauw alejandro'],
-};
+
+// Override the 'all' bucket to respect the GAME_ARTIST_QUERY env var
+GENRE_QUERY_MAP.all = DEFAULT_ARTIST_QUERIES;
 type ItunesArtistSearchResult = {
     artistId?: number;
     artistName?: string;
@@ -161,17 +121,6 @@ type SpotifyTokenPayload = {
     access_token?: string;
     expires_in?: number;
 };
-const INDIA_FOCUSED_LANGUAGES: GameLanguage[] = ['hindi', 'punjabi'];
-const INDIA_FOCUSED_ARTISTS = [
-    'arijit singh',
-    'pritam',
-    'shreya ghoshal',
-    'atif aslam',
-    'diljit dosanjh',
-    'karan aujla',
-    'ap dhillon',
-    'shubh',
-];
 
 const songPoolCache = new Map<string, { songs: SongPreview[]; fetchedAt: number }>();
 const inFlightSongPools = new Map<string, Promise<SongPreview[]>>();
@@ -255,6 +204,9 @@ const shuffle = <T>(arr: T[]): T[] => [...arr].sort(() => Math.random() - 0.5);
 
 const normalizeTitle = (value: string): string =>
     value.toLowerCase().trim().replace(/\s+/g, ' ');
+
+const escapeRegExp = (value: string): string =>
+    value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const normalizeArtistKey = (value: string): string =>
     normalizeTitle(value)
@@ -670,20 +622,24 @@ const titleOverlapScore = (left: string, right: string): number => {
 
 const distractorScore = (candidate: SongPreview, correct: SongPreview, difficulty: GameDifficulty): number => {
     const sameArtist = normalizeArtistKey(candidate.artist) === normalizeArtistKey(correct.artist) ? 14 : 0;
+    const sameAlbum = normalizeTitle(candidate.album) && normalizeTitle(candidate.album) === normalizeTitle(correct.album) ? 6 : 0;
     const sameEra = candidate.releaseYear && correct.releaseYear
         ? Math.max(0, 8 - Math.abs(candidate.releaseYear - correct.releaseYear))
         : 1;
+    const similarLength = candidate.durationMs && correct.durationMs
+        ? Math.max(0, 4 - Math.abs(candidate.durationMs - correct.durationMs) / 45_000)
+        : 0;
     const titlePenalty = titleOverlapScore(candidate.title, correct.title) * 8;
 
     if (difficulty === 'easy') {
-        return sameEra - sameArtist - titlePenalty;
+        return sameEra + similarLength - sameArtist - sameAlbum - titlePenalty;
     }
 
     if (difficulty === 'hard') {
-        return sameArtist + sameEra * 1.2 - titlePenalty;
+        return sameArtist + sameAlbum + sameEra * 1.35 + similarLength - titlePenalty;
     }
 
-    return sameArtist * 0.4 + sameEra - titlePenalty;
+    return sameArtist * 0.55 + sameAlbum * 0.35 + sameEra + similarLength - titlePenalty;
 };
 
 const pickDistractors = (songs: SongPreview[], correct: SongPreview, difficulty: GameDifficulty): SongPreview[] => {
@@ -696,9 +652,25 @@ const pickDistractors = (songs: SongPreview[], correct: SongPreview, difficulty:
         return true;
     });
 
-    return shuffle(eligible)
-        .sort((a, b) => distractorScore(b, correct, difficulty) - distractorScore(a, correct, difficulty))
-        .slice(0, 3);
+    const ranked = shuffle(eligible)
+        .map((song) => ({ song, score: distractorScore(song, correct, difficulty) }))
+        .sort((a, b) => b.score - a.score);
+    const shortlistSize = difficulty === 'hard' ? 10 : difficulty === 'medium' ? 12 : 16;
+    const shortlist = ranked.slice(0, Math.min(shortlistSize, ranked.length));
+    const picks: SongPreview[] = [];
+
+    while (picks.length < 3 && shortlist.length > 0) {
+        const total = shortlist.reduce((sum, item) => sum + Math.max(1, item.score + 12), 0);
+        let cursor = Math.random() * total;
+        const selectedIndex = shortlist.findIndex((item) => {
+            cursor -= Math.max(1, item.score + 12);
+            return cursor <= 0;
+        });
+        const [selected] = shortlist.splice(selectedIndex >= 0 ? selectedIndex : shortlist.length - 1, 1);
+        picks.push(selected.song);
+    }
+
+    return picks;
 };
 
 const fetchSpotifySongPool = async (
@@ -1079,6 +1051,10 @@ export const submitAnswer = async (req: Request, res: Response): Promise<void> =
                 artistName: song.artist,
                 artworkUrl: song.artworkUrl,
                 trackUrl: song.trackUrl,
+                genre: filters.genre,
+                language: filters.language,
+                difficulty: filters.difficulty,
+                artistFilter: filters.artist,
                 correct,
                 responseTimeMs,
                 score: pointsAwarded,
@@ -1107,6 +1083,10 @@ export const submitAnswer = async (req: Request, res: Response): Promise<void> =
                 artistName: song.artist,
                 artworkUrl: song.artworkUrl,
                 trackUrl: song.trackUrl,
+                genre: filters.genre,
+                language: filters.language,
+                difficulty: filters.difficulty,
+                artistFilter: filters.artist,
                 correct,
                 responseTimeMs,
                 score: pointsAwarded,
@@ -1306,12 +1286,31 @@ export const getStats = async (req: Request, res: Response): Promise<void> => {
 export const getLeaderboard = async (_req: Request, res: Response): Promise<void> => {
     try {
         const period = _req.query.period === 'daily' ? 'daily' : 'all-time';
+        const scope = _req.query.scope === 'artist' || _req.query.scope === 'genre'
+            ? _req.query.scope
+            : 'global';
+        const scopeValue = typeof _req.query.scopeValue === 'string'
+            ? normalizeTitle(_req.query.scopeValue)
+            : '';
+
         if (!isDbConnected()) {
-            res.json(successResponse(devStore.getLeaderboard(period, _req.userId)));
+            res.json(successResponse(devStore.getLeaderboard(period, _req.userId, scope, scopeValue)));
             return;
         }
+
         const periodStart = getPeriodStart(period);
-        const matchStage = periodStart ? { $match: { sessionDate: { $gte: periodStart } } } : null;
+        const match: Record<string, unknown> = {};
+        if (periodStart) match.sessionDate = { $gte: periodStart };
+        if (scope === 'artist' && scopeValue) {
+            match.$or = [
+                { artistFilter: scopeValue },
+                { artistName: { $regex: escapeRegExp(scopeValue), $options: 'i' } },
+            ];
+        }
+        if (scope === 'genre' && scopeValue) {
+            match.genre = scopeValue;
+        }
+        const matchStage = Object.keys(match).length > 0 ? { $match: match } : null;
         const pipeline: object[] = [
             ...(matchStage ? [matchStage] : []),
             { $group: { _id: '$user', totalScore: { $sum: '$score' }, sessions: { $sum: 1 }, xpTotal: { $sum: '$xpEarned' } } },
@@ -1329,6 +1328,8 @@ export const getLeaderboard = async (_req: Request, res: Response): Promise<void
             entries: fullLeaderboard.slice(0, 50),
             userRank,
             period,
+            scope,
+            scopeValue,
         }));
     } catch {
         res.status(500).json(errorResponse('Server error'));
