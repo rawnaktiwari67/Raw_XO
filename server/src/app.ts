@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
@@ -99,7 +100,12 @@ app.use('/api/v1/eras', eraRoutes);
 app.use('/api/v1/culture', cultureRoutes);
 
 // ─── Health check ─────────────────────────────────────────────────────────────
-app.get('/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date() }));
+const DB_STATES = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+app.get(['/health', '/api/v1/health'], (_req, res) => res.json({
+    status: 'ok',
+    db: DB_STATES[mongoose.connection.readyState] ?? String(mongoose.connection.readyState),
+    timestamp: new Date(),
+}));
 
 // ─── Error handler (must be last) ─────────────────────────────────────────────
 app.use(errorHandler);
