@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { clerkMiddleware } from '@clerk/express';
 import { env, hasClerkKeys, shouldUseClerkServer } from './config/env';
+import { getLastDbError } from './config/db';
 import { errorHandler } from './middleware/error.middleware';
 import { apiLimiter } from './middleware/rateLimiter';
 
@@ -104,6 +105,7 @@ const DB_STATES = ['disconnected', 'connected', 'connecting', 'disconnecting'];
 app.get(['/health', '/api/v1/health'], (_req, res) => res.json({
     status: 'ok',
     db: DB_STATES[mongoose.connection.readyState] ?? String(mongoose.connection.readyState),
+    dbError: getLastDbError(),
     timestamp: new Date(),
 }));
 
