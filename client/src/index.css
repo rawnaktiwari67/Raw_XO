@@ -32,12 +32,6 @@
   --text-3: #7A7A80;
   --text-4: #4A4A52;
 
-  /* Text hierarchy */
-  --text-1: #F5F5F5;
-  --text-2: #B3B3B8;
-  --text-3: #7A7A80;
-  --text-4: #4A4A52;
-
   /* Glass */
   --glass-bg: rgba(255, 255, 255, 0.030);
   --glass-border: rgba(255, 255, 255, 0.055);
@@ -47,8 +41,11 @@
   --shadow-card: 0 4px 40px rgba(0, 0, 0, 0.4);
   --shadow-lift: 0 12px 60px rgba(0, 0, 0, 0.6);
 
-  /* Easing */
+  /* Easing — all three curves available in CSS */
   --ease-cinematic: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-apple:     cubic-bezier(0.25, 0.10, 0.25, 1.00);
+  --ease-out:       cubic-bezier(0.00, 0.00, 0.20, 1.00);
+  --ease-entrance:  cubic-bezier(0.22, 1.00, 0.36, 1.00);
 }
 
 /* ─────────────────────────────
@@ -234,6 +231,31 @@ h6 {
   }
 }
 
+@keyframes skeletonShimmer {
+  from { background-position: -200% 0; }
+  to   { background-position:  200% 0; }
+}
+
+/* Audio visualizer bars — each bar drives this via inline animation */
+@keyframes audioBar {
+  0%, 100% { transform: scaleY(0.13); opacity: 0.46; }
+  30%       { transform: scaleY(0.82); opacity: 0.88; }
+  60%       { transform: scaleY(0.55); opacity: 0.72; }
+  80%       { transform: scaleY(1);   opacity: 1;    }
+}
+
+@keyframes audioBarUrgent {
+  0%, 100% { transform: scaleY(0.18); opacity: 0.55; }
+  25%       { transform: scaleY(1);   opacity: 1;    }
+  55%       { transform: scaleY(0.42); opacity: 0.7; }
+  75%       { transform: scaleY(0.9); opacity: 0.95; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes audioBar        { 0%, 100% { transform: scaleY(0.5); opacity: 0.7; } }
+  @keyframes audioBarUrgent  { 0%, 100% { transform: scaleY(0.5); opacity: 0.7; } }
+}
+
 /* ─────────────────────────────
    Utility Classes
    ───────────────────────────── */
@@ -280,9 +302,9 @@ h6 {
   /* ── Card hover — lift only, no glow ── */
   .card-hover {
     transition:
-      transform 0.8s var(--ease-cinematic),
-      box-shadow 0.8s var(--ease-cinematic),
-      border-color 0.8s var(--ease-cinematic);
+      transform 0.32s var(--ease-cinematic),
+      box-shadow 0.32s var(--ease-cinematic),
+      border-color 0.32s var(--ease-cinematic);
   }
 
   .card-hover:hover {
@@ -402,8 +424,8 @@ h6 {
     cursor: pointer;
     white-space: nowrap;
     transition:
-      opacity 0.8s var(--ease-cinematic),
-      transform 0.8s var(--ease-cinematic);
+      opacity 0.22s var(--ease-apple),
+      transform 0.22s var(--ease-apple);
   }
 
   .btn-primary:hover {
@@ -430,8 +452,10 @@ h6 {
     border-radius: 1rem;
     border: 1px solid rgba(255, 255, 255, 0.10);
     cursor: pointer;
-    transition: color 0.8s var(--ease-cinematic), border-color 0.8s var(--ease-cinematic),
-      background 0.8s var(--ease-cinematic);
+    transition:
+      color 0.22s var(--ease-apple),
+      border-color 0.22s var(--ease-apple),
+      background 0.22s var(--ease-apple);
   }
 
   .btn-secondary:hover {
@@ -451,7 +475,7 @@ h6 {
     font-weight: 500;
     color: var(--text-2);
     letter-spacing: 0.01em;
-    transition: color 0.8s var(--ease-cinematic);
+    transition: color 0.2s var(--ease-apple);
     padding-bottom: 4px;
   }
 
@@ -465,7 +489,7 @@ h6 {
     background: rgba(244, 162, 97, 0.9);
     transform: scaleX(0);
     transform-origin: left;
-    transition: transform 0.8s var(--ease-cinematic);
+    transition: transform 0.38s var(--ease-entrance);
   }
 
   .nav-link:hover {
@@ -621,6 +645,21 @@ h6 {
 }
 
 /* ─────────────────────────────
+   Skeleton loader
+   ───────────────────────────── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 25%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.04) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.8s ease-in-out infinite;
+  border-radius: 0.75rem;
+}
+
+/* ─────────────────────────────
    Scrollbar
    ───────────────────────────── */
 ::-webkit-scrollbar {
@@ -676,4 +715,33 @@ h6 {
   outline: 2px solid rgba(244, 162, 97, 0.45);
   outline-offset: 3px;
   border-radius: 4px;
+}
+
+/* ─────────────────────────────
+   Reduced motion
+   ───────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+
+  .enter-up,
+  .enter-fade {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .skeleton {
+    animation: none;
+    background: rgba(255, 255, 255, 0.06);
+  }
 }

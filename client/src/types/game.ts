@@ -2,6 +2,7 @@ export type GameGenre = 'all' | 'hip-hop' | 'pop' | 'rnb' | 'dance';
 export type GameLanguage = 'all' | 'english' | 'hindi' | 'punjabi' | 'korean' | 'spanish';
 export type GameDifficulty = 'easy' | 'medium' | 'hard';
 export type LeaderboardPeriod = 'daily' | 'all-time';
+export type LeaderboardScope = 'global' | 'artist' | 'genre';
 
 export interface GameArtistOption {
     label: string;
@@ -65,6 +66,14 @@ export interface LeaderboardData {
     entries: LeaderboardEntry[];
     userRank: number | null;
     period: LeaderboardPeriod;
+    scope?: LeaderboardScope;
+    scopeValue?: string;
+}
+
+export interface RoundLeaderboards {
+    daily: LeaderboardData | null;
+    artist: LeaderboardData | null;
+    genre: LeaderboardData | null;
 }
 
 export interface GameSession {
@@ -72,6 +81,10 @@ export interface GameSession {
     trackId?: string;
     trackName?: string;
     artistName?: string;
+    genre?: GameGenre;
+    language?: GameLanguage;
+    difficulty?: GameDifficulty;
+    artistFilter?: string;
     artworkUrl?: string;
     trackUrl?: string;
     correct?: boolean;

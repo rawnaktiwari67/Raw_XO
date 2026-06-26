@@ -1,5 +1,5 @@
 import api from './api';
-import type { GameFilters, GameLanguage, LeaderboardPeriod } from '../types/game';
+import type { GameFilters, GameLanguage, LeaderboardPeriod, LeaderboardScope } from '../types/game';
 import type { LyricGuessRound, MeaningEntry } from '../types/culture';
 
 export const gameService = {
@@ -18,9 +18,13 @@ export const gameService = {
     rateTrack: (trackId: string, rating: number, filters: GameFilters) =>
         api.post('/game/rating', { trackId, rating, ...filters }),
     getStats: () => api.get('/game/stats'),
-    getLeaderboard: (period: LeaderboardPeriod) =>
+    getLeaderboard: (period: LeaderboardPeriod, scope: LeaderboardScope = 'global', scopeValue?: string) =>
         api.get('/game/leaderboard', {
-            params: { period },
+            params: {
+                period,
+                scope,
+                ...(scopeValue ? { scopeValue } : {}),
+            },
         }),
     getHistory: () => api.get('/game/history'),
     getArtists: () => api.get('/game/artists'),

@@ -12,11 +12,14 @@ import type {
     GameResult,
     GameStats,
     LeaderboardEntry,
+    LeaderboardScope,
+    RoundLeaderboards,
     GameSession,
 } from '../types/game';
 import { gameService } from '../services/gameService';
 
 type Phase = 'idle' | 'playing' | 'answered' | 'result';
+const ROUND_LIMIT = 5;
 
 const getApiData = <T>(response: { data?: { data?: T } }): T | undefined => response.data?.data;
 const getApiError = (error: unknown, fallback: string): string => {
@@ -46,6 +49,7 @@ interface GameState {
     correctAnswersInSession: number;
     sessionSummary: SessionSummary | null;
     isSummaryVisible: boolean;
+    roundLeaderboards: RoundLeaderboards;
     leaderboard: LeaderboardEntry[];
     leaderboardPeriod: LeaderboardPeriod;
     leaderboardRank: number | null;
@@ -60,12 +64,15 @@ interface GameState {
     setDifficulty: (difficulty: GameDifficulty) => void;
     setArtist: (artist: string) => void;
     startRound: () => Promise<void>;
+    startFreshSession: () => Promise<void>;
     submitAnswer: (answer: string, responseTimeMs?: number) => Promise<void>;
     rateTrack: (rating: number) => Promise<void>;
     resetRound: () => void;
+    revealSessionSummary: () => void;
     dismissSessionSummary: () => void;
     fetchStats: () => Promise<void>;
-    fetchLeaderboard: (period?: LeaderboardPeriod) => Promise<void>;
+    fetchLeaderboard: (period?: LeaderboardPeriod, scope?: LeaderboardScope, scopeValue?: string) => Promise<void>;
+    fetchRoundLeaderboards: () => Promise<void>;
     fetchHistory: () => Promise<void>;
     fetchArtists: () => Promise<void>;
 }
@@ -87,6 +94,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     correctAnswersInSession: 0,
     sessionSummary: null,
     isSummaryVisible: false,
+    roundLeaderboards: { daily: null, artist: null, genre: null },
     leaderboard: [],
     leaderboardPeriod: 'all-time',
     leaderboardRank: null,
@@ -100,6 +108,26 @@ export const useGameStore = create<GameState>((set, get) => ({
     setLanguage: (language) => set((state) => ({ filters: { ...state.filters, language } })),
     setDifficulty: (difficulty) => set((state) => ({ filters: { ...state.filters, difficulty } })),
     setArtist: (artist) => set((state) => ({ filters: { ...state.filters, artist } })),
+
+    startFreshSession: async () => {
+        set({
+            question: null,
+            phase: 'idle',
+            selectedAnswer: null,
+            result: null,
+            streak: 0,
+            bestSessionStreak: 0,
+            lastBrokenStreak: null,
+            sessionScore: 0,
+            roundsPlayedInSession: 0,
+            correctAnswersInSession: 0,
+            sessionSummary: null,
+            isSummaryVisible: false,
+            roundLeaderboards: { daily: null, artist: null, genre: null },
+            error: null,
+        });
+        await get().startRound();
+    },
 
     startRound: async () => {
         const { filters, recentSongIds } = get();
@@ -131,22 +159,42 @@ export const useGameStore = create<GameState>((set, get) => ({
             if (!result) throw new Error('Invalid answer payload');
 
             const newStreak = result.correct ? streak + 1 : 0;
-            set((s) => ({
-                result,
-                phase: 'result',
-                streak: newStreak,
-                bestSessionStreak: result.correct ? Math.max(s.bestSessionStreak, newStreak) : s.bestSessionStreak,
-                lastBrokenStreak: result.correct ? null : (streak > 0 ? streak : null),
-                sessionScore: s.sessionScore + (result.pointsAwarded ?? 0),
-                roundsPlayedInSession: s.roundsPlayedInSession + 1,
-                correctAnswersInSession: s.correctAnswersInSession + (result.correct ? 1 : 0),
-                recentSongIds: result.correct && result.songKey
-                    ? [result.songKey, ...s.recentSongIds.filter((item) => item !== result.songKey)].slice(0, 60)
-                    : s.recentSongIds,
-            }));
+            let shouldShowSummary = false;
+            set((s) => {
+                const roundsPlayed = s.roundsPlayedInSession + 1;
+                const correctAnswers = s.correctAnswersInSession + (result.correct ? 1 : 0);
+                const totalScore = s.sessionScore + (result.pointsAwarded ?? 0);
+                const bestStreak = result.correct ? Math.max(s.bestSessionStreak, newStreak) : s.bestSessionStreak;
+                shouldShowSummary = roundsPlayed >= ROUND_LIMIT;
+
+                return {
+                    result,
+                    phase: 'result',
+                    streak: newStreak,
+                    bestSessionStreak: bestStreak,
+                    lastBrokenStreak: result.correct ? null : (streak > 0 ? streak : null),
+                    sessionScore: totalScore,
+                    roundsPlayedInSession: roundsPlayed,
+                    correctAnswersInSession: correctAnswers,
+                    sessionSummary: shouldShowSummary
+                        ? {
+                            roundsPlayed,
+                            correctAnswers,
+                            accuracy: Math.round((correctAnswers / roundsPlayed) * 100),
+                            totalScore,
+                            bestStreak,
+                        }
+                        : s.sessionSummary,
+                    isSummaryVisible: shouldShowSummary,
+                    recentSongIds: result.correct && result.songKey
+                        ? [result.songKey, ...s.recentSongIds.filter((item) => item !== result.songKey)].slice(0, 60)
+                        : s.recentSongIds,
+                };
+            });
             get().fetchStats();
             get().fetchHistory();
             get().fetchLeaderboard(get().leaderboardPeriod);
+            if (shouldShowSummary) void get().fetchRoundLeaderboards();
         } catch (error) {
             set({
                 phase: 'idle',
@@ -171,6 +219,18 @@ export const useGameStore = create<GameState>((set, get) => ({
     },
 
     resetRound: () => set({ question: null, phase: 'idle', selectedAnswer: null, result: null, lastBrokenStreak: null, error: null }),
+    revealSessionSummary: () => set((state) => ({
+        isSummaryVisible: true,
+        sessionSummary: state.sessionSummary ?? {
+            roundsPlayed: state.roundsPlayedInSession,
+            correctAnswers: state.correctAnswersInSession,
+            accuracy: state.roundsPlayedInSession > 0
+                ? Math.round((state.correctAnswersInSession / state.roundsPlayedInSession) * 100)
+                : 0,
+            totalScore: state.sessionScore,
+            bestStreak: state.bestSessionStreak,
+        },
+    })),
     dismissSessionSummary: () => set({ isSummaryVisible: false, sessionSummary: null }),
 
     fetchStats: async () => {
@@ -182,10 +242,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
     },
 
-    fetchLeaderboard: async (period) => {
+    fetchLeaderboard: async (period, scope = 'global', scopeValue) => {
         const requestedPeriod = period ?? get().leaderboardPeriod;
         try {
-            const res = await gameService.getLeaderboard(requestedPeriod);
+            const res = await gameService.getLeaderboard(requestedPeriod, scope, scopeValue);
             const payload = getApiData<LeaderboardData>(res);
 
             set({
@@ -195,6 +255,33 @@ export const useGameStore = create<GameState>((set, get) => ({
             });
         } catch {
             set({ leaderboard: [], leaderboardRank: null, leaderboardPeriod: requestedPeriod });
+        }
+    },
+
+    fetchRoundLeaderboards: async () => {
+        const { filters, roundFilters, result } = get();
+        const activeFilters = result?.filters ?? roundFilters ?? filters;
+        const artistValue = activeFilters.artist !== 'all'
+            ? activeFilters.artist
+            : result?.correctArtist;
+        const genreValue = activeFilters.genre !== 'all' ? activeFilters.genre : undefined;
+
+        try {
+            const [daily, artist, genre] = await Promise.all([
+                gameService.getLeaderboard('daily'),
+                artistValue ? gameService.getLeaderboard('daily', 'artist', artistValue) : Promise.resolve(null),
+                genreValue ? gameService.getLeaderboard('daily', 'genre', genreValue) : Promise.resolve(null),
+            ]);
+
+            set({
+                roundLeaderboards: {
+                    daily: getApiData<LeaderboardData>(daily) ?? null,
+                    artist: artist ? getApiData<LeaderboardData>(artist) ?? null : null,
+                    genre: genre ? getApiData<LeaderboardData>(genre) ?? null : null,
+                },
+            });
+        } catch {
+            set({ roundLeaderboards: { daily: null, artist: null, genre: null } });
         }
     },
 

@@ -7,6 +7,10 @@ export interface IGameScore extends Document {
     artistName: string;
     artworkUrl: string;
     trackUrl: string;
+    genre: string;
+    language: string;
+    difficulty: string;
+    artistFilter: string;
     correct: boolean;
     responseTimeMs: number;
     score: number;
@@ -23,6 +27,10 @@ const GameScoreSchema = new Schema<IGameScore>({
     artistName: { type: String, default: '' },
     artworkUrl: { type: String, default: '' },
     trackUrl: { type: String, default: '' },
+    genre: { type: String, default: 'all', index: true },
+    language: { type: String, default: 'all' },
+    difficulty: { type: String, default: 'medium' },
+    artistFilter: { type: String, default: 'all', index: true },
     correct: { type: Boolean, default: false },
     responseTimeMs: { type: Number, default: 0 },
     score: { type: Number, required: true, default: 0 },

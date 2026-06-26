@@ -17,6 +17,16 @@ const pageReveal = {
     },
 };
 
+const staggerContainer = {
+    hidden: {},
+    visible: { transition: { staggerChildren: 0.07 } },
+};
+
+const staggerItem = {
+    hidden: { opacity: 0, y: 18 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } },
+};
+
 const chipMotion = {
     whileHover: { scale: 1.02, y: -2 },
     whileTap: { scale: 0.98 },
@@ -321,13 +331,16 @@ export default function Home() {
                     </div>
                 </motion.section>
 
-                <section className="mt-8 grid grid-cols-1 gap-3 md:grid-cols-3">
-                    {cultureLanes.map((lane, index) => (
+                <motion.section
+                    variants={staggerContainer}
+                    initial="hidden"
+                    animate="visible"
+                    className="mt-8 grid grid-cols-1 gap-3 md:grid-cols-3"
+                >
+                    {cultureLanes.map((lane) => (
                         <motion.article
                             key={lane.label}
-                            initial={{ opacity: 0, y: 14 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.45, delay: 0.08 + index * 0.05 }}
+                            variants={staggerItem}
                             className="rounded-[1rem] border border-white/10 bg-black/20 p-5"
                         >
                             <p className="text-xs uppercase tracking-[0.18em] text-amber">{lane.label}</p>
@@ -335,7 +348,7 @@ export default function Home() {
                             <p className="mt-3 text-sm leading-relaxed text-text-3">{lane.body}</p>
                         </motion.article>
                     ))}
-                </section>
+                </motion.section>
 
                 <motion.section
                     initial={{ opacity: 0, y: 20 }}
@@ -415,10 +428,17 @@ export default function Home() {
                         </p>
                     </div>
 
-                    <div className="flex gap-4 overflow-x-auto pb-2">
+                    <motion.div
+                        variants={staggerContainer}
+                        initial="hidden"
+                        whileInView="visible"
+                        viewport={{ once: true, margin: '-80px' }}
+                        className="flex gap-4 overflow-x-auto pb-2"
+                    >
                         {entries.map((entry) => (
                             <motion.article
                                 key={entry.trackId}
+                                variants={staggerItem}
                                 whileHover={{ scale: 1.02, y: -2 }}
                                 className="min-w-[280px] max-w-[280px] shrink-0 rounded-2xl border border-white/10 bg-white/[0.03] p-4"
                             >
@@ -435,7 +455,7 @@ export default function Home() {
                                 <p className="text-text-2 text-sm mt-4">{entry.lyricsSnippet}</p>
                             </motion.article>
                         ))}
-                    </div>
+                    </motion.div>
                 </section>
 
                 <section className="grid grid-cols-12 gap-8 mt-16 items-start">
