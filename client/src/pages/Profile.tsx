@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '../stores/authStore';
 import XPBar from '../components/user/XPBar';
+import { avatarInitial, avatarHue } from '../utils/avatar';
 import api from '../services/api';
 import type { User } from '../types/user';
 import type { Thread } from '../types/thread';
@@ -63,9 +64,9 @@ export default function Profile() {
                 <div className="flex items-start gap-4">
                     <div
                         className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold text-dusk-navy shrink-0"
-                        style={{ background: `hsl(${username!.charCodeAt(0) * 7 % 360}, 60%, 60%)` }}
+                        style={{ background: `hsl(${avatarHue(profile.username)}, 60%, 60%)` }}
                     >
-                        {profile.username[0].toUpperCase()}
+                        {avatarInitial(profile.username)}
                     </div>
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">

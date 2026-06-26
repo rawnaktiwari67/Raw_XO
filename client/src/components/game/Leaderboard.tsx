@@ -60,6 +60,9 @@ export default function Leaderboard() {
                 <ol className="flex flex-col gap-4">
                     {leaderboard.map((entry, index) => {
                         const isUser = !!user && entry._id === user._id;
+                        const name = entry.username?.trim() || 'Guest';
+                        const initial = name[0]?.toUpperCase() ?? 'G';
+                        const hue = (name.charCodeAt(0) * 7) % 360;
 
                         return (
                             <motion.li
@@ -76,12 +79,12 @@ export default function Leaderboard() {
                                 <span className="w-5 text-center font-heading text-text-3">{index + 1}</span>
                                 <div
                                     className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-ch-0"
-                                    style={{ background: `hsl(${(entry.username.charCodeAt(0) * 7) % 360}, 58%, 64%)` }}
+                                    style={{ background: `hsl(${hue}, 58%, 64%)` }}
                                 >
-                                    {entry.username[0].toUpperCase()}
+                                    {initial}
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                    <p className="truncate text-sm font-medium text-text-1">{entry.username}</p>
+                                    <p className="truncate text-sm font-medium text-text-1">{name}</p>
                                     <p className="mt-2 text-xs text-text-4">{entry.levelBadge} · {entry.sessions} sessions</p>
                                 </div>
                                 <div className="text-right">

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { Thread } from '../../types/thread';
 import VoteButtons from './VoteButtons';
 import { useAuthStore } from '../../stores/authStore';
+import { avatarInitial } from '../../utils/avatar';
 
 interface Props {
     thread: Thread;
@@ -89,7 +90,7 @@ export default function ThreadCard({ thread, onVote }: Props) {
                             className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-dusk-navy shrink-0"
                             style={{ background: accentColor }}
                         >
-                            {thread.author.username[0].toUpperCase()}
+                            {avatarInitial(thread.author.username)}
                         </div>
                         <span className="font-medium">{thread.author.username}</span>
                     </Link>

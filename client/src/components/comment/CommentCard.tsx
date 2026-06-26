@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { Comment } from '../../types/comment';
 import { useAuthStore } from '../../stores/authStore';
 import { useCommentStore } from '../../stores/commentStore';
+import { avatarInitial, avatarHue } from '../../utils/avatar';
 
 interface Props {
     comment: Comment;
@@ -57,9 +58,9 @@ export default function CommentCard({ comment, threadId, depth = 0, allComments 
                 <div className="flex items-center gap-2 mb-2">
                     <div
                         className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-dusk-navy"
-                        style={{ background: `hsl(${comment.author.username.charCodeAt(0) * 7 % 360}, 60%, 60%)` }}
+                        style={{ background: `hsl(${avatarHue(comment.author.username)}, 60%, 60%)` }}
                     >
-                        {comment.author.username[0].toUpperCase()}
+                        {avatarInitial(comment.author.username)}
                     </div>
                     <span className="text-text-warm text-sm font-medium">{comment.author.username}</span>
                     <span className="text-text-subtle text-xs">{comment.author.levelBadge}</span>

@@ -7,6 +7,7 @@ import { useCommentStore } from '../stores/commentStore';
 import { useAuthStore } from '../stores/authStore';
 import VoteButtons from '../components/thread/VoteButtons';
 import CommentCard from '../components/comment/CommentCard';
+import { avatarInitial } from '../utils/avatar';
 
 export default function ThreadDetail() {
     const { id } = useParams<{ id: string }>();
@@ -85,7 +86,7 @@ export default function ThreadDetail() {
                     <div className="flex items-center gap-2 text-sm text-text-subtle">
                         <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-dusk-navy"
                             style={{ background: t.era.accentColor }}>
-                            {t.author.username[0].toUpperCase()}
+                            {avatarInitial(t.author.username)}
                         </div>
                         <Link to={`/profile/${t.author.username}`} className="hover:text-text-warm">{t.author.username}</Link>
                         <span className="text-xs text-text-subtle">{t.author.levelBadge}</span>
