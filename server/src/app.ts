@@ -101,13 +101,23 @@ app.use('/api/v1/eras', eraRoutes);
 app.use('/api/v1/culture', cultureRoutes);
 
 // ─── Health check ─────────────────────────────────────────────────────────────
+// Public response only exposes coarse status. The raw connection error (which can
+// leak host:port details) is gated behind a secret header so it stays available
+// for debugging without being world-readable.
 const DB_STATES = ['disconnected', 'connected', 'connecting', 'disconnecting'];
-app.get(['/health', '/api/v1/health'], (_req, res) => res.json({
-    status: 'ok',
-    db: DB_STATES[mongoose.connection.readyState] ?? String(mongoose.connection.readyState),
-    dbError: getLastDbError(),
-    timestamp: new Date(),
-}));
+app.get(['/health', '/api/v1/health'], (req, res) => {
+    const connected = mongoose.connection.readyState === 1;
+    const authorized = typeof req.headers['x-health-key'] === 'string'
+        && env.GAME_SECRET.length >= 16
+        && req.headers['x-health-key'] === env.GAME_SECRET;
+
+    res.json({
+        status: connected ? 'ok' : 'degraded',
+        db: DB_STATES[mongoose.connection.readyState] ?? String(mongoose.connection.readyState),
+        timestamp: new Date(),
+        ...(authorized ? { dbError: getLastDbError() } : {}),
+    });
+});
 
 // ─── Error handler (must be last) ─────────────────────────────────────────────
 app.use(errorHandler);
