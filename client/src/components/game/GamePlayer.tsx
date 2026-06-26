@@ -461,6 +461,7 @@ export default function GamePlayer() {
         setDifficulty,
         setArtist,
         startFreshSession,
+        prefetchNextQuestion,
         revealSessionSummary,
         dismissSessionSummary,
         fetchRoundLeaderboards,
@@ -585,6 +586,13 @@ export default function GamePlayer() {
         }, 1200);
         return () => window.clearTimeout(t);
     }, [phase, roundsPlayedInSession, isSummaryVisible, revealSessionSummary, fetchRoundLeaderboards]);
+
+    // Warm the next clip while the player reads the result, so "Next" starts instantly.
+    useEffect(() => {
+        if (phase === 'result' && roundsPlayedInSession < ROUND_LIMIT) {
+            void prefetchNextQuestion();
+        }
+    }, [phase, roundsPlayedInSession, prefetchNextQuestion]);
 
     const handleSelectOption = (option: string) => {
         if (phase !== 'playing' || selectedOption) return;

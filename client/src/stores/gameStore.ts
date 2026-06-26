@@ -34,6 +34,7 @@ const getApiError = (error: unknown, fallback: string): string => {
 
 interface GameState {
     question: GameQuestion | null;
+    prefetchedQuestion: GameQuestion | null;
     phase: Phase;
     selectedAnswer: string | null;
     result: GameResult | null;
@@ -64,6 +65,7 @@ interface GameState {
     setDifficulty: (difficulty: GameDifficulty) => void;
     setArtist: (artist: string) => void;
     startRound: () => Promise<void>;
+    prefetchNextQuestion: () => Promise<void>;
     startFreshSession: () => Promise<void>;
     submitAnswer: (answer: string, responseTimeMs?: number) => Promise<void>;
     rateTrack: (rating: number) => Promise<void>;
@@ -79,6 +81,7 @@ interface GameState {
 
 export const useGameStore = create<GameState>((set, get) => ({
     question: null,
+    prefetchedQuestion: null,
     phase: 'idle',
     selectedAnswer: null,
     result: null,
@@ -104,14 +107,16 @@ export const useGameStore = create<GameState>((set, get) => ({
     error: null,
     isRating: false,
 
-    setGenre: (genre) => set((state) => ({ filters: { ...state.filters, genre } })),
-    setLanguage: (language) => set((state) => ({ filters: { ...state.filters, language } })),
-    setDifficulty: (difficulty) => set((state) => ({ filters: { ...state.filters, difficulty } })),
-    setArtist: (artist) => set((state) => ({ filters: { ...state.filters, artist } })),
+    // Changing filters invalidates any question we prefetched for the old filters.
+    setGenre: (genre) => set((state) => ({ filters: { ...state.filters, genre }, prefetchedQuestion: null })),
+    setLanguage: (language) => set((state) => ({ filters: { ...state.filters, language }, prefetchedQuestion: null })),
+    setDifficulty: (difficulty) => set((state) => ({ filters: { ...state.filters, difficulty }, prefetchedQuestion: null })),
+    setArtist: (artist) => set((state) => ({ filters: { ...state.filters, artist }, prefetchedQuestion: null })),
 
     startFreshSession: async () => {
         set({
             question: null,
+            prefetchedQuestion: null,
             phase: 'idle',
             selectedAnswer: null,
             result: null,
@@ -130,7 +135,25 @@ export const useGameStore = create<GameState>((set, get) => ({
     },
 
     startRound: async () => {
-        const { filters, recentSongIds } = get();
+        const { filters, recentSongIds, prefetchedQuestion } = get();
+
+        // Instant start: if we prefetched the next clip during the result screen,
+        // play it immediately instead of waiting on another network round-trip.
+        if (prefetchedQuestion) {
+            set({
+                question: prefetchedQuestion,
+                prefetchedQuestion: null,
+                roundFilters: prefetchedQuestion.filters ?? filters,
+                result: null,
+                selectedAnswer: null,
+                error: null,
+                lastBrokenStreak: null,
+                phase: 'playing',
+                isLoading: false,
+            });
+            return;
+        }
+
         const excludeSongIds = recentSongIds.slice(0, 40);
         set({ isLoading: true, question: null, result: null, selectedAnswer: null, phase: 'idle', error: null, lastBrokenStreak: null });
         try {
@@ -146,6 +169,23 @@ export const useGameStore = create<GameState>((set, get) => ({
             });
         } catch (error) {
             set({ isLoading: false, error: getApiError(error, 'Could not load a song clip.') });
+        }
+    },
+
+    prefetchNextQuestion: async () => {
+        const { filters, recentSongIds, prefetchedQuestion } = get();
+        if (prefetchedQuestion) return; // already warmed
+
+        const excludeSongIds = recentSongIds.slice(0, 40);
+        try {
+            const res = await gameService.getQuestion(filters, excludeSongIds);
+            const question = getApiData<GameQuestion>(res);
+            // Only keep it if the player hasn't already moved on / changed filters.
+            if (question && !get().prefetchedQuestion) {
+                set({ prefetchedQuestion: question });
+            }
+        } catch {
+            // Prefetch is best-effort; startRound will fetch normally on miss.
         }
     },
 
