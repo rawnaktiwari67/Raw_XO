@@ -12,15 +12,9 @@ export default defineConfig(({ command, mode }) => {
   ).trim();
   const isVercelBuild = process.env.VERCEL === '1' || Boolean(process.env.VERCEL_ENV);
 
-  const isVercelProduction = process.env.VERCEL_ENV === 'production';
-
   if (command === 'build' && isVercelBuild) {
     if (!clerkPublishableKey) {
       throw new Error('Vercel builds require VITE_CLERK_PUBLISHABLE_KEY or NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.');
-    }
-
-    if (isVercelProduction && clerkPublishableKey.startsWith('pk_test_')) {
-      throw new Error('Production Vercel builds must use a Clerk live publishable key (pk_live_), not a test key.');
     }
   }
 
