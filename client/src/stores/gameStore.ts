@@ -191,10 +191,16 @@ export const useGameStore = create<GameState>((set, get) => ({
                         : s.recentSongIds,
                 };
             });
-            get().fetchStats();
-            get().fetchHistory();
-            get().fetchLeaderboard(get().leaderboardPeriod);
-            if (shouldShowSummary) void get().fetchRoundLeaderboards();
+            // Only hit the network at the end of a session. Firing stats/history/
+            // leaderboard on every single answer made each round feel sluggish
+            // (3+ serverless round-trips per guess). The live score/streak shown
+            // mid-game is already tracked locally above.
+            if (shouldShowSummary) {
+                void get().fetchStats();
+                void get().fetchHistory();
+                void get().fetchLeaderboard(get().leaderboardPeriod);
+                void get().fetchRoundLeaderboards();
+            }
         } catch (error) {
             set({
                 phase: 'idle',

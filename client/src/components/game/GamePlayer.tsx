@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { animate, AnimatePresence, motion, useMotionTemplate, useMotionValue, useSpring, useTransform } from 'framer-motion';
+import { animate, AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { useGameStore } from '../../stores/gameStore';
 import { gameService } from '../../services/gameService';
 import type { GameArtistOption, GameDifficulty, GameGenre, GameLanguage, LeaderboardData } from '../../types/game';
@@ -388,9 +388,9 @@ const VIZ_BARS = [
 ] as const;
 
 function AudioVisualizer({ active, urgent, hero = false }: { active: boolean; urgent: boolean; hero?: boolean }) {
-    const s = hero ? 1.55 : 1;  // hero scale multiplier
-    const containerH = hero ? 78 : 56;
-    const gap = hero ? 5 : 3.5;
+    const s = hero ? 1.25 : 1;  // hero scale multiplier
+    const containerH = hero ? 64 : 56;
+    const gap = hero ? 4.5 : 3.5;
 
     const barGrad = urgent
         ? 'linear-gradient(to top, rgba(251,146,60,0.96), rgba(255,210,140,0.48))'
@@ -476,14 +476,16 @@ export default function GamePlayer() {
     const [timerActive, setTimerActive] = useState(false);
     const [selectedOption, setSelectedOption] = useState<string | null>(null);
 
-    // Hero card — mouse-reactive glow (parallax spotlight effect)
+    // Hero card — mouse-reactive glow (parallax spotlight effect).
+    // Moved a translate-positioned blurred blob instead of animating a CSS radial
+    // gradient: transforms are GPU-composited, whereas animating background-image
+    // forces a full layer repaint on every mousemove frame.
     const rawMX = useMotionValue(0.5);
     const rawMY = useMotionValue(0.5);
     const sMX = useSpring(rawMX, { stiffness: 90, damping: 24 });
     const sMY = useSpring(rawMY, { stiffness: 90, damping: 24 });
-    const glowXPct = useTransform(sMX, [0, 1], [22, 78]);
-    const glowYPct = useTransform(sMY, [0, 1], [18, 82]);
-    const heroGlowBg = useMotionTemplate`radial-gradient(54% 62% at ${glowXPct}% ${glowYPct}%, rgba(244,162,97,0.115), transparent 68%)`;
+    const glowX = useTransform(sMX, [0, 1], ['-22%', '22%']);
+    const glowY = useTransform(sMY, [0, 1], ['-30%', '30%']);
 
     const handleHeroMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
         const rect = heroCardRef.current?.getBoundingClientRect();
@@ -786,8 +788,18 @@ export default function GamePlayer() {
                             className="relative flex min-h-0 items-center justify-center overflow-hidden rounded-[0.9rem] bg-[linear-gradient(158deg,rgba(20,21,28,0.97),rgba(10,10,14,0.99))] sm:rounded-[1.1rem]"
                             style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.075), 0 0 0 1px rgba(255,255,255,0.05)' }}
                         >
-                            {/* Mouse-reactive amber spotlight */}
-                            <motion.div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: heroGlowBg }} />
+                            {/* Mouse-reactive amber spotlight — translate-positioned blob.
+                                Centered via left/top offsets (not translate) so framer's
+                                x/y transform is purely the parallax movement. */}
+                            <motion.div
+                                aria-hidden
+                                className="pointer-events-none absolute left-[15%] top-[-10%] h-[120%] w-[70%] rounded-full blur-3xl will-change-transform"
+                                style={{
+                                    x: glowX,
+                                    y: glowY,
+                                    background: 'radial-gradient(circle, rgba(244,162,97,0.14), transparent 70%)',
+                                }}
+                            />
 
                             {/* Breathing ambient glow — pulses with timer */}
                             <motion.div
@@ -898,7 +910,7 @@ export default function GamePlayer() {
                                         animate={{ opacity: 1, y: 0 }}
                                         exit={{ opacity: 0, y: -10 }}
                                         transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
-                                        className="relative flex w-full flex-col items-center justify-center gap-2 py-2.5 text-center sm:gap-3.5 sm:py-4"
+                                        className="relative flex w-full flex-col items-center justify-center gap-1.5 py-2 text-center sm:gap-2.5 sm:py-3"
                                     >
                                         {/* Visualizer with bloom glow below the bars */}
                                         <div className="relative flex flex-col items-center">
@@ -970,7 +982,7 @@ export default function GamePlayer() {
                                             initial={{ opacity: 0, y: 8 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             transition={{ duration: 0.42, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
-                                            className="mx-auto max-w-[640px] line-clamp-2 font-heading text-[clamp(1.4rem,4.8vw,3.1rem)] leading-[0.92] text-text-1 tracking-[-0.025em]"
+                                            className="mx-auto max-w-[640px] line-clamp-2 font-heading text-[clamp(1.3rem,4vw,2.5rem)] leading-[0.95] text-text-1 tracking-[-0.025em]"
                                         >
                                             What track is this?
                                         </motion.h2>

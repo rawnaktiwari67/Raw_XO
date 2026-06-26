@@ -1,12 +1,15 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '../stores/authStore';
 import { useGameStore } from '../stores/gameStore';
 import GamePlayer from '../components/game/GamePlayer';
 import Leaderboard from '../components/game/Leaderboard';
-import LaserFlow from '../components/effects/LaserFlow';
 import type { GameSession } from '../types/game';
+
+// three.js is the heaviest dependency in the bundle (~492KB). Lazy-load it so it
+// never blocks the initial paint, and only mount it once the page is idle.
+const LaserFlow = lazy(() => import('../components/effects/LaserFlow'));
 
 function formatResponseTime(value?: number) {
     if (!value || value <= 0) return 'No time';
@@ -48,6 +51,7 @@ export default function Game() {
     const { isAuthenticated, user } = useAuthStore();
     const { stats, history, phase, isLoading, fetchStats, fetchHistory } = useGameStore();
     const isGameplayActive = phase !== 'idle' || isLoading;
+    const [showLaser, setShowLaser] = useState(false);
 
     useEffect(() => {
         if (isAuthenticated) {
@@ -55,6 +59,22 @@ export default function Game() {
             fetchHistory();
         }
     }, [fetchHistory, fetchStats, isAuthenticated]);
+
+    // Mount the WebGL backdrop only after the page is idle, and never for users
+    // who prefer reduced motion or are on a small/low-power screen.
+    useEffect(() => {
+        const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (reduced || window.innerWidth < 768) return;
+
+        const idle = window.requestIdleCallback
+            ? window.requestIdleCallback(() => setShowLaser(true), { timeout: 1500 })
+            : window.setTimeout(() => setShowLaser(true), 600);
+
+        return () => {
+            if (window.cancelIdleCallback && typeof idle === 'number') window.cancelIdleCallback(idle);
+            else window.clearTimeout(idle as number);
+        };
+    }, []);
 
     useEffect(() => {
         document.body.classList.toggle('gameplay-locked', isGameplayActive);
@@ -75,25 +95,29 @@ export default function Game() {
     return (
         <div className="relative overflow-hidden">
             <div aria-hidden className="absolute inset-x-0 top-0 h-[34rem] opacity-[0.16]">
-                <LaserFlow
-                    color="#F4A261"
-                    dpr={0.85}
-                    horizontalBeamOffset={0.08}
-                    verticalBeamOffset={-0.02}
-                    horizontalSizing={0.92}
-                    verticalSizing={2.3}
-                    wispDensity={1}
-                    wispSpeed={10}
-                    wispIntensity={2.2}
-                    flowSpeed={0.18}
-                    flowStrength={0.14}
-                    fogIntensity={0.18}
-                    fogScale={0.24}
-                    fogFallSpeed={0.34}
-                    decay={1.02}
-                    falloffStart={1.04}
-                    mouseTiltStrength={0}
-                />
+                {showLaser ? (
+                    <Suspense fallback={null}>
+                        <LaserFlow
+                            color="#F4A261"
+                            dpr={0.7}
+                            horizontalBeamOffset={0.08}
+                            verticalBeamOffset={-0.02}
+                            horizontalSizing={0.92}
+                            verticalSizing={2.3}
+                            wispDensity={1}
+                            wispSpeed={10}
+                            wispIntensity={2.2}
+                            flowSpeed={0.18}
+                            flowStrength={0.14}
+                            fogIntensity={0.18}
+                            fogScale={0.24}
+                            fogFallSpeed={0.34}
+                            decay={1.02}
+                            falloffStart={1.04}
+                            mouseTiltStrength={0}
+                        />
+                    </Suspense>
+                ) : null}
             </div>
 
             <div
