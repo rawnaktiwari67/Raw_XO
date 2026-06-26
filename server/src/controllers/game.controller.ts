@@ -447,8 +447,10 @@ const guestNameFromId = (guestId: string): string => {
     for (let i = 0; i < guestId.length; i += 1) {
         hash = (hash * 31 + guestId.charCodeAt(i)) >>> 0;
     }
+    // Use unsigned shift (>>>) — a signed >> can go negative for large hashes,
+    // producing a negative index and an "undefined" noun.
     const adjective = GUEST_ADJECTIVES[hash % GUEST_ADJECTIVES.length];
-    const noun = GUEST_NOUNS[(hash >> 8) % GUEST_NOUNS.length];
+    const noun = GUEST_NOUNS[(hash >>> 8) % GUEST_NOUNS.length];
     return `${adjective} ${noun}`;
 };
 
