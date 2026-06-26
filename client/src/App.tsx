@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
 import AppRouter from './router/AppRouter';
+import ErrorBoundary from './components/layout/ErrorBoundary';
 import { setClerkTokenGetter } from './services/clerkToken';
 import { useAuthStore } from './stores/authStore';
 
@@ -41,9 +42,11 @@ const syncProfileWithRetry = async (fetchMe: () => Promise<unknown>) => {
 
 function AppShell() {
     return (
-        <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
-            <AppRouter />
-        </BrowserRouter>
+        <ErrorBoundary>
+            <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+                <AppRouter />
+            </BrowserRouter>
+        </ErrorBoundary>
     );
 }
 
