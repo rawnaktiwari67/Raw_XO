@@ -435,6 +435,39 @@ const getPeriodStart = (period: LeaderboardPeriod): Date | null => {
 const artworkLarge = (url = ''): string =>
     url.replace(/100x100bb\.(jpg|png|webp)$/i, '600x600bb.$1');
 
+// ─── Guest identity ──────────────────────────────────────────────────────────
+// Anonymous players get a stable id stored in a cookie so their scores group
+// into a single leaderboard entry across rounds, with a friendly display name
+// derived deterministically from that id.
+const GUEST_ADJECTIVES = ['Swift', 'Golden', 'Midnight', 'Electric', 'Velvet', 'Neon', 'Cosmic', 'Silent', 'Crimson', 'Lunar', 'Wild', 'Hidden'];
+const GUEST_NOUNS = ['Listener', 'Crate', 'Vinyl', 'Echo', 'Pulse', 'Tempo', 'Riff', 'Encore', 'Bassline', 'Hook', 'Anthem', 'Groove'];
+
+const guestNameFromId = (guestId: string): string => {
+    let hash = 0;
+    for (let i = 0; i < guestId.length; i += 1) {
+        hash = (hash * 31 + guestId.charCodeAt(i)) >>> 0;
+    }
+    const adjective = GUEST_ADJECTIVES[hash % GUEST_ADJECTIVES.length];
+    const noun = GUEST_NOUNS[(hash >> 8) % GUEST_NOUNS.length];
+    return `${adjective} ${noun}`;
+};
+
+const getOrCreateGuest = (req: Request, res: Response): { guestId: string; guestName: string } => {
+    const existing = typeof req.cookies?.xo_guest === 'string' ? req.cookies.xo_guest.trim() : '';
+    const guestId = existing && existing.length >= 8 ? existing : crypto.randomBytes(12).toString('base64url');
+
+    if (guestId !== existing) {
+        res.cookie('xo_guest', guestId, {
+            httpOnly: false,
+            sameSite: 'lax',
+            secure: env.NODE_ENV === 'production',
+            maxAge: 1000 * 60 * 60 * 24 * 365, // 1 year
+        });
+    }
+
+    return { guestId, guestName: guestNameFromId(guestId) };
+};
+
 const matchesGuess = (guess: string, song: SongPreview): boolean => {
     const normalizedGuess = normalizeTitle(guess);
     if (!normalizedGuess) return false;
@@ -1095,6 +1128,28 @@ export const submitAnswer = async (req: Request, res: Response): Promise<void> =
                 xpEarned,
             });
             devStore.incrementUserXp(req.userId, xpEarned);
+        } else if (isDbConnected()) {
+            // Anonymous play — persist under a stable guest id so leaderboards populate.
+            const { guestId, guestName } = getOrCreateGuest(req, res);
+            await GameScore.create({
+                guestId,
+                guestName,
+                trackId: song.id,
+                trackName: song.title,
+                artistName: song.artist,
+                artworkUrl: song.artworkUrl,
+                trackUrl: song.trackUrl,
+                genre: filters.genre,
+                language: filters.language,
+                difficulty: filters.difficulty,
+                artistFilter: filters.artist,
+                correct,
+                responseTimeMs,
+                score: pointsAwarded,
+                correctCount: correct ? 1 : 0,
+                totalQuestions: 1,
+                xpEarned,
+            });
         }
 
         res.json(successResponse({
@@ -1313,16 +1368,43 @@ export const getLeaderboard = async (_req: Request, res: Response): Promise<void
         const matchStage = Object.keys(match).length > 0 ? { $match: match } : null;
         const pipeline: object[] = [
             ...(matchStage ? [matchStage] : []),
-            { $group: { _id: '$user', totalScore: { $sum: '$score' }, sessions: { $sum: 1 }, xpTotal: { $sum: '$xpEarned' } } },
+            {
+                $group: {
+                    // Group by signed-in user, or fall back to the guest id so anonymous
+                    // players still rank. Their rows have no user document.
+                    _id: { $ifNull: ['$user', { $concat: ['guest:', { $ifNull: ['$guestId', 'anon'] }] }] },
+                    userId: { $first: '$user' },
+                    guestName: { $first: '$guestName' },
+                    totalScore: { $sum: '$score' },
+                    sessions: { $sum: 1 },
+                    xpTotal: { $sum: '$xpEarned' },
+                },
+            },
             { $sort: { totalScore: -1 } },
-            { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
-            { $unwind: '$user' },
-            { $project: { username: '$user.username', avatar: '$user.avatar', levelBadge: '$user.levelBadge', totalScore: 1, sessions: 1, xpTotal: 1 } },
+            { $limit: 100 },
+            { $lookup: { from: 'users', localField: 'userId', foreignField: '_id', as: 'user' } },
+            { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+            {
+                $project: {
+                    username: { $ifNull: ['$user.username', { $ifNull: ['$guestName', 'Guest'] }] },
+                    avatar: '$user.avatar',
+                    levelBadge: { $ifNull: ['$user.levelBadge', 'guest'] },
+                    isGuest: { $cond: [{ $ifNull: ['$user', false] }, false, true] },
+                    totalScore: 1,
+                    sessions: 1,
+                    xpTotal: 1,
+                },
+            },
         ];
         const fullLeaderboard = await GameScore.aggregate(pipeline as any);
+        const guestId = !_req.userId && typeof _req.cookies?.xo_guest === 'string'
+            ? _req.cookies.xo_guest.trim()
+            : '';
         const userRank = _req.userId
-            ? fullLeaderboard.findIndex((entry) => String(entry._id) === String(_req.userId)) + 1 || null
-            : null;
+            ? fullLeaderboard.findIndex((entry) => String(entry.userId) === String(_req.userId)) + 1 || null
+            : guestId
+                ? fullLeaderboard.findIndex((entry) => String(entry._id) === `guest:${guestId}`) + 1 || null
+                : null;
 
         res.json(successResponse({
             entries: fullLeaderboard.slice(0, 50),

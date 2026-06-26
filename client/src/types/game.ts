@@ -60,6 +60,7 @@ export interface LeaderboardEntry {
     levelBadge: string;
     totalScore: number;
     sessions: number;
+    isGuest?: boolean;
 }
 
 export interface LeaderboardData {
