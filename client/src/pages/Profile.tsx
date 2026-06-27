@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '../stores/authStore';
 import XPBar from '../components/user/XPBar';
@@ -15,6 +15,7 @@ export default function Profile() {
     const isMe = me?.username === username;
 
     const [profile, setProfile] = useState<User | null>(null);
+    const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
     const [threads, setThreads] = useState<Thread[]>([]);
     const [comments, setComments] = useState<Comment[]>([]);
     const [tab, setTab] = useState<'threads' | 'comments'>('threads');
@@ -23,10 +24,17 @@ export default function Profile() {
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
+        let cancelled = false;
+        setStatus('loading');
         api.get(`/api/v1/users/${username}`).then((res) => {
+            if (cancelled) return;
             setProfile(res.data.data);
             setBioText(res.data.data.bio || '');
-        }).catch(() => { });
+            setStatus('ready');
+        }).catch(() => {
+            if (!cancelled) setStatus('error');
+        });
+        return () => { cancelled = true; };
     }, [username]);
 
     useEffect(() => {
@@ -46,10 +54,36 @@ export default function Profile() {
         }
     };
 
+    if (status === 'error' || (status === 'ready' && !profile)) return (
+        <div className="max-w-2xl mx-auto px-4 py-24 text-center">
+            <p className="label-xs mb-3 text-accent">Profile</p>
+            <h1 className="font-heading text-[clamp(1.8rem,5vw,2.8rem)] leading-[0.95] text-text-1">
+                We couldn't find that listener.
+            </h1>
+            <p className="mt-4 text-sm text-text-3">The username may have changed, or the profile doesn't exist.</p>
+            <Link to="/leaderboard" className="btn-secondary mt-8 inline-block rounded-[1rem] px-6 py-3 text-sm">
+                Browse the leaderboard
+            </Link>
+        </div>
+    );
+
     if (!profile) return (
-        <div className="max-w-2xl mx-auto px-4 py-12 text-center text-text-subtle">
-            <div className="text-4xl mb-3 animate-pulse">🌙</div>
-            <p>Loading profile...</p>
+        <div className="max-w-2xl mx-auto px-4 py-8">
+            <div className="glass-surface p-6 mb-6">
+                <div className="flex items-start gap-4">
+                    <div className="skeleton h-16 w-16 shrink-0 rounded-full" />
+                    <div className="flex-1 space-y-3 pt-1">
+                        <div className="skeleton h-6 w-40 rounded-lg" />
+                        <div className="skeleton h-4 w-24 rounded" />
+                        <div className="skeleton h-3 w-full max-w-sm rounded" />
+                    </div>
+                </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                {[0, 1, 2, 3].map((i) => (
+                    <div key={i} className="skeleton h-24 rounded-2xl" />
+                ))}
+            </div>
         </div>
     );
 

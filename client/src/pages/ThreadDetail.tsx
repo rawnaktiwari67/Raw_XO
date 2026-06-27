@@ -11,7 +11,7 @@ import { avatarInitial } from '../utils/avatar';
 
 export default function ThreadDetail() {
     const { id } = useParams<{ id: string }>();
-    const { currentThread, fetchThread, voteThread } = useThreadStore();
+    const { currentThread, fetchThread, voteThread, isLoading: threadLoading, error: threadError } = useThreadStore();
     const { comments, isLoading: commentsLoading, fetchComments, addComment, clearComments } = useCommentStore();
     const { user, isAuthenticated } = useAuthStore();
     const [commentBody, setCommentBody] = useState('');
@@ -38,12 +38,38 @@ export default function ThreadDetail() {
         }
     };
 
-    if (!currentThread) return (
-        <div className="max-w-3xl mx-auto px-4 py-12 text-center text-text-subtle">
-            <div className="animate-pulse text-4xl mb-3">🌙</div>
-            <p>Loading thread...</p>
-        </div>
-    );
+    if (!currentThread) {
+        if (threadError && !threadLoading) return (
+            <div className="max-w-3xl mx-auto px-4 py-24 text-center">
+                <p className="label-xs mb-3 text-accent">Thread</p>
+                <h1 className="font-heading text-[clamp(1.8rem,5vw,2.8rem)] leading-[0.95] text-text-1">
+                    This thread isn't here anymore.
+                </h1>
+                <p className="mt-4 text-sm text-text-3">It may have been removed, or the link is broken.</p>
+                <Link to="/archive" className="btn-secondary mt-8 inline-block rounded-[1rem] px-6 py-3 text-sm">
+                    Back to culture
+                </Link>
+            </div>
+        );
+
+        return (
+            <div className="max-w-3xl mx-auto px-4 py-12">
+                <div className="skeleton h-4 w-24 rounded" />
+                <div className="skeleton mt-5 h-9 w-3/4 rounded-lg" />
+                <div className="mt-4 space-y-2.5">
+                    <div className="skeleton h-3.5 w-full rounded" />
+                    <div className="skeleton h-3.5 w-11/12 rounded" />
+                    <div className="skeleton h-3.5 w-4/5 rounded" />
+                </div>
+                <div className="skeleton mt-8 h-12 w-full rounded-xl" />
+                <div className="mt-6 space-y-3">
+                    {[0, 1, 2].map((i) => (
+                        <div key={i} className="skeleton h-20 w-full rounded-xl" />
+                    ))}
+                </div>
+            </div>
+        );
+    }
 
     const t = currentThread;
     const hasUpvoted = user ? t.upvotes.includes(user._id) : false;

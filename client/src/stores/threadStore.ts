@@ -39,7 +39,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
     },
 
     fetchThread: async (id) => {
-        set({ isLoading: true, currentThread: null });
+        set({ isLoading: true, currentThread: null, error: null });
         try {
             const res = await threadService.getThread(id);
             set({ currentThread: res.data.data, isLoading: false });
