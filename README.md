@@ -292,6 +292,33 @@ From repo root:
 npm run build
 ```
 
+## Performance
+
+Raw XO is tuned to stay light on the main thread and quick to first paint. The
+guiding rule: nothing decorative should sit on the critical rendering path.
+
+- **LCP-safe entrances.** Page and hero entrance animations use transform-only
+  motion (a GPU-composited slide), never an `opacity: 0` fade. Chrome skips
+  transparent elements when choosing the Largest Contentful Paint candidate, so
+  fading the hero in from zero used to delay the headline by the whole
+  animation. Reduced-motion users get an instant, static render.
+- **Eager landing route.** The `/` route (the game) is statically imported, so
+  the first screen ships in the initial bundle instead of waiting on a second
+  lazy-chunk fetch. Every other route stays code-split.
+- **Non-blocking fonts.** Google Fonts are fetched via `rel="preload"` and
+  promoted to a stylesheet on load, with `display=swap` so text paints
+  immediately in the fallback face and the web fonts swap in when ready.
+- **Lazy, self-governing WebGL.** The Three.js `LaserFlow` backdrop (the single
+  heaviest dependency) is lazy-loaded, mounted only after the page is idle, and
+  skipped entirely for small screens and reduced-motion users. While running it
+  adapts its pixel ratio to the live frame rate and pauses when off-screen or
+  when the tab is hidden.
+- **Code-split vendors.** React, Three.js, Framer Motion, and Clerk are split
+  into separate chunks so a change in one doesn't bust the cache for the others.
+
+Audit the bundle any time with `npm run build` from `client` — Vite prints the
+gzipped size of every chunk.
+
 ## Notes
 
 - Apple music data on the culture page is powered by the iTunes Search API.

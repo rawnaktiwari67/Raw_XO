@@ -138,9 +138,12 @@ export default function Game() {
             />
 
             <div className="relative mx-auto max-w-[1160px] px-4 pb-16 pt-24 md:px-8 md:pt-28">
+                {/* Transform-only entrance (no opacity fade): this section holds the
+                    LCP <h1>, and an opacity:0 start would push the largest paint out
+                    by the full animation duration. The slide-up keeps the motion. */}
                 <motion.section
-                    initial={{ opacity: 0, y: 18 }}
-                    animate={{ opacity: 1, y: 0 }}
+                    initial={{ y: 18 }}
+                    animate={{ y: 0 }}
                     transition={{ duration: 0.58, ease: [0.22, 1, 0.36, 1] }}
                     className="mb-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between"
                 >

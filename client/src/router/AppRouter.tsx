@@ -1,10 +1,13 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
+// Game is the landing route ("/"). Import it eagerly so the first paint doesn't
+// wait on a second chunk fetch — that extra waterfall hop was inflating LCP.
+// Every other route stays lazy, so the rest of the app is still code-split.
+import Game from '../pages/Game';
 
-const Game = lazy(() => import('../pages/Game'));
 const Home = lazy(() => import('../pages/Home'));
 const EraPage = lazy(() => import('../pages/EraPage'));
 const ThreadDetail = lazy(() => import('../pages/ThreadDetail'));
@@ -15,10 +18,20 @@ const Login = lazy(() => import('../pages/Login'));
 const Register = lazy(() => import('../pages/Register'));
 
 function PageTransition({ children }: { children: ReactNode }) {
+    const reducedMotion = useReducedMotion();
+
+    // Entrance is a pure transform (translateY) — never an opacity fade. Chrome
+    // ignores opacity:0 elements when picking the LCP candidate, so fading the
+    // page in from transparent delayed the hero text by the whole animation.
+    // A GPU-composited slide reads the same but paints the text immediately.
+    if (reducedMotion) {
+        return <div>{children}</div>;
+    }
+
     return (
         <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ y: 16 }}
+            animate={{ y: 0 }}
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
         >
             {children}
