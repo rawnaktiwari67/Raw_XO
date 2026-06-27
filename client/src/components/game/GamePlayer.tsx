@@ -737,13 +737,17 @@ export default function GamePlayer() {
                     transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
                     className="relative grid h-full w-full max-w-[1060px] grid-rows-[auto_minmax(0,1fr)_auto] gap-1.5 sm:gap-3"
                 >
-                    <header className="grid min-h-[48px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[0.75rem] bg-white/[0.035] px-2 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:min-h-[72px] sm:gap-3 sm:rounded-[0.85rem] sm:px-4">
+                    <header className="grid min-h-[52px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 rounded-[0.75rem] bg-white/[0.035] px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:min-h-[72px] sm:gap-3 sm:rounded-[0.85rem] sm:px-4">
                         <button
                             type="button"
                             onClick={handleBackToSetup}
-                            className="min-h-8 rounded-[0.65rem] border border-white/[0.08] bg-white/[0.04] px-2.5 text-[10px] font-bold uppercase tracking-[0.08em] text-text-2 transition-colors hover:bg-white/[0.07] hover:text-text-1 sm:min-h-10 sm:px-4 sm:text-xs"
+                            aria-label="Back to setup"
+                            className="flex min-h-10 items-center gap-1 rounded-[0.7rem] border border-white/[0.12] bg-white/[0.06] px-2.5 text-[11px] font-bold uppercase tracking-[0.06em] text-text-2 transition-colors hover:bg-white/[0.10] hover:text-text-1 sm:min-h-10 sm:px-4 sm:text-xs"
                         >
-                            Back
+                            <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5 shrink-0" aria-hidden>
+                                <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                            <span>Back</span>
                         </button>
                         <div className="min-w-0">
                             <div className="flex min-w-0 items-center gap-2">
@@ -751,11 +755,11 @@ export default function GamePlayer() {
                                 <span className="hidden truncate text-[10px] font-semibold uppercase tracking-[0.10em] text-text-4 sm:inline">
                                     {selectedArtistLabel}
                                 </span>
-                                <span className="rounded-full bg-white/[0.05] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.10em] text-text-3 sm:text-[9px]">
+                                <span className="rounded-full bg-white/[0.05] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-text-3 sm:text-[11px]">
                                     {Math.min(roundsPlayedInSession + (isResult ? 0 : 1), ROUND_LIMIT)}/{ROUND_LIMIT}
                                 </span>
                             </div>
-                            <div className="mt-1 h-1.5 w-full max-w-[420px] overflow-hidden rounded-full bg-white/[0.08] sm:h-2">
+                            <div className="mt-1.5 h-1.5 w-full max-w-[420px] overflow-hidden rounded-full bg-white/[0.08] sm:h-2">
                                 <motion.div
                                     className={`h-full ${isUrgent ? 'bg-orange-300' : isResult && isCorrect ? 'bg-emerald-300' : isResult ? 'bg-rose-300' : 'bg-amber'}`}
                                     initial={false}
@@ -765,22 +769,22 @@ export default function GamePlayer() {
                             </div>
                         </div>
 
-                        <div className="grid shrink-0 grid-cols-3 gap-1.5 text-right sm:gap-5">
+                        <div className="grid shrink-0 grid-cols-3 gap-2 text-right sm:gap-5">
                             <div>
-                                <p className="text-[8px] font-semibold uppercase tracking-[0.10em] text-text-3 sm:text-[0.6875rem] sm:tracking-[0.12em]">Time</p>
-                                <p className={`font-heading text-[1rem] leading-none sm:text-[2.2rem] ${isUrgent ? 'text-orange-100' : 'text-text-1'}`}>
+                                <p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-text-3 sm:text-[0.6875rem] sm:tracking-[0.12em]">Time</p>
+                                <p className={`font-heading text-[1.15rem] leading-none sm:text-[2.2rem] ${isUrgent ? 'text-orange-100' : 'text-text-1'}`}>
                                     {phase === 'playing' ? timeLeft : isResult ? formatResponseTime(result?.responseTimeMs) : '--'}
                                 </p>
                             </div>
                             <div>
-                                <p className="text-[8px] font-semibold uppercase tracking-[0.10em] text-text-3 sm:text-[0.6875rem] sm:tracking-[0.12em]">Streak</p>
-                                <p className="font-heading text-[0.95rem] leading-none text-text-1 sm:text-[1.75rem]">
+                                <p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-text-3 sm:text-[0.6875rem] sm:tracking-[0.12em]">Streak</p>
+                                <p className="font-heading text-[1.15rem] leading-none text-text-1 sm:text-[1.75rem]">
                                     <AnimatedValue value={streak} />
                                 </p>
                             </div>
                             <div>
-                                <p className="text-[8px] font-semibold uppercase tracking-[0.10em] text-text-3 sm:text-[0.6875rem] sm:tracking-[0.12em]">Score</p>
-                                <p className="font-heading text-[0.95rem] leading-none text-accent sm:text-[1.75rem]">
+                                <p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-text-3 sm:text-[0.6875rem] sm:tracking-[0.12em]">Score</p>
+                                <p className="font-heading text-[1.15rem] leading-none text-accent sm:text-[1.75rem]">
                                     <AnimatedValue value={sessionScore} />
                                 </p>
                             </div>
@@ -1000,7 +1004,7 @@ export default function GamePlayer() {
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
                                             transition={{ duration: 0.55, delay: 0.2 }}
-                                            className="text-[10px] tracking-[0.04em] text-text-4 sm:text-[11px]"
+                                            className="text-[11px] tracking-[0.04em] text-text-4 sm:text-[12px]"
                                         >
                                             Five seconds. Four options. One instinct.
                                         </motion.p>
@@ -1026,7 +1030,7 @@ export default function GamePlayer() {
                                         whileTap={phase === 'playing' && !selectedOption ? { scale: 0.99 } : undefined}
                                         onClick={() => handleSelectOption(option)}
                                         disabled={!!selectedOption || phase !== 'playing'}
-                                        className={`min-h-[42px] rounded-[0.75rem] px-2 py-2 text-left text-text-1 transition-all duration-200 sm:min-h-[78px] sm:rounded-[0.85rem] sm:px-4 ${
+                                        className={`min-h-[52px] rounded-[0.75rem] px-3 py-2.5 text-left text-text-1 transition-all duration-200 sm:min-h-[78px] sm:rounded-[0.85rem] sm:px-4 ${
                                             isCorrectOption
                                                 ? 'bg-emerald-400/18 ring-1 ring-emerald-300/55 shadow-[0_18px_45px_rgba(16,185,129,0.14),inset_0_1px_0_rgba(52,211,153,0.15)]'
                                                 : isWrongOption
@@ -1036,7 +1040,7 @@ export default function GamePlayer() {
                                                     : 'bg-white/[0.045] ring-1 ring-white/[0.045] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] hover:bg-white/[0.08] hover:ring-white/[0.07] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.09)]'
                                         } disabled:opacity-100`}
                                     >
-                                        <span className="line-clamp-2 block text-[clamp(0.8rem,3vw,1.25rem)] font-bold leading-tight tracking-[-0.01em]">
+                                        <span className="line-clamp-2 block text-[clamp(0.95rem,3.6vw,1.25rem)] font-bold leading-tight tracking-[-0.01em]">
                                             {option}
                                         </span>
                                     </motion.button>
@@ -1061,7 +1065,7 @@ export default function GamePlayer() {
                                     <p className={`text-xs font-semibold sm:text-sm ${isCorrect ? 'text-emerald-100' : 'text-rose-100'}`}>
                                         {isCorrect ? `+${result.pointsAwarded} pts` : 'Missed this one'}
                                     </p>
-                                    <p className={`truncate text-[10px] font-semibold sm:text-xs ${
+                                    <p className={`truncate text-[11px] font-semibold sm:text-xs ${
                                         rating ? (rating >= 4 ? 'text-emerald-100' : rating <= 2 ? 'text-rose-100' : 'text-amber-100') : 'text-text-4'
                                     }`}>
                                         {roundsPlayedInSession >= ROUND_LIMIT ? 'Round complete. Your score is landing.' : getRatingMessage(rating)}
