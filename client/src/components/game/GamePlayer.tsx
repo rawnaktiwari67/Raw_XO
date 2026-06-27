@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom';
 import { animate, AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { useGameStore } from '../../stores/gameStore';
 import { gameService } from '../../services/gameService';
+import { roundSecondsFor } from '../../config/gameConfig';
 import type { GameArtistOption, GameDifficulty, GameGenre, GameLanguage, LeaderboardData } from '../../types/game';
 
-const TOTAL_SECONDS = 5;
 const ROUND_LIMIT = 5;
 
 const GENRE_OPTIONS: Array<{ label: string; value: GameGenre }> = [
@@ -455,6 +455,7 @@ export default function GamePlayer() {
         isRating,
         error,
         filters,
+        roundFilters,
         artistOptions,
         setGenre,
         setLanguage,
@@ -468,10 +469,16 @@ export default function GamePlayer() {
         fetchArtists,
     } = useGameStore();
 
+    // Clock length follows the active round's difficulty: easy 10s, medium 7s,
+    // hard 5s. While setting up we preview the chosen difficulty's clock; once a
+    // round is live we honour the difficulty the question was actually built for
+    // (roundFilters), so changing the picker mid-round can't shorten the timer.
+    const roundSeconds = roundSecondsFor((phase === 'idle' ? filters : roundFilters).difficulty);
+
     const audioRef = useRef<HTMLAudioElement>(null);
     const roundStartedAtRef = useRef<number | null>(null);
     const heroCardRef = useRef<HTMLDivElement>(null);
-    const [timeLeft, setTimeLeft] = useState(TOTAL_SECONDS);
+    const [timeLeft, setTimeLeft] = useState(roundSeconds);
     const [rating, setRating] = useState<number | null>(null);
     const [clipBlocked, setClipBlocked] = useState(false);
     const [timerActive, setTimerActive] = useState(false);
@@ -505,7 +512,7 @@ export default function GamePlayer() {
             audioRef.current.pause();
             audioRef.current.currentTime = 0;
         }
-        setTimeLeft(TOTAL_SECONDS);
+        setTimeLeft(roundSeconds);
         setClipBlocked(false);
         setTimerActive(false);
         setSelectedOption(null);
@@ -521,7 +528,7 @@ export default function GamePlayer() {
             audio.pause();
             audio.currentTime = 0;
             audio.load();
-            setTimeLeft(TOTAL_SECONDS);
+            setTimeLeft(roundSeconds);
         }
 
         try {
@@ -567,14 +574,14 @@ export default function GamePlayer() {
         const timeout = window.setTimeout(() => {
             if (audioRef.current) audioRef.current.pause();
             setTimerActive(false);
-            void submitAnswer('__timeout__', TOTAL_SECONDS * 1000);
-        }, TOTAL_SECONDS * 1000);
+            void submitAnswer('__timeout__', roundSeconds * 1000);
+        }, roundSeconds * 1000);
 
         return () => {
             window.clearInterval(tick);
             window.clearTimeout(timeout);
         };
-    }, [phase, question?.songId, submitAnswer, timerActive]);
+    }, [phase, question?.songId, submitAnswer, timerActive, roundSeconds]);
 
     // Guarantee recap appears after the 5th result — backup for any edge-case where
     // the store's isSummaryVisible flag didn't land before this render
@@ -763,7 +770,7 @@ export default function GamePlayer() {
                                 <motion.div
                                     className={`h-full ${isUrgent ? 'bg-orange-300' : isResult && isCorrect ? 'bg-emerald-300' : isResult ? 'bg-rose-300' : 'bg-amber'}`}
                                     initial={false}
-                                    animate={{ width: `${(timeLeft / TOTAL_SECONDS) * 100}%` }}
+                                    animate={{ width: `${(timeLeft / roundSeconds) * 100}%` }}
                                     transition={{ duration: 0.18, ease: 'linear' }}
                                 />
                             </div>
@@ -1277,7 +1284,7 @@ export default function GamePlayer() {
                             <div className="space-y-2">
                                 <p className="label-xs">Timer</p>
                                 <p className={`font-heading text-[1.8rem] leading-none ${isUrgent ? 'text-orange-100' : 'text-text-1'}`}>
-                                    {timeLeft}s
+                                    {roundSeconds}s
                                 </p>
                             </div>
                             <div className="space-y-2">
@@ -1303,7 +1310,7 @@ export default function GamePlayer() {
                         <motion.div
                             className={`h-full ${isUrgent ? 'bg-orange-300' : 'bg-amber'}`}
                             initial={false}
-                            animate={{ width: `${(timeLeft / TOTAL_SECONDS) * 100}%` }}
+                            animate={{ width: `${(timeLeft / roundSeconds) * 100}%` }}
                             transition={{ duration: 0.18, ease: 'linear' }}
                         />
                     </div>

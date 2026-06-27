@@ -14,6 +14,7 @@ import {
     LANGUAGE_QUERY_MAP,
     INDIA_FOCUSED_LANGUAGES,
     INDIA_FOCUSED_ARTISTS,
+    DIFFICULTY_ROUND_SECONDS,
     type ArtistProfile,
 } from '../config/gameConstants';
 
@@ -39,6 +40,9 @@ type SongPreview = {
     snippetUrl: string;
     artworkUrl: string;
     trackUrl: string;
+    // 0–100 stream popularity. Real value from Spotify when available; a rank-based
+    // approximation for iTunes-only results; -1 when we have no signal at all.
+    popularity: number;
 };
 
 type GameGenre = 'all' | 'hip-hop' | 'pop' | 'rnb' | 'dance';
@@ -407,7 +411,15 @@ const applyDifficulty = (songs: SongPreview[], difficulty: GameDifficulty): Song
     return (medium.length >= 4 ? medium : byRecent).slice(0, Math.min(54, source.length));
 };
 
-const calculateScorePayload = (correct: boolean, streak: number, responseTimeMs: number) => {
+const roundWindowMs = (difficulty: GameDifficulty): number =>
+    (DIFFICULTY_ROUND_SECONDS[difficulty] ?? DIFFICULTY_ROUND_SECONDS.medium) * 1000;
+
+const calculateScorePayload = (
+    correct: boolean,
+    streak: number,
+    responseTimeMs: number,
+    difficulty: GameDifficulty
+) => {
     if (!correct) {
         return {
             pointsAwarded: 0,
@@ -416,7 +428,10 @@ const calculateScorePayload = (correct: boolean, streak: number, responseTimeMs:
         };
     }
 
-    const speedWindowMs = 5000;
+    // Speed bonus is measured against the clock you actually had. Hard rounds are
+    // short, so a 2s answer there earns a bigger share of the window than the same
+    // 2s on a 10s easy round — rewarding leaving time on the table at any level.
+    const speedWindowMs = roundWindowMs(difficulty);
     const safeResponseTime = responseTimeMs > 0 ? Math.min(responseTimeMs, speedWindowMs) : speedWindowMs;
     const speedBonus = Math.max(0, Math.round(((speedWindowMs - safeResponseTime) / speedWindowMs) * 60));
     const multiplier = Math.min(1 + Math.floor(streak / 3) * 0.25, 2);
@@ -619,20 +634,34 @@ const spotifyReleaseYear = (releaseDate?: string): number => {
     return Number.isFinite(year) ? year : 0;
 };
 
+// Stream popularity nudge (0–100 scale). Easy leans toward the hits everyone
+// knows, hard toward the deep cuts, medium toward the familiar-but-not-obvious
+// middle. Returns 0 when we have no popularity signal (iTunes-only with the rank
+// proxy disabled), so selection falls back cleanly to the age/duration heuristic.
+const popularityBoost = (popularity: number, difficulty: GameDifficulty): number => {
+    if (popularity < 0) return 0;
+    const pop = Math.max(0, Math.min(100, popularity));
+
+    if (difficulty === 'easy') return (pop / 100) * 22;
+    if (difficulty === 'hard') return ((100 - pop) / 100) * 22;
+    return Math.max(0, 16 - Math.abs(pop - 55) * 0.32);
+};
+
 const songWeight = (song: SongPreview, difficulty: GameDifficulty): number => {
     const currentYear = new Date().getFullYear();
     const age = song.releaseYear > 0 ? Math.max(0, currentYear - song.releaseYear) : 8;
     const durationMinutes = song.durationMs > 0 ? song.durationMs / 60000 : 3.5;
+    const popBoost = popularityBoost(song.popularity, difficulty);
 
     if (difficulty === 'easy') {
-        return Math.max(1, 18 - age) + Math.max(0, 5 - Math.abs(durationMinutes - 3.4));
+        return Math.max(1, 18 - age) + Math.max(0, 5 - Math.abs(durationMinutes - 3.4)) + popBoost;
     }
 
     if (difficulty === 'hard') {
-        return Math.max(1, age + Math.min(durationMinutes, 7));
+        return Math.max(1, age + Math.min(durationMinutes, 7)) + popBoost;
     }
 
-    return Math.max(1, 12 - Math.abs(age - 6)) + Math.max(0, 4 - Math.abs(durationMinutes - 3.6));
+    return Math.max(1, 12 - Math.abs(age - 6)) + Math.max(0, 4 - Math.abs(durationMinutes - 3.6)) + popBoost;
 };
 
 const pickWeightedSong = (songs: SongPreview[], difficulty: GameDifficulty): SongPreview => {
@@ -767,6 +796,9 @@ const fetchSpotifySongPool = async (
             snippetUrl: item.preview_url,
             artworkUrl: bestSpotifyImage(item.album?.images),
             trackUrl: item.external_urls?.spotify ?? '',
+            // Spotify's popularity is a real, stream-derived 0–100 score — the
+            // gold signal for "is this a hit or a deep cut".
+            popularity: typeof item.popularity === 'number' ? item.popularity : -1,
         });
     }
 
@@ -794,15 +826,18 @@ const fetchItunesSongPool = async (
         })
     );
 
-    const results = payloads.flatMap((payload) =>
+    // iTunes returns each term's tracks roughly biggest-first, so a track's rank
+    // within its own search is a serviceable popularity proxy when we don't have
+    // Spotify's real score. Keep the per-term rank instead of flattening blindly.
+    const ranked = payloads.flatMap((payload) =>
         payload.status === 'fulfilled' && Array.isArray(payload.value.results)
-            ? payload.value.results
+            ? payload.value.results.map((item, rank) => ({ item, rank }))
             : []
     );
     const seen = new Set<string>();
     const songs: SongPreview[] = [];
 
-    for (const item of results) {
+    for (const { item, rank } of ranked) {
         if (!item.trackId || !item.trackName || !item.artistName || !item.previewUrl) {
             continue;
         }
@@ -826,6 +861,10 @@ const fetchItunesSongPool = async (
             snippetUrl: item.previewUrl,
             artworkUrl: artworkLarge(item.artworkUrl100),
             trackUrl: item.trackViewUrl ?? '',
+            // Rank-based approximation (0–100). Real Spotify popularity, when the
+            // pool also has a Spotify entry for this track, wins via the dedupe
+            // merge that lists Spotify songs first.
+            popularity: Math.max(0, Math.round(100 - rank * 3.5)),
         });
     }
 
@@ -1071,89 +1110,23 @@ export const submitAnswer = async (req: Request, res: Response): Promise<void> =
 
         const correct = matchesGuess(String(answer), song);
         const streak = Number(req.body.streak) || 0;
-        const responseTimeMs = Math.max(0, Math.min(5000, Number(req.body.responseTimeMs) || 0));
-        const { pointsAwarded, speedBonus, multiplier } = calculateScorePayload(correct, streak, responseTimeMs);
+        // Clamp the reported time to this difficulty's clock, not a fixed 5s — an
+        // 8s answer on a 10s easy round is legitimate and must not be capped to 5s.
+        const answerWindowMs = roundWindowMs(filters.difficulty);
+        const responseTimeMs = Math.max(0, Math.min(answerWindowMs, Number(req.body.responseTimeMs) || 0));
+        const { pointsAwarded, speedBonus, multiplier } = calculateScorePayload(correct, streak, responseTimeMs, filters.difficulty);
         const xpEarned = calculateGameXP(correct, streak) + Math.round(speedBonus * 0.5);
         if (correct) {
             rememberCorrectSong(filtersCacheKey(filters), song);
         }
 
-        if (req.userId && isDbConnected()) {
-            await GameScore.create({
-                user: req.userId,
-                trackId: song.id,
-                trackName: song.title,
-                artistName: song.artist,
-                artworkUrl: song.artworkUrl,
-                trackUrl: song.trackUrl,
-                genre: filters.genre,
-                language: filters.language,
-                difficulty: filters.difficulty,
-                artistFilter: filters.artist,
-                correct,
-                responseTimeMs,
-                score: pointsAwarded,
-                correctCount: correct ? 1 : 0,
-                totalQuestions: 1,
-                xpEarned,
-            });
+        // Resolve guest identity up front — it sets a cookie, which has to be on
+        // the response headers, so it must run before res.json below.
+        const guest = !req.userId && isDbConnected() ? getOrCreateGuest(req, res) : null;
 
-            const user = await User.findByIdAndUpdate(
-                req.userId,
-                { $inc: { xp: xpEarned } },
-                { new: true }
-            );
-
-            if (user) {
-                const { level, badge } = calculateLevel(user.xp);
-                if (level !== user.level || badge !== user.levelBadge) {
-                    await User.findByIdAndUpdate(req.userId, { level, levelBadge: badge });
-                }
-            }
-        } else if (req.userId) {
-            devStore.saveGameScore({
-                user: req.userId ?? '',
-                trackId: song.id,
-                trackName: song.title,
-                artistName: song.artist,
-                artworkUrl: song.artworkUrl,
-                trackUrl: song.trackUrl,
-                genre: filters.genre,
-                language: filters.language,
-                difficulty: filters.difficulty,
-                artistFilter: filters.artist,
-                correct,
-                responseTimeMs,
-                score: pointsAwarded,
-                correctCount: correct ? 1 : 0,
-                totalQuestions: 1,
-                xpEarned,
-            });
-            devStore.incrementUserXp(req.userId, xpEarned);
-        } else if (isDbConnected()) {
-            // Anonymous play — persist under a stable guest id so leaderboards populate.
-            const { guestId, guestName } = getOrCreateGuest(req, res);
-            await GameScore.create({
-                guestId,
-                guestName,
-                trackId: song.id,
-                trackName: song.title,
-                artistName: song.artist,
-                artworkUrl: song.artworkUrl,
-                trackUrl: song.trackUrl,
-                genre: filters.genre,
-                language: filters.language,
-                difficulty: filters.difficulty,
-                artistFilter: filters.artist,
-                correct,
-                responseTimeMs,
-                score: pointsAwarded,
-                correctCount: correct ? 1 : 0,
-                totalQuestions: 1,
-                xpEarned,
-            });
-        }
-
+        // Send the reveal immediately. Persisting the score used to sit on this
+        // critical path (two sequential DB round-trips before the player saw the
+        // answer); now the result flushes first and the writes happen after.
         res.json(successResponse({
             correct,
             correctAnswer: song.title,
@@ -1170,8 +1143,58 @@ export const submitAnswer = async (req: Request, res: Response): Promise<void> =
             responseTimeMs,
             filters,
         }));
+
+        // Persist after the response has flushed. Awaiting here keeps serverless
+        // functions alive until the writes complete, but the client already has
+        // its answer — so the reveal is instant regardless of DB latency. Errors
+        // can't be surfaced now (headers are sent), so they're logged and swallowed.
+        try {
+            const scoreDoc = {
+                trackId: song.id,
+                trackName: song.title,
+                artistName: song.artist,
+                artworkUrl: song.artworkUrl,
+                trackUrl: song.trackUrl,
+                genre: filters.genre,
+                language: filters.language,
+                difficulty: filters.difficulty,
+                artistFilter: filters.artist,
+                correct,
+                responseTimeMs,
+                score: pointsAwarded,
+                correctCount: correct ? 1 : 0,
+                totalQuestions: 1,
+                xpEarned,
+            };
+
+            if (req.userId && isDbConnected()) {
+                // Run the score insert and the XP increment in parallel instead of
+                // back-to-back. The level/badge recalc only writes on a level-up.
+                const [, user] = await Promise.all([
+                    GameScore.create({ user: req.userId, ...scoreDoc }),
+                    User.findByIdAndUpdate(req.userId, { $inc: { xp: xpEarned } }, { new: true }),
+                ]);
+
+                if (user) {
+                    const { level, badge } = calculateLevel(user.xp);
+                    if (level !== user.level || badge !== user.levelBadge) {
+                        await User.findByIdAndUpdate(req.userId, { level, levelBadge: badge });
+                    }
+                }
+            } else if (req.userId) {
+                devStore.saveGameScore({ user: req.userId, ...scoreDoc });
+                devStore.incrementUserXp(req.userId, xpEarned);
+            } else if (guest) {
+                // Anonymous play — persist under a stable guest id so leaderboards populate.
+                await GameScore.create({ guestId: guest.guestId, guestName: guest.guestName, ...scoreDoc });
+            }
+        } catch (error) {
+            console.error('submitAnswer: failed to persist score', error);
+        }
     } catch {
-        res.status(500).json(errorResponse('Server error'));
+        if (!res.headersSent) {
+            res.status(500).json(errorResponse('Server error'));
+        }
     }
 };
 

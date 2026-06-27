@@ -292,6 +292,30 @@ From repo root:
 npm run build
 ```
 
+## Game design
+
+The 5-second guess game adapts to the difficulty you pick:
+
+- **The clock scales with difficulty.** Easy gives you 10 seconds, medium 7,
+  hard 5. The countdown and the server's speed-bonus window read the same
+  numbers (`client/src/config/gameConfig.ts` and
+  `server/src/config/gameConstants.ts`), so a longer clock always means a longer
+  window to earn a speed bonus on — they can't drift apart.
+- **Difficulty is popularity-aware.** Easy leans toward the hits, hard toward the
+  deep cuts and older OG tracks, medium sits in the familiar-but-not-obvious
+  middle. The signal is Spotify's real stream-based popularity when Spotify
+  credentials are present; otherwise it falls back to an iTunes search-rank
+  approximation, and finally to a release-year/duration heuristic. Set
+  `GAME_SPOTIFY_TRACK_SEARCH=true` for the richest tiers.
+- **The reveal is instant.** Answering no longer waits on the database. The
+  server scores the guess in memory, flushes the result, and persists the score
+  afterwards — so the correct/wrong reveal shows immediately even under DB
+  latency. Writes still complete (the handler awaits them after responding, which
+  keeps serverless functions alive), they just aren't on the critical path.
+- **Songs keep mixing.** Recently-served correct answers are remembered per
+  filter set (server-side) and the client also passes a recent-song exclusion
+  list, so you don't get the same track twice in a session.
+
 ## Performance
 
 Raw XO is tuned to stay light on the main thread and quick to first paint. The
