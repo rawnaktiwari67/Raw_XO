@@ -58,13 +58,60 @@ you around.
 
 - [client](C:/Raw_Xo/client) - Vite + React frontend
 - [server](C:/Raw_Xo/server) - Express + MongoDB backend
+- [api/index.ts](C:/Raw_Xo/api/index.ts) - serverless entry that wraps the Express app for Vercel
+
+## API reference
+
+All routes are served under the base path **`/api/v1`** (mounted in
+[server/src/app.ts](C:/Raw_Xo/server/src/app.ts)). Responses share a common
+envelope — `{ success, data }` on success, `{ success: false, error }` on
+failure.
+
+**Auth model.** Most read endpoints are public. Write endpoints marked _auth_
+require a signed-in user — either a Clerk session (sent as a `Bearer` token) or
+the app's own JWT cookie from `/auth/login`. Game and culture endpoints use
+_optional_ auth: they work for guests and simply persist more when you're signed
+in. Tour writes additionally require an admin id (`ADMIN_USER_IDS`).
+
+| Group | Method & path | Auth | What it does |
+| --- | --- | --- | --- |
+| Health | `GET /health` (and `/api/v1/health`) | — | Liveness probe |
+| Auth | `POST /auth/register` | — | Create a local account |
+| | `POST /auth/login` | — | Local login |
+| | `POST /auth/logout` | auth | End the session |
+| | `GET /auth/me` | auth | Current user |
+| Game | `GET /game/question` | optional | Fetch a round (clip + 4 options) |
+| | `POST /game/answer` | optional | Submit a guess, get the reveal + score |
+| | `POST /game/rating` | optional | Rate a track 1–5 |
+| | `GET /game/artists` | — | Curated artist pool |
+| | `GET /game/artists/search?q=` | — | Live artist search (iTunes/Spotify) |
+| | `GET /game/leaderboard?period=&scope=&scopeValue=` | optional | Daily/all-time boards, sliceable by artist/genre |
+| | `GET /game/history` | auth | Your recent rounds |
+| | `GET /game/stats` | auth | Your aggregate stats |
+| Threads | `GET /threads`, `GET /threads/:id` | — | List / read discussions |
+| | `POST /threads`, `PUT/DELETE /threads/:id`, `POST /threads/:id/vote` | auth | Create / edit / vote |
+| Comments | `GET /comments` | — | List comments for a thread |
+| | `POST /comments`, `PUT/DELETE /comments/:id`, `POST /comments/:id/vote` | auth | Create / edit / vote |
+| Culture | `GET /culture/signals`, `GET /culture/reviews` | — | Trending tracks + reviews |
+| | `POST /culture/meaning`, `POST /culture/reaction`, `POST /culture/reviews` | optional¹ | Vote a lyric meaning, react, review |
+| Tours | `GET /tours` | — | Live music listings |
+| | `POST /tours`, `PUT /tours/:id` | admin | Create / update a tour record |
+| Eras | `GET /eras`, `GET /eras/:slug` | — | Music-era catalog |
+| Users | `GET /users/:username` | — | Public profile |
+| | `GET /users/me/threads`, `GET /users/me/comments`, `PUT /users/me` | auth | Your content / edit profile |
+
+¹ Culture writes require sign-in when `REQUIRE_AUTH_FOR_CULTURE_WRITES=true`.
+
+Rate limiting is applied per group (auth, game, voting, and write limiters live
+in `server/src/middleware/rateLimiter.ts`).
 
 ## Local development
 
-Install both apps:
+This is an npm workspaces monorepo, so a single install from the repo root
+pulls in dependencies for both `client` and `server`:
 
 ```bash
-npm run install:all
+npm install
 ```
 
 Run the backend:
@@ -106,7 +153,7 @@ Create `server/.env` from [server/.env.example](C:/Raw_Xo/server/.env.example).
 Important values:
 
 - `MONGODB_URI`
-- `CLERK_SECRET_KEY`
+- `CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` (the API needs both to verify Clerk sessions)
 - `JWT_SECRET`
 - `GAME_SECRET`
 - `CLIENT_ORIGIN`
@@ -157,7 +204,7 @@ JWT_SECRET=your_32_plus_character_jwt_secret
 GAME_SECRET=your_32_plus_character_game_secret
 GAME_ARTIST_QUERY=the weeknd, kanye west, travis scott, drake
 GAME_ITUNES_COUNTRY=us
-GAME_ITUNES_LIMIT=80
+GAME_ITUNES_LIMIT=40
 GAME_ITUNES_TIMEOUT_MS=4500
 GAME_MAX_QUERY_TERMS=6
 GAME_TRACK_CACHE_MS=600000
@@ -257,7 +304,7 @@ JWT_SECRET=your_jwt_secret
 GAME_SECRET=your_game_secret
 GAME_ARTIST_QUERY=the weeknd, kanye west, travis scott, drake
 GAME_ITUNES_COUNTRY=us
-GAME_ITUNES_LIMIT=80
+GAME_ITUNES_LIMIT=40
 GAME_TRACK_CACHE_MS=600000
 SPOTIFY_CLIENT_ID=your_spotify_client_id
 SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
