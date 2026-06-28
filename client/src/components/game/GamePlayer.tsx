@@ -4,6 +4,9 @@ import { animate, AnimatePresence, motion, useMotionValue, useSpring, useTransfo
 import { useGameStore } from '../../stores/gameStore';
 import { gameService } from '../../services/gameService';
 import { roundSecondsFor } from '../../config/gameConfig';
+import ShareButton from './ShareButton';
+import SoundToggle from './SoundToggle';
+import { unlock, playTick, playCorrect, playWrong, playComplete, vibrate } from '../../services/sound';
 import type { GameArtistOption, GameDifficulty, GameGenre, GameLanguage, LeaderboardData } from '../../types/game';
 
 const ROUND_LIMIT = 5;
@@ -524,6 +527,9 @@ export default function GamePlayer() {
         const audio = audioRef.current;
         if (!audio) return;
 
+        // Starting a clip is a user gesture — unlock the cue AudioContext here.
+        unlock();
+
         if (restart) {
             audio.pause();
             audio.currentTime = 0;
@@ -583,6 +589,31 @@ export default function GamePlayer() {
         };
     }, [phase, question?.songId, submitAnswer, timerActive, roundSeconds]);
 
+    // Single tick on the last second of the round (plus a light haptic tap).
+    useEffect(() => {
+        if (phase === 'playing' && timerActive && timeLeft === 1) {
+            playTick();
+            vibrate(20);
+        }
+    }, [phase, timerActive, timeLeft]);
+
+    // Reveal cue: a rising chime for a correct guess, a dry buzz for a miss.
+    useEffect(() => {
+        if (phase !== 'result' || !result) return;
+        if (result.correct) {
+            playCorrect();
+            vibrate([15, 40, 30]);
+        } else {
+            playWrong();
+            vibrate(120);
+        }
+    }, [phase, result]);
+
+    // Small flourish when the end-of-session recap opens.
+    useEffect(() => {
+        if (isSummaryVisible) playComplete();
+    }, [isSummaryVisible]);
+
     // Guarantee recap appears after the 5th result — backup for any edge-case where
     // the store's isSummaryVisible flag didn't land before this render
     useEffect(() => {
@@ -604,6 +635,7 @@ export default function GamePlayer() {
     const handleSelectOption = (option: string) => {
         if (phase !== 'playing' || selectedOption) return;
 
+        unlock();
         setSelectedOption(option);
         if (audioRef.current) audioRef.current.pause();
         setTimerActive(false);
@@ -765,6 +797,7 @@ export default function GamePlayer() {
                                 <span className="rounded-full bg-white/[0.05] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-text-3 sm:text-[11px]">
                                     {Math.min(roundsPlayedInSession + (isResult ? 0 : 1), ROUND_LIMIT)}/{ROUND_LIMIT}
                                 </span>
+                                <SoundToggle />
                             </div>
                             <div className="mt-1.5 h-1.5 w-full max-w-[420px] overflow-hidden rounded-full bg-white/[0.08] sm:h-2">
                                 <motion.div
@@ -1196,6 +1229,18 @@ export default function GamePlayer() {
                                             >
                                                 New Game
                                             </button>
+                                            <ShareButton
+                                                data={{
+                                                    score: summary.totalScore,
+                                                    accuracy: summary.accuracy,
+                                                    correctAnswers: summary.correctAnswers,
+                                                    roundsPlayed: summary.roundsPlayed,
+                                                    bestStreak: summary.bestStreak,
+                                                    artist: recapArtist,
+                                                    message: getFanMessage(recapArtist, summary.accuracy, summary.totalScore),
+                                                    difficulty: roundFilters.difficulty,
+                                                }}
+                                            />
                                             <Link
                                                 to="/"
                                                 onClick={handleBackToSetup}
