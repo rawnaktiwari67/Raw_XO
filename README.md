@@ -1,11 +1,58 @@
 # Raw XO
 
-Raw XO is a cinematic music culture platform with:
+> **Five seconds. Four options. One instinct.**
 
-- a 5-second guess game
-- a culture page with lyric meaning, reactions, reviews, and lyric guessing
-- tours for Indian cities
-- Clerk-ready auth
+A clip starts playing. The clock is bleeding out. You either know the song or
+you don't — and Raw XO is built around that one honest moment.
+
+Raw XO is a cinematic music game and culture room for people who remember songs
+by *feeling* — the cover art, the era, the late-night context — not by reading a
+tracklist. It's a charcoal-and-amber, Apple-cinematic web app: a fast guessing
+game up front, a place to argue about what lyrics actually mean out back, and a
+leaderboard to keep you honest about how good your ear really is.
+
+No "sign up to continue" wall. Guest mode is instant — you're one tap from a
+round. Sign in only when you want your streaks, ratings, and history to follow
+you around.
+
+## What's inside
+
+- **🎧 The 5-second game.** A clip plays, four track names appear, and you pick
+  before it disappears. Faster correct answers score more; streaks stack a
+  multiplier. Five clips make a session, then you get a recap with a (slightly
+  judgmental) read on your taste.
+- **🎚️ Difficulty that actually means something.** Easy gives you a roomy 10s and
+  serves the hits; medium tightens to 7s; hard drops you to 5s and digs up the
+  old OG deep cuts nobody streams anymore. Filter by genre, language (English,
+  Hindi, Punjabi, Korean, Spanish), or pin a single artist's catalog.
+- **🏆 Leaderboards & profiles.** Daily and all-time boards, sliceable by artist
+  and genre. Earn XP, climb levels, collect badges. Guests rank too — under a
+  stable, randomly-generated handle like *Midnight Vinyl*.
+- **📝 Culture archive.** Lyric meanings, reactions, reviews, and lyric-guessing
+  for trending tracks — the part where people argue about what a song is really
+  about.
+- **🎫 Tour calendar.** Live music listings for Indian cities, with quick links
+  out to tickets.
+
+## How a round feels
+
+1. Pick a vibe — genre, language, an artist, a difficulty — or just hit play and
+   take what the shuffle gives you.
+2. A clip fires. The bar drains. Four options stare back at you.
+3. Tap your gut. Instant reveal: album art, the answer, and your points.
+4. Rate the track, watch your streak, and run it back. Five rounds, one
+   scorecard.
+
+## Built with
+
+- **Frontend:** Vite + React + TypeScript, Tailwind, Framer Motion for the
+  motion design, a hand-written Three.js shader (`LaserFlow`) for the backdrop,
+  Zustand for state, React Router.
+- **Backend:** Express + MongoDB (Mongoose), with a `dev-data.json` fallback so
+  it runs even without a database.
+- **Music data:** iTunes Search API for fast preview clips, Spotify (optional)
+  for real stream-popularity and richer catalog search.
+- **Auth:** Clerk, with a first-class guest mode for everyone else.
 
 ## Project structure
 
