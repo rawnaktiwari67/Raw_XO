@@ -636,6 +636,9 @@ export default function GamePlayer() {
         if (phase !== 'playing' || selectedOption) return;
 
         unlock();
+        // Punchy double-tap buzz so the choice feels physical (Android only —
+        // iOS Safari blocks navigator.vibrate).
+        vibrate([30, 25, 30]);
         setSelectedOption(option);
         if (audioRef.current) audioRef.current.pause();
         setTimerActive(false);

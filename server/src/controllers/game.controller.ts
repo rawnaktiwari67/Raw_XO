@@ -204,7 +204,18 @@ const decodeSongToken = (token: string): SongPreview | null => {
     }
 };
 
-const shuffle = <T>(arr: T[]): T[] => [...arr].sort(() => Math.random() - 0.5);
+// Fisher–Yates: a uniform shuffle where every element is equally likely to land
+// in any position. The old `sort(() => Math.random() - 0.5)` was biased — for a
+// 4-item array it left the first element (always the correct answer) in slot 0
+// far more than 25% of the time, so the right answer kept showing up as option 1.
+const shuffle = <T>(arr: T[]): T[] => {
+    const result = [...arr];
+    for (let i = result.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
+};
 
 const normalizeTitle = (value: string): string =>
     value.toLowerCase().trim().replace(/\s+/g, ' ');
