@@ -1346,9 +1346,9 @@ export default function GamePlayer() {
                           : '0 32px 80px rgba(0,0,0,0.22)',
                 }}
                 transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-                className="rounded-[1.5rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.026),rgba(255,255,255,0.012))] p-8"
+                className="rounded-[1.5rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.026),rgba(255,255,255,0.012))] p-5 sm:p-8"
             >
-                <div className="space-y-8">
+                <div className="space-y-6 sm:space-y-8">
                     <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
                         <div className="max-w-2xl space-y-4">
                             <p className="label-xs">Guess Round</p>
@@ -1367,26 +1367,26 @@ export default function GamePlayer() {
                                     {roundSeconds}s
                                 </p>
                             </div>
-                            <div className="space-y-2">
+                            <div className={`space-y-2 ${phase === 'idle' ? 'hidden sm:block' : ''}`}>
                                 <p className="label-xs">Streak</p>
                                 <p className="font-heading text-[1.8rem] leading-none text-text-1">
                                     <AnimatedValue value={streak} />
                                 </p>
                             </div>
-                            <div className="space-y-2">
+                            <div className={`space-y-2 ${phase === 'idle' ? 'hidden sm:block' : ''}`}>
                                 <p className="label-xs">Best</p>
                                 <p className="font-heading text-[1.8rem] leading-none text-text-1">
                                     <AnimatedValue value={bestSessionStreak} />
                                 </p>
                             </div>
-                            <div className="space-y-2">
+                            <div className={`space-y-2 ${phase === 'idle' ? 'hidden sm:block' : ''}`}>
                                 <p className="label-xs">Multiplier</p>
                                 <p className="font-heading text-[1.8rem] leading-none text-accent">x{liveMultiplier.toFixed(2)}</p>
                             </div>
                         </div>
                     </div>
 
-                    <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                    <div className={`h-1.5 overflow-hidden rounded-full bg-white/[0.06] ${phase === 'idle' ? 'hidden sm:block' : ''}`}>
                         <motion.div
                             className={`h-full ${isUrgent ? 'bg-orange-300' : 'bg-amber'}`}
                             initial={false}
@@ -1402,8 +1402,8 @@ export default function GamePlayer() {
                     ) : null}
 
                     {phase === 'idle' ? (
-                        <div className="flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
-                            <div className="space-y-4">
+                        <div className="flex flex-col gap-5 sm:gap-8 xl:flex-row xl:items-end xl:justify-between">
+                            <div className="hidden space-y-4 sm:block">
                                 <p className="label-xs">Ready</p>
                                 <p className="max-w-xl text-sm leading-relaxed text-text-3">
                                     {filters.artist === 'all' ? 'The pool spans multiple artists.' : `Now pulling from ${selectedArtistLabel}.`}
@@ -1416,7 +1416,7 @@ export default function GamePlayer() {
                                     void startFreshSession();
                                 }}
                                 disabled={isLoading}
-                                className="btn-primary rounded-[1rem] px-8 py-4 shadow-[0_18px_40px_rgba(244,162,97,0.18)] disabled:opacity-50"
+                                className="btn-primary w-full rounded-[1rem] px-8 py-4 shadow-[0_18px_40px_rgba(244,162,97,0.18)] disabled:opacity-50 sm:w-auto"
                             >
                                 {isLoading ? 'Loading Clip' : 'Play Round'}
                             </motion.button>
