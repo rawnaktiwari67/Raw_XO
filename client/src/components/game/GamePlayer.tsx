@@ -482,6 +482,9 @@ export default function GamePlayer() {
     const roundStartedAtRef = useRef<number | null>(null);
     const heroCardRef = useRef<HTMLDivElement>(null);
     const [timeLeft, setTimeLeft] = useState(roundSeconds);
+    // Filters collapse into a compact "Customize" panel on phones so Play isn't
+    // buried under four tall cards. Always expanded on desktop (lg+).
+    const [filtersOpen, setFiltersOpen] = useState(false);
     const [rating, setRating] = useState<number | null>(null);
     const [clipBlocked, setClipBlocked] = useState(false);
     const [timerActive, setTimerActive] = useState(false);
@@ -724,6 +727,12 @@ export default function GamePlayer() {
         : (artistOptions.find((artist) => artist.value === filters.artist)?.label ?? filters.artist);
     const recapArtist = result?.correctArtist || (filters.artist === 'all' ? 'your mystery artist' : selectedArtistLabel);
     const activeGenreLabel = filters.genre === 'all' ? 'mixed genre' : titleCase(filters.genre);
+    const filtersSummary = [
+        selectedArtistLabel,
+        GENRE_OPTIONS.find((o) => o.value === filters.genre)?.label ?? 'All',
+        LANGUAGE_OPTIONS.find((o) => o.value === filters.language)?.label ?? 'Any',
+        DIFFICULTY_OPTIONS.find((o) => o.value === filters.difficulty)?.label ?? '',
+    ].filter(Boolean).join(' · ');
     const summary = sessionSummary ?? {
         roundsPlayed: roundsPlayedInSession,
         correctAnswers: correctAnswersInSession,
@@ -1287,17 +1296,40 @@ export default function GamePlayer() {
         <div className="space-y-8">
             {question ? <audio key={question.songId} ref={audioRef} src={question.snippetUrl} preload="auto" /> : null}
 
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <ArtistPicker
-                    artists={artistOptions}
-                    value={filters.artist}
-                    onChange={handleArtistChange}
-                    disabled={isLoading}
-                    language={filters.language}
-                />
-                <FilterRail label="Genre" options={GENRE_OPTIONS} value={filters.genre} onChange={handleGenreChange} disabled={isLoading} />
-                <FilterRail label="Language" options={LANGUAGE_OPTIONS} value={filters.language} onChange={handleLanguageChange} disabled={isLoading} />
-                <FilterRail label="Difficulty" options={DIFFICULTY_OPTIONS} value={filters.difficulty} onChange={handleDifficultyChange} disabled={isLoading} />
+            <div>
+                {/* Mobile: one tappable summary row that expands the filters. Hidden on desktop. */}
+                <button
+                    type="button"
+                    onClick={() => setFiltersOpen((open) => !open)}
+                    aria-expanded={filtersOpen}
+                    className="flex w-full items-center gap-3 rounded-[1.1rem] bg-white/[0.025] px-4 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] lg:hidden"
+                >
+                    <span className="min-w-0 flex-1">
+                        <span className="label-xs block">Customize</span>
+                        <span className="mt-1 block truncate text-sm text-text-2">{filtersSummary}</span>
+                    </span>
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        className={`h-4 w-4 shrink-0 text-text-3 transition-transform duration-300 ${filtersOpen ? 'rotate-180' : ''}`}
+                        aria-hidden
+                    >
+                        <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                </button>
+
+                <div className={`gap-4 md:grid-cols-2 xl:grid-cols-4 lg:grid ${filtersOpen ? 'mt-4 grid' : 'hidden'}`}>
+                    <ArtistPicker
+                        artists={artistOptions}
+                        value={filters.artist}
+                        onChange={handleArtistChange}
+                        disabled={isLoading}
+                        language={filters.language}
+                    />
+                    <FilterRail label="Genre" options={GENRE_OPTIONS} value={filters.genre} onChange={handleGenreChange} disabled={isLoading} />
+                    <FilterRail label="Language" options={LANGUAGE_OPTIONS} value={filters.language} onChange={handleLanguageChange} disabled={isLoading} />
+                    <FilterRail label="Difficulty" options={DIFFICULTY_OPTIONS} value={filters.difficulty} onChange={handleDifficultyChange} disabled={isLoading} />
+                </div>
             </div>
 
             <motion.section
