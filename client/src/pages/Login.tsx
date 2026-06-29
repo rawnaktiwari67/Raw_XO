@@ -1,6 +1,7 @@
 import { SignIn } from '@clerk/clerk-react';
 import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useDocumentMeta } from '../hooks/useDocumentMeta';
 import { authService } from '../services/authService';
 import { clerkDisabledReason, clerkSignUpUrl, shouldUseClerk } from '../services/authMode';
 import { useAuthStore } from '../stores/authStore';
@@ -16,6 +17,7 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 };
 
 export default function Login() {
+    useDocumentMeta({ title: 'Sign In — Raw XO', description: 'Sign in to keep your streaks, ratings, and history.' });
     const navigate = useNavigate();
     const { setSession } = useAuthStore();
     const [email, setEmail] = useState('');

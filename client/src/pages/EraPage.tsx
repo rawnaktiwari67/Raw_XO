@@ -5,11 +5,16 @@ import api from '../services/api';
 import { useThreadStore } from '../stores/threadStore';
 import { useAuthStore } from '../stores/authStore';
 import ThreadCard from '../components/thread/ThreadCard';
+import { useDocumentMeta } from '../hooks/useDocumentMeta';
 import type { Era } from '../types/thread';
 
 export default function EraPage() {
     const { slug } = useParams<{ slug: string }>();
     const [era, setEra] = useState<Era | null>(null);
+    useDocumentMeta({
+        title: era?.name ? `${era.name} — Raw XO` : undefined,
+        description: era?.description || undefined,
+    });
     const [showForm, setShowForm] = useState(false);
     const [title, setTitle] = useState('');
     const [body, setBody] = useState('');

@@ -5,12 +5,17 @@ import { useAuthStore } from '../stores/authStore';
 import XPBar from '../components/user/XPBar';
 import { avatarInitial, avatarHue } from '../utils/avatar';
 import api from '../services/api';
+import { useDocumentMeta } from '../hooks/useDocumentMeta';
 import type { User } from '../types/user';
 import type { Thread } from '../types/thread';
 import type { Comment } from '../types/comment';
 
 export default function Profile() {
     const { username } = useParams<{ username: string }>();
+    useDocumentMeta({
+        title: username ? `${username} — Raw XO` : undefined,
+        description: username ? `${username}'s profile on Raw XO — streaks, ratings, levels, and recent rounds.` : undefined,
+    });
     const { user: me } = useAuthStore();
     const isMe = me?.username === username;
 

@@ -1,6 +1,7 @@
 import { SignUp } from '@clerk/clerk-react';
 import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useDocumentMeta } from '../hooks/useDocumentMeta';
 import { authService } from '../services/authService';
 import { clerkDisabledReason, clerkSignInUrl, shouldUseClerk } from '../services/authMode';
 import { useAuthStore } from '../stores/authStore';
@@ -16,6 +17,7 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 };
 
 export default function Register() {
+    useDocumentMeta({ title: 'Create Account — Raw XO', description: 'Create a Raw XO account to save your runs, streaks, and ratings.' });
     const navigate = useNavigate();
     const { setSession } = useAuthStore();
     const [username, setUsername] = useState('');

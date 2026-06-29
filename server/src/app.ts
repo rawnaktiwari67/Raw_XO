@@ -8,6 +8,7 @@ import { env, hasClerkKeys, shouldUseClerkServer } from './config/env';
 import { getLastDbError } from './config/db';
 import { errorHandler } from './middleware/error.middleware';
 import { apiLimiter } from './middleware/rateLimiter';
+import { crawlerMeta } from './seo/crawlerMeta';
 
 import authRoutes from './routes/auth.routes';
 import threadRoutes from './routes/thread.routes';
@@ -118,6 +119,11 @@ app.get(['/health', '/api/v1/health'], (req, res) => {
         ...(authorized ? { dbError: getLastDbError() } : {}),
     });
 });
+
+// ─── Crawler Open Graph ───────────────────────────────────────────────────────
+// Deep-link previews for social scrapers. Only reached when Vercel rewrites a
+// bot User-Agent here (see vercel.json); human traffic stays on the static SPA.
+app.get(['/profile/:username', '/thread/:id', '/era/:slug'], crawlerMeta);
 
 // ─── Error handler (must be last) ─────────────────────────────────────────────
 app.use(errorHandler);

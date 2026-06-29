@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useDocumentMeta } from '../hooks/useDocumentMeta';
 import { musicService } from '../services/musicService';
 import { lyricsService } from '../services/lyricsService';
 import { cultureService } from '../services/cultureService';
@@ -53,6 +54,10 @@ const cultureLanes = [
 ];
 
 export default function Home() {
+    useDocumentMeta({
+        title: 'Culture — Raw XO',
+        description: 'Lyric meanings, reactions, and reviews for trending tracks — the room where people argue about what a song is really about.',
+    });
     const { user } = useAuthStore();
     const [entries, setEntries] = useState<MeaningEntry[]>([]);
     const [reviews, setReviews] = useState<CultureReview[]>([]);

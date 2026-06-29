@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { tourService } from '../services/tourService';
+import { useDocumentMeta } from '../hooks/useDocumentMeta';
 import type { Tour } from '../types/tour';
 import SpotlightCard from '../components/ui/SpotlightCard';
 
@@ -83,6 +84,10 @@ const cityTone = (index: number) =>
     ][index % 4];
 
 export default function Tours() {
+    useDocumentMeta({
+        title: 'Tours — Raw XO',
+        description: 'Live music listings for Indian cities, with quick links out to tickets.',
+    });
     const [tours, setTours] = useState<Tour[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');

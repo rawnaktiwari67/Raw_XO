@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useGameStore } from '../stores/gameStore';
 import GamePlayer from '../components/game/GamePlayer';
 import Leaderboard from '../components/game/Leaderboard';
+import { useDocumentMeta } from '../hooks/useDocumentMeta';
 import type { GameSession } from '../types/game';
 
 // three.js is the heaviest dependency in the bundle (~492KB). Lazy-load it so it
@@ -48,6 +49,10 @@ function HistoryItem({ item }: { item: GameSession }) {
 }
 
 export default function Game() {
+    useDocumentMeta({
+        title: 'Raw XO — Five seconds. Four options. One instinct.',
+        description: 'A cinematic 5-second music guessing game. A clip plays, four track names appear, and you pick before it disappears.',
+    });
     const { isAuthenticated, user } = useAuthStore();
     const { stats, history, phase, isLoading, fetchStats, fetchHistory } = useGameStore();
     const isGameplayActive = phase !== 'idle' || isLoading;

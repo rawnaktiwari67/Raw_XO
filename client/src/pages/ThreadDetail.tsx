@@ -8,10 +8,15 @@ import { useAuthStore } from '../stores/authStore';
 import VoteButtons from '../components/thread/VoteButtons';
 import CommentCard from '../components/comment/CommentCard';
 import { avatarInitial } from '../utils/avatar';
+import { useDocumentMeta } from '../hooks/useDocumentMeta';
 
 export default function ThreadDetail() {
     const { id } = useParams<{ id: string }>();
     const { currentThread, fetchThread, voteThread, isLoading: threadLoading, error: threadError } = useThreadStore();
+    useDocumentMeta({
+        title: currentThread?.title ? `${currentThread.title} — Raw XO` : undefined,
+        description: currentThread?.body ? currentThread.body.slice(0, 155) : undefined,
+    });
     const { comments, isLoading: commentsLoading, fetchComments, addComment, clearComments } = useCommentStore();
     const { user, isAuthenticated } = useAuthStore();
     const [commentBody, setCommentBody] = useState('');
