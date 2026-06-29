@@ -1529,7 +1529,7 @@ export default function GamePlayer() {
                                         }`}
                                     >
                                         {result.artworkUrl ? (
-                                            <img src={result.artworkUrl} alt="" className="aspect-square w-full object-cover" />
+                                            <img src={result.artworkUrl} alt="" width={600} height={600} loading="lazy" decoding="async" className="aspect-square w-full object-cover" />
                                         ) : (
                                             <div className="aspect-square w-full bg-gradient-to-br from-white/10 to-transparent" />
                                         )}

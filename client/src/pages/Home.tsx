@@ -317,7 +317,7 @@ export default function Home() {
                                     className={`${index === 0 ? 'col-span-12 md:col-span-6' : 'col-span-12 md:col-span-3'} group text-left rounded-[1rem] overflow-hidden border border-white/10 bg-black/20 transition-colors hover:border-amber/25`}
                                 >
                                     <div className="relative">
-                                        <img src={entry.albumArt} alt={entry.title} className="h-44 w-full object-cover transition duration-500 group-hover:scale-[1.03]" />
+                                        <img src={entry.albumArt} alt={entry.title} width={400} height={176} loading="lazy" decoding="async" className="h-44 w-full object-cover transition duration-500 group-hover:scale-[1.03]" />
                                         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
                                         <span className="absolute bottom-3 left-3 rounded-full bg-black/55 px-3 py-1 text-[10px] uppercase tracking-[0.14em] text-text-2">
                                             {entry.mood}
@@ -448,7 +448,7 @@ export default function Home() {
                                 className="min-w-[280px] max-w-[280px] shrink-0 rounded-2xl border border-white/10 bg-white/[0.03] p-4"
                             >
                                 <div className="flex items-center gap-4">
-                                    <img src={entry.albumArt} alt={entry.title} className="h-20 w-20 rounded-2xl object-cover" />
+                                    <img src={entry.albumArt} alt={entry.title} width={80} height={80} loading="lazy" decoding="async" className="h-20 w-20 rounded-2xl object-cover" />
                                     <div>
                                         <p className="font-heading font-bold text-xl text-text-1">{entry.title}</p>
                                         <p className="text-text-3 text-sm mt-1">{entry.artist}</p>
@@ -639,7 +639,7 @@ export default function Home() {
                             {activeEntry ? (
                                 <>
                                     <div className="flex items-center gap-4">
-                                        <img src={activeEntry.albumArt} alt={activeEntry.title} className="h-16 w-16 rounded-2xl object-cover" />
+                                        <img src={activeEntry.albumArt} alt={activeEntry.title} width={64} height={64} loading="lazy" decoding="async" className="h-16 w-16 rounded-2xl object-cover" />
                                         <div>
                                             <p className="font-heading font-bold text-text-1 text-2xl">{activeEntry.title}</p>
                                             <p className="text-text-3 text-sm mt-1">{activeEntry.artist}</p>
@@ -730,7 +730,7 @@ export default function Home() {
 
                                 <div className="grid grid-cols-12 gap-6 mt-8">
                                     <div className="col-span-12 md:col-span-5">
-                                        <img src={currentRound.albumArt} alt={currentRound.title} className="w-full rounded-3xl object-cover aspect-square" />
+                                        <img src={currentRound.albumArt} alt={currentRound.title} width={600} height={600} loading="lazy" decoding="async" className="w-full rounded-3xl object-cover aspect-square" />
                                     </div>
                                     <div className="col-span-12 md:col-span-7">
                                         <p className="text-xs uppercase tracking-[0.22em] text-text-4">Lyric snippet</p>
@@ -829,7 +829,7 @@ export default function Home() {
                                 reviews.slice(0, 4).map((review) => (
                                     <article key={review.id} className="rounded-2xl bg-black/20 p-4">
                                         <div className="flex items-center gap-4">
-                                            <img src={review.albumArt} alt={review.title} className="h-14 w-14 rounded-2xl object-cover" />
+                                            <img src={review.albumArt} alt={review.title} width={56} height={56} loading="lazy" decoding="async" className="h-14 w-14 rounded-2xl object-cover" />
                                             <div>
                                                 <p className="font-heading font-bold text-text-1 text-xl">{review.title}</p>
                                                 <p className="text-text-3 text-sm">{review.artist}</p>
