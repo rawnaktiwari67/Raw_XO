@@ -981,27 +981,36 @@ const getSongPool = async (filters: GameFilters): Promise<SongPreview[]> => {
     const spotifySongPoolPromise = shouldUseSpotifyTrackSearch
         ? fetchSpotifySongPool(queryTerms, spotifyMarket, filters.artist !== 'all' ? filters.artist : undefined)
         : Promise.resolve([]);
+    const itunesSongPoolPromise = fetchItunesSongPool(queryTerms, country, filters.artist !== 'all' ? filters.artist : undefined);
+
+    // Merge, dedupe across providers, and apply the difficulty filter. Shared so
+    // both the full (Spotify+iTunes) pool and the iTunes-only fast path below run
+    // identical preparation.
+    const prepareMergedPool = (spotifySongs: SongPreview[], itunesSongs: SongPreview[]): SongPreview[] => {
+        const mergedSongs = [...spotifySongs, ...itunesSongs].sort((a, b) => {
+            const alternateDelta = Number(isAlternateTrackVersion(`${a.title} ${a.album}`)) -
+                Number(isAlternateTrackVersion(`${b.title} ${b.album}`));
+            if (alternateDelta !== 0) return alternateDelta;
+            return b.releaseYear - a.releaseYear;
+        });
+        const seen = new Set<string>();
+        const uniqueSongs = mergedSongs.filter((song) => {
+            const key = `${normalizeTrackTitleKey(song.title)}::${normalizeArtistKey(song.artist)}`;
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+        return applyDifficulty(uniqueSongs, filters.difficulty);
+    };
+
     const nextFetch = Promise.allSettled([
         spotifySongPoolPromise,
-        fetchItunesSongPool(queryTerms, country, filters.artist !== 'all' ? filters.artist : undefined),
+        itunesSongPoolPromise,
     ])
         .then((songs) => {
             const spotifySongs = songs[0].status === 'fulfilled' ? songs[0].value : [];
             const itunesSongs = songs[1].status === 'fulfilled' ? songs[1].value : [];
-            const mergedSongs = [...spotifySongs, ...itunesSongs].sort((a, b) => {
-                const alternateDelta = Number(isAlternateTrackVersion(`${a.title} ${a.album}`)) -
-                    Number(isAlternateTrackVersion(`${b.title} ${b.album}`));
-                if (alternateDelta !== 0) return alternateDelta;
-                return b.releaseYear - a.releaseYear;
-            });
-            const seen = new Set<string>();
-            const uniqueSongs = mergedSongs.filter((song) => {
-                const key = `${normalizeTrackTitleKey(song.title)}::${normalizeArtistKey(song.artist)}`;
-                if (!key || seen.has(key)) return false;
-                seen.add(key);
-                return true;
-            });
-            const preparedSongs = applyDifficulty(uniqueSongs, filters.difficulty);
+            const preparedSongs = prepareMergedPool(spotifySongs, itunesSongs);
             if (preparedSongs.length >= 4) {
                 songPoolCache.set(cacheKey, { songs: preparedSongs, fetchedAt: Date.now() });
                 return preparedSongs;
@@ -1033,6 +1042,18 @@ const getSongPool = async (filters: GameFilters): Promise<SongPreview[]> => {
         });
 
     inFlightSongPools.set(cacheKey, nextFetch);
+
+    // Fast path: don't gate the first clip on the slower provider. iTunes needs
+    // no OAuth token, so it usually returns first — if it alone gives a playable
+    // pool, answer with it now while nextFetch keeps warming the cache with the
+    // fuller Spotify+iTunes merge for subsequent rounds. nextFetch is never
+    // slower than before, so this only ever helps.
+    const itunesOnly = await itunesSongPoolPromise
+        .then((itunesSongs) => prepareMergedPool([], itunesSongs))
+        .catch(() => [] as SongPreview[]);
+    if (itunesOnly.length >= 4) {
+        return itunesOnly;
+    }
 
     const songs = await nextFetch;
     if (songs.length < 4) {
