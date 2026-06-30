@@ -13,6 +13,19 @@ export const gameService = {
                 ...(excludeSongIds && excludeSongIds.length > 0 ? { excludeSongIds: excludeSongIds.join(',') } : {}),
             },
         }),
+    // Fetch a whole game's rounds in one request so gameplay needs no per-round
+    // network calls (see GET /game/session).
+    getSession: (filters: GameFilters, count = 5, excludeSongIds?: string[]) =>
+        api.get('/game/session', {
+            params: {
+                genre: filters.genre,
+                language: filters.language,
+                difficulty: filters.difficulty,
+                artist: filters.artist,
+                count,
+                ...(excludeSongIds && excludeSongIds.length > 0 ? { excludeSongIds: excludeSongIds.join(',') } : {}),
+            },
+        }),
     submitAnswer: (songId: string, answer: string, streak: number, responseTimeMs: number, filters: GameFilters) =>
         api.post('/game/answer', { songId, answer, streak, responseTimeMs, ...filters }),
     rateTrack: (trackId: string, rating: number, filters: GameFilters) =>

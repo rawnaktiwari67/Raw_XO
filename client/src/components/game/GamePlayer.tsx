@@ -523,6 +523,7 @@ export default function GamePlayer() {
         setArtist,
         startFreshSession,
         prefetchNextQuestion,
+        clearSession,
         revealSessionSummary,
         dismissSessionSummary,
         fetchRoundLeaderboards,
@@ -786,12 +787,14 @@ export default function GamePlayer() {
     const handlePlayAgain = () => {
         resetPlaybackState();
         dismissSessionSummary();
+        clearSession();
         resetRound();
     };
 
     const handleBackToSetup = () => {
         resetPlaybackState();
         dismissSessionSummary();
+        clearSession();
         resetRound();
     };
 

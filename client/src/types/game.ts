@@ -17,12 +17,32 @@ export interface GameFilters {
     artist: string;
 }
 
+// Reveal data is embedded in batched session questions so the client can show
+// the answer instantly with no network round-trip. Absent on the legacy
+// /game/question path.
+export interface GameReveal {
+    correctAnswer: string;
+    correctArtist?: string;
+    album?: string;
+    artworkUrl?: string;
+    trackUrl?: string;
+    songKey?: string;
+    trackId?: string;
+}
+
 export interface GameQuestion {
     snippetUrl: string;
     options: string[];
     songId: string;
     artistName?: string;
     filters?: GameFilters;
+    reveal?: GameReveal;
+}
+
+// A whole game's rounds fetched in one request (see GET /game/session).
+export interface GameSessionBatch {
+    questions: GameQuestion[];
+    filters: GameFilters;
 }
 
 export interface GameResult {

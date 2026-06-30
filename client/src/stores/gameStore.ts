@@ -10,6 +10,7 @@ import type {
     GameLanguage,
     GameQuestion,
     GameResult,
+    GameSessionBatch,
     GameStats,
     LeaderboardEntry,
     LeaderboardScope,
@@ -20,6 +21,29 @@ import { gameService } from '../services/gameService';
 
 type Phase = 'idle' | 'playing' | 'answered' | 'result';
 const ROUND_LIMIT = 5;
+
+// Round clock per difficulty, in ms — must mirror the server's
+// DIFFICULTY_ROUND_SECONDS so client-computed scores match what the server
+// re-derives when it persists the answer.
+const ROUND_WINDOW_MS: Record<GameDifficulty, number> = { easy: 10_000, medium: 7_000, hard: 5_000 };
+
+// Ported from the server's calculateScorePayload + calculateGameXP so a batched
+// round can be scored instantly on the client (no network round-trip). The
+// server re-scores authoritatively when the answer is POSTed in the background,
+// so this only drives the immediate reveal — any drift would be corrected on the
+// server, but the formulas are identical, so they won't drift.
+const scoreAnswerLocally = (correct: boolean, streak: number, responseTimeMs: number, difficulty: GameDifficulty) => {
+    if (!correct) return { pointsAwarded: 0, speedBonus: 0, multiplier: 1, xpEarned: 5 };
+
+    const windowMs = ROUND_WINDOW_MS[difficulty] ?? ROUND_WINDOW_MS.medium;
+    const safeResponseTime = responseTimeMs > 0 ? Math.min(responseTimeMs, windowMs) : windowMs;
+    const speedBonus = Math.max(0, Math.round(((windowMs - safeResponseTime) / windowMs) * 60));
+    const multiplier = Math.min(1 + Math.floor(streak / 3) * 0.25, 2);
+    const pointsAwarded = Math.round((100 + speedBonus) * multiplier);
+    const xpEarned = 50 + Math.min(streak * 10, 50) + Math.round(speedBonus * 0.5);
+
+    return { pointsAwarded, speedBonus, multiplier, xpEarned };
+};
 
 const getApiData = <T>(response: { data?: { data?: T } }): T | undefined => response.data?.data;
 const getApiError = (error: unknown, fallback: string): string => {
@@ -35,6 +59,10 @@ const getApiError = (error: unknown, fallback: string): string => {
 interface GameState {
     question: GameQuestion | null;
     prefetchedQuestion: GameQuestion | null;
+    // The remaining rounds of the current batched game, played from memory with
+    // no per-round network. prefetchedQuestion mirrors sessionQueue[0] so the UI
+    // can buffer the next clip's audio ahead of time.
+    sessionQueue: GameQuestion[];
     phase: Phase;
     selectedAnswer: string | null;
     result: GameResult | null;
@@ -66,6 +94,7 @@ interface GameState {
     setArtist: (artist: string) => void;
     startRound: () => Promise<void>;
     prefetchNextQuestion: () => Promise<void>;
+    clearSession: () => void;
     startFreshSession: () => Promise<void>;
     submitAnswer: (answer: string, responseTimeMs?: number) => Promise<void>;
     rateTrack: (rating: number) => Promise<void>;
@@ -82,6 +111,7 @@ interface GameState {
 export const useGameStore = create<GameState>((set, get) => ({
     question: null,
     prefetchedQuestion: null,
+    sessionQueue: [],
     phase: 'idle',
     selectedAnswer: null,
     result: null,
@@ -107,11 +137,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     error: null,
     isRating: false,
 
-    // Changing filters invalidates any question we prefetched for the old filters.
-    setGenre: (genre) => set((state) => ({ filters: { ...state.filters, genre }, prefetchedQuestion: null })),
-    setLanguage: (language) => set((state) => ({ filters: { ...state.filters, language }, prefetchedQuestion: null })),
-    setDifficulty: (difficulty) => set((state) => ({ filters: { ...state.filters, difficulty }, prefetchedQuestion: null })),
-    setArtist: (artist) => set((state) => ({ filters: { ...state.filters, artist }, prefetchedQuestion: null })),
+    // Changing filters invalidates any rounds we prefetched for the old filters.
+    setGenre: (genre) => set((state) => ({ filters: { ...state.filters, genre }, prefetchedQuestion: null, sessionQueue: [] })),
+    setLanguage: (language) => set((state) => ({ filters: { ...state.filters, language }, prefetchedQuestion: null, sessionQueue: [] })),
+    setDifficulty: (difficulty) => set((state) => ({ filters: { ...state.filters, difficulty }, prefetchedQuestion: null, sessionQueue: [] })),
+    setArtist: (artist) => set((state) => ({ filters: { ...state.filters, artist }, prefetchedQuestion: null, sessionQueue: [] })),
 
     startFreshSession: async () => {
         // Keep any question warmed on the setup screen — startRound will play it
@@ -136,15 +166,17 @@ export const useGameStore = create<GameState>((set, get) => ({
     },
 
     startRound: async () => {
-        const { filters, recentSongIds, prefetchedQuestion } = get();
+        const { filters, recentSongIds, sessionQueue } = get();
 
-        // Instant start: if we prefetched the next clip during the result screen,
-        // play it immediately instead of waiting on another network round-trip.
-        if (prefetchedQuestion) {
+        // Instant start: play the next round straight from the in-memory batch.
+        // Rounds 2-5 of a game never touch the network.
+        if (sessionQueue.length > 0) {
+            const [next, ...rest] = sessionQueue;
             set({
-                question: prefetchedQuestion,
-                prefetchedQuestion: null,
-                roundFilters: prefetchedQuestion.filters ?? filters,
+                question: next,
+                sessionQueue: rest,
+                prefetchedQuestion: rest[0] ?? null,
+                roundFilters: next.filters ?? filters,
                 result: null,
                 selectedAnswer: null,
                 error: null,
@@ -155,16 +187,21 @@ export const useGameStore = create<GameState>((set, get) => ({
             return;
         }
 
+        // Empty queue — pull a whole game's worth of rounds in a single request.
         const excludeSongIds = recentSongIds.slice(0, 40);
         set({ isLoading: true, question: null, result: null, selectedAnswer: null, phase: 'idle', error: null, lastBrokenStreak: null });
         try {
-            const res = await gameService.getQuestion(filters, excludeSongIds);
-            const question = getApiData<GameQuestion>(res);
-            if (!question) throw new Error('Invalid question payload');
+            const res = await gameService.getSession(filters, ROUND_LIMIT, excludeSongIds);
+            const batch = getApiData<GameSessionBatch>(res);
+            const questions = batch?.questions ?? [];
+            if (questions.length === 0) throw new Error('Invalid session payload');
 
+            const [first, ...rest] = questions;
             set({
-                question,
-                roundFilters: question.filters ?? filters,
+                question: first,
+                sessionQueue: rest,
+                prefetchedQuestion: rest[0] ?? null,
+                roundFilters: first.filters ?? filters,
                 phase: 'playing',
                 isLoading: false,
             });
@@ -173,26 +210,108 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
     },
 
+    // Warm the whole game batch while the player is still on the setup screen, so
+    // "Play" starts instantly. No-op once a batch is in hand.
     prefetchNextQuestion: async () => {
-        const { filters, recentSongIds, prefetchedQuestion } = get();
-        if (prefetchedQuestion) return; // already warmed
+        const { filters, recentSongIds, sessionQueue, isLoading } = get();
+        if (sessionQueue.length > 0 || isLoading) return; // already warm / fetching
 
         const excludeSongIds = recentSongIds.slice(0, 40);
         try {
-            const res = await gameService.getQuestion(filters, excludeSongIds);
-            const question = getApiData<GameQuestion>(res);
-            // Only keep it if the player hasn't already moved on / changed filters.
-            if (question && !get().prefetchedQuestion) {
-                set({ prefetchedQuestion: question });
+            const res = await gameService.getSession(filters, ROUND_LIMIT, excludeSongIds);
+            const batch = getApiData<GameSessionBatch>(res);
+            const questions = batch?.questions ?? [];
+            // Only keep it if nothing changed meanwhile (filters null the queue and
+            // a started round sets question).
+            if (questions.length > 0 && get().sessionQueue.length === 0 && !get().question) {
+                set({ sessionQueue: questions, prefetchedQuestion: questions[0] ?? null });
             }
         } catch {
-            // Prefetch is best-effort; startRound will fetch normally on miss.
+            // Best-effort; startRound will fetch on demand.
         }
     },
+
+    // Drop a warmed/partial batch so the next game pulls fresh songs (used by
+    // "New Game" and "Back to setup").
+    clearSession: () => set({ sessionQueue: [], prefetchedQuestion: null }),
 
     submitAnswer: async (answer, responseTimeMs = 0) => {
         const { question, streak, roundFilters } = get();
         if (!question) return;
+
+        // Instant path: batched rounds carry their reveal data, so the result
+        // resolves with zero network. The answer is still POSTed in the
+        // background (fire-and-forget) where the server re-scores it
+        // authoritatively for the leaderboard.
+        const reveal = question.reveal;
+        if (reveal) {
+            const correct = answer === reveal.correctAnswer;
+            const { pointsAwarded, speedBonus, multiplier, xpEarned } = scoreAnswerLocally(correct, streak, responseTimeMs, roundFilters.difficulty);
+            const result: GameResult = {
+                correct,
+                correctAnswer: reveal.correctAnswer,
+                correctArtist: reveal.correctArtist,
+                album: reveal.album,
+                artworkUrl: reveal.artworkUrl,
+                trackUrl: reveal.trackUrl,
+                trackId: reveal.trackId,
+                songKey: reveal.songKey,
+                xpEarned,
+                pointsAwarded,
+                speedBonus,
+                multiplier,
+                responseTimeMs,
+                filters: roundFilters,
+            };
+
+            const newStreak = correct ? streak + 1 : 0;
+            let shouldShowSummary = false;
+            set((s) => {
+                const roundsPlayed = s.roundsPlayedInSession + 1;
+                const correctAnswers = s.correctAnswersInSession + (correct ? 1 : 0);
+                const totalScore = s.sessionScore + pointsAwarded;
+                const bestStreak = correct ? Math.max(s.bestSessionStreak, newStreak) : s.bestSessionStreak;
+                shouldShowSummary = roundsPlayed >= ROUND_LIMIT;
+
+                return {
+                    result,
+                    phase: 'result',
+                    streak: newStreak,
+                    bestSessionStreak: bestStreak,
+                    lastBrokenStreak: correct ? null : (streak > 0 ? streak : null),
+                    sessionScore: totalScore,
+                    roundsPlayedInSession: roundsPlayed,
+                    correctAnswersInSession: correctAnswers,
+                    sessionSummary: shouldShowSummary
+                        ? {
+                            roundsPlayed,
+                            correctAnswers,
+                            accuracy: Math.round((correctAnswers / roundsPlayed) * 100),
+                            totalScore,
+                            bestStreak,
+                        }
+                        : s.sessionSummary,
+                    isSummaryVisible: shouldShowSummary,
+                    recentSongIds: correct && reveal.songKey
+                        ? [reveal.songKey, ...s.recentSongIds.filter((item) => item !== reveal.songKey)].slice(0, 60)
+                        : s.recentSongIds,
+                };
+            });
+
+            // Persist in the background — the reveal already showed instantly.
+            void gameService.submitAnswer(question.songId, answer, streak, responseTimeMs, roundFilters).catch(() => {});
+
+            if (shouldShowSummary) {
+                void get().fetchStats();
+                void get().fetchHistory();
+                void get().fetchLeaderboard(get().leaderboardPeriod);
+                void get().fetchRoundLeaderboards();
+            }
+            return;
+        }
+
+        // Legacy path: no embedded reveal (e.g. the /game/question endpoint) —
+        // resolve over the network as before.
         set({ selectedAnswer: answer, phase: 'answered' });
         try {
             const res = await gameService.submitAnswer(question.songId, answer, streak, responseTimeMs, roundFilters);

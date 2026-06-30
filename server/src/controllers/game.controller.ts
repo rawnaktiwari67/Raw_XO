@@ -1135,6 +1135,73 @@ export const getQuestion = async (_req: Request, res: Response): Promise<void> =
     }
 };
 
+// GET /game/session
+// Returns a whole game's worth of rounds (with reveal data) in ONE request, so
+// the client never has to hit this serverless function per round — the single
+// biggest latency win on Vercel, where each request can cold-start. The reveal
+// data lets the client show the answer instantly with no network round-trip;
+// the score is still POSTed to /game/answer in the background and re-scored
+// server-side there, so the leaderboard stays authoritative.
+export const getSession = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const filters = parseFilters({
+            genre: req.query.genre,
+            language: req.query.language,
+            difficulty: req.query.difficulty,
+            artist: req.query.artist,
+        });
+        const cacheKey = filtersCacheKey(filters);
+        const songs = await getSongPool(filters);
+
+        const requestedCount = Number.parseInt(String(req.query.count ?? ''), 10);
+        const count = Math.min(Math.max(Number.isFinite(requestedCount) ? requestedCount : 5, 1), 10);
+
+        // Seed with the caller's recent correct songs, then keep extending it with
+        // each round we build so a single batch never repeats a correct answer.
+        const usedKeys = typeof req.query.excludeSongIds === 'string'
+            ? req.query.excludeSongIds.split(',').map((item) => item.trim()).filter(Boolean)
+            : [];
+
+        const questions = [];
+        for (let i = 0; i < count; i += 1) {
+            let built;
+            try {
+                built = buildQuestionWithExclusion(songs, usedKeys, cacheKey);
+            } catch {
+                break; // pool exhausted — return however many we managed to build
+            }
+            const { correct, options } = built;
+            const token = createSongToken(correct);
+            usedKeys.push(encodeSongMemory(correct));
+            questions.push({
+                snippetUrl: correct.snippetUrl,
+                options,
+                songId: token,
+                artistName: correct.artist,
+                filters,
+                reveal: {
+                    correctAnswer: correct.title,
+                    correctArtist: correct.artist,
+                    album: correct.album,
+                    artworkUrl: correct.artworkUrl,
+                    trackUrl: correct.trackUrl,
+                    songKey: encodeSongMemory(correct),
+                    trackId: token,
+                },
+            });
+        }
+
+        if (questions.length === 0) {
+            res.status(503).json(errorResponse('Game session unavailable'));
+            return;
+        }
+
+        res.json(successResponse({ questions, filters }));
+    } catch {
+        res.status(503).json(errorResponse('Game session unavailable'));
+    }
+};
+
 // POST /game/answer
 export const submitAnswer = async (req: Request, res: Response): Promise<void> => {
     try {

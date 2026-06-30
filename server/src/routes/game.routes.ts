@@ -1,11 +1,12 @@
 import { Router } from 'express';
-import { getQuestion, submitAnswer, getLeaderboard, getHistory, getStats, rateTrack, getArtists, searchArtists } from '../controllers/game.controller';
+import { getQuestion, getSession, submitAnswer, getLeaderboard, getHistory, getStats, rateTrack, getArtists, searchArtists } from '../controllers/game.controller';
 import { optionalProtect } from '../middleware/auth.middleware';
 import { gameLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
 router.get('/question', optionalProtect, getQuestion);
+router.get('/session', optionalProtect, getSession);
 router.get('/artists', getArtists);
 router.get('/artists/search', searchArtists);
 router.post('/answer', optionalProtect, gameLimiter, submitAnswer);
