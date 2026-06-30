@@ -34,6 +34,28 @@ const DIFFICULTY_OPTIONS: Array<{ label: string; value: GameDifficulty }> = [
     { label: 'Hard', value: 'hard' },
 ];
 
+// True on phones/tablets (coarse pointer) or when the user asks for reduced
+// motion. We use it to strip the expensive always-on blur + infinite-animation
+// layers that choke mobile GPUs and make the round feel laggy. Desktop (fine
+// pointer, motion allowed) keeps the full treatment.
+function usePerfLite() {
+    const [lite, setLite] = useState(false);
+
+    useEffect(() => {
+        if (typeof window.matchMedia !== 'function') return;
+        const queries = [
+            window.matchMedia('(pointer: coarse)'),
+            window.matchMedia('(prefers-reduced-motion: reduce)'),
+        ];
+        const update = () => setLite(queries.some((query) => query.matches));
+        update();
+        queries.forEach((query) => query.addEventListener('change', update));
+        return () => queries.forEach((query) => query.removeEventListener('change', update));
+    }, []);
+
+    return lite;
+}
+
 function formatResponseTime(value?: number) {
     if (!value || value <= 0) return '--';
     return `${(value / 1000).toFixed(2)}s`;
@@ -41,23 +63,6 @@ function formatResponseTime(value?: number) {
 
 function getLiveMultiplier(streak: number) {
     return Math.min(1 + Math.floor(streak / 3) * 0.25, 2);
-}
-
-function getRatingTone(value: number, selectedRating: number | null) {
-    const active = selectedRating === value;
-    if (value <= 2) {
-        return active
-            ? 'bg-rose-400 text-ch-0 ring-1 ring-rose-200/70'
-            : 'bg-rose-400/10 text-rose-100 ring-1 ring-rose-300/18 hover:bg-rose-400/18';
-    }
-    if (value === 3) {
-        return active
-            ? 'bg-amber text-ch-0 ring-1 ring-amber/70'
-            : 'bg-amber/10 text-amber-100 ring-1 ring-amber/18 hover:bg-amber/18';
-    }
-    return active
-        ? 'bg-emerald-300 text-ch-0 ring-1 ring-emerald-100/70'
-        : 'bg-emerald-400/10 text-emerald-100 ring-1 ring-emerald-300/18 hover:bg-emerald-400/18';
 }
 
 function getRatingMessage(value: number | null) {
@@ -159,25 +164,43 @@ function FilterRail<T extends string>({
     value,
     onChange,
     disabled,
+    locked = false,
+    onLockedTap,
 }: {
     label: string;
     options: Array<{ label: string; value: T }>;
     value: T;
     onChange: (next: T) => void;
     disabled: boolean;
+    // When locked, the rail is shown but inert: tapping any chip fires onLockedTap
+    // (toast + haptic) instead of changing the value. Used when an artist is set,
+    // which overrides genre/language on the server anyway.
+    locked?: boolean;
+    onLockedTap?: () => void;
 }) {
     const selectedOption = options.find((option) => option.value === value);
+    const interactive = !disabled && !locked;
 
     return (
-        <div className="min-h-[174px] rounded-[1.1rem] bg-white/[0.025] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+        <div className={`min-h-[174px] rounded-[1.1rem] bg-white/[0.025] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] transition-opacity duration-300 ${locked ? 'opacity-55' : ''}`}>
             <div className="mb-3 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <p className="label-xs">{label}</p>
                     <p className="mt-2 truncate text-sm font-semibold text-text-1">{selectedOption?.label ?? label}</p>
                 </div>
-                <span className="rounded-full bg-white/[0.035] px-3 py-1.5 text-[9px] uppercase tracking-[0.14em] text-text-4">
-                    Select
-                </span>
+                {locked ? (
+                    <span className="flex items-center gap-1 rounded-full bg-white/[0.035] px-3 py-1.5 text-[9px] uppercase tracking-[0.14em] text-text-4">
+                        <svg viewBox="0 0 24 24" fill="none" className="h-2.5 w-2.5" aria-hidden>
+                            <rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" strokeWidth="2.2" />
+                            <path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+                        </svg>
+                        Locked
+                    </span>
+                ) : (
+                    <span className="rounded-full bg-white/[0.035] px-3 py-1.5 text-[9px] uppercase tracking-[0.14em] text-text-4">
+                        Select
+                    </span>
+                )}
             </div>
             <div className="flex flex-wrap gap-2">
                 {options.map((option) => {
@@ -187,15 +210,22 @@ function FilterRail<T extends string>({
                         <motion.button
                             key={option.value}
                             type="button"
-                            whileHover={disabled ? undefined : { y: -1, scale: 1.01 }}
-                            whileTap={disabled ? undefined : { scale: 0.99 }}
-                            onClick={() => onChange(option.value)}
+                            whileHover={interactive ? { y: -1, scale: 1.01 } : undefined}
+                            whileTap={interactive ? { scale: 0.99 } : undefined}
+                            onClick={() => {
+                                if (locked) {
+                                    onLockedTap?.();
+                                    return;
+                                }
+                                onChange(option.value);
+                            }}
                             disabled={disabled}
+                            aria-disabled={locked}
                             className={`min-h-10 rounded-[0.85rem] px-4 py-2 text-[11px] uppercase tracking-[0.12em] transition-all duration-300 ${
                                 active
                                     ? 'bg-[linear-gradient(180deg,rgba(244,162,97,0.24),rgba(244,162,97,0.09))] text-text-1 ring-1 ring-amber/20'
                                     : 'bg-white/[0.035] text-text-3 hover:text-text-1'
-                            } disabled:opacity-60`}
+                            } disabled:opacity-60 ${locked ? 'cursor-not-allowed' : ''}`}
                         >
                             {option.label}
                         </motion.button>
@@ -221,6 +251,7 @@ function ArtistPicker({
 }) {
     const [query, setQuery] = useState('');
     const [liveArtists, setLiveArtists] = useState<GameArtistOption[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
     const normalizedQuery = query.trim().replace(/\s+/g, ' ');
     const customArtistValue = normalizedQuery.toLowerCase();
     const visiblePresetArtists = artists.filter((artist) => language === 'all' || artist.language === language || artist.language === 'all');
@@ -258,10 +289,12 @@ function ArtistPicker({
     useEffect(() => {
         if (normalizedQuery.length < 2) {
             setLiveArtists([]);
+            setIsSearching(false);
             return;
         }
 
         let active = true;
+        setIsSearching(true);
         const timeout = window.setTimeout(async () => {
             try {
                 const response = await gameService.searchArtists(normalizedQuery, language);
@@ -270,6 +303,8 @@ function ArtistPicker({
             } catch {
                 if (!active) return;
                 setLiveArtists([]);
+            } finally {
+                if (active) setIsSearching(false);
             }
         }, 250);
 
@@ -300,20 +335,46 @@ function ArtistPicker({
                 ) : null}
             </div>
 
-            <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(event) => {
-                    if (event.key !== 'Enter') return;
-                    event.preventDefault();
-                    applyCustomArtist();
-                }}
-                placeholder="Search any artist"
-                disabled={disabled}
-                className="h-10 w-full rounded-[0.85rem] bg-black/15 px-3 text-sm text-text-1 outline-none ring-1 ring-white/[0.04] transition-all placeholder:text-text-4 focus:bg-black/20 focus:ring-amber/30"
-            />
+            <div className="relative">
+                <input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(event) => {
+                        if (event.key !== 'Enter') return;
+                        event.preventDefault();
+                        applyCustomArtist();
+                    }}
+                    placeholder="Search any artist — Don Toliver, Ed Sheeran…"
+                    disabled={disabled}
+                    className="h-10 w-full rounded-[0.85rem] bg-black/15 pl-3 pr-9 text-sm text-text-1 outline-none ring-1 ring-white/[0.04] transition-all placeholder:text-text-4 focus:bg-black/20 focus:ring-amber/30"
+                />
+                {isSearching ? (
+                    <span
+                        aria-hidden
+                        className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin rounded-full border-2 border-white/15 border-t-amber"
+                    />
+                ) : null}
+            </div>
 
-            <div className="scrollbar-cinematic mt-3 max-h-[82px] overflow-y-auto pr-2">
+            {/* Type-anyone CTA: plays the exact text the player typed, even when the
+                live lookup returns nothing — so any artist is reachable, not just presets. */}
+            {canUseCustomArtist ? (
+                <motion.button
+                    type="button"
+                    whileHover={disabled ? undefined : { y: -1, scale: 1.005 }}
+                    whileTap={disabled ? undefined : { scale: 0.99 }}
+                    onClick={applyCustomArtist}
+                    disabled={disabled}
+                    className="mt-2.5 flex min-h-10 w-full items-center justify-center gap-2 rounded-[0.85rem] bg-[linear-gradient(180deg,rgba(244,162,97,0.26),rgba(244,162,97,0.1))] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-text-1 ring-1 ring-amber/25 transition-all duration-300 disabled:opacity-60"
+                >
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5 shrink-0" aria-hidden>
+                        <path d="M8 5v14l11-7z" />
+                    </svg>
+                    <span className="truncate">Play “{normalizedQuery}”</span>
+                </motion.button>
+            ) : null}
+
+            <div className="scrollbar-cinematic mt-3 max-h-[110px] overflow-y-auto pr-2">
                 <div className="flex flex-wrap gap-2">
                     <motion.button
                         type="button"
@@ -329,19 +390,6 @@ function ArtistPicker({
                     >
                         Any Artist
                     </motion.button>
-
-                    {canUseCustomArtist ? (
-                        <motion.button
-                            type="button"
-                            whileHover={disabled ? undefined : { y: -1, scale: 1.01 }}
-                            whileTap={disabled ? undefined : { scale: 0.99 }}
-                            onClick={applyCustomArtist}
-                            disabled={disabled}
-                            className="min-h-9 rounded-[0.8rem] bg-amber/10 px-3 py-2 text-left text-[10px] uppercase tracking-[0.11em] text-text-1 ring-1 ring-amber/20 transition-all duration-300 disabled:opacity-60"
-                        >
-                            Use {normalizedQuery}
-                        </motion.button>
-                    ) : null}
 
                     {filteredArtists.map((artist) => {
                         const active = value === artist.value;
@@ -366,10 +414,18 @@ function ArtistPicker({
                     })}
                 </div>
 
-                {filteredArtists.length === 0 && !canUseCustomArtist ? (
-                    <p className="py-3 text-sm text-text-4">No artists found.</p>
+                {isSearching && filteredArtists.length === 0 ? (
+                    <p className="py-3 text-sm text-text-4">Searching…</p>
+                ) : normalizedQuery && filteredArtists.length === 0 && !canUseCustomArtist ? (
+                    <p className="py-3 text-sm text-text-4">No matches — keep typing to search any artist.</p>
                 ) : null}
             </div>
+
+            {!normalizedQuery ? (
+                <p className="mt-2 text-[10px] leading-snug text-text-4">
+                    Type any artist and press Enter to play their songs.
+                </p>
+            ) : null}
         </div>
     );
 }
@@ -439,6 +495,7 @@ function CountUp({ value, duration = 1.4 }: { value: number; duration?: number }
 export default function GamePlayer() {
     const {
         question,
+        prefetchedQuestion,
         phase,
         startRound,
         submitAnswer,
@@ -478,7 +535,15 @@ export default function GamePlayer() {
     // (roundFilters), so changing the picker mid-round can't shorten the timer.
     const roundSeconds = roundSecondsFor((phase === 'idle' ? filters : roundFilters).difficulty);
 
+    // On phones we run a lighter render: no mouse spotlight, frozen ambient
+    // glows, no backdrop blur, and a snappier reveal. Desktop keeps everything.
+    const lite = usePerfLite();
+
     const audioRef = useRef<HTMLAudioElement>(null);
+    // Off-screen element that buffers the *next* clip's bytes during the result
+    // screen, so hitting "Next" starts playback instantly instead of waiting on
+    // a fresh CDN download.
+    const preloadAudioRef = useRef<HTMLAudioElement | null>(null);
     const roundStartedAtRef = useRef<number | null>(null);
     const heroCardRef = useRef<HTMLDivElement>(null);
     const [timeLeft, setTimeLeft] = useState(roundSeconds);
@@ -486,6 +551,8 @@ export default function GamePlayer() {
     // buried under four tall cards. Always expanded on desktop (lg+).
     const [filtersOpen, setFiltersOpen] = useState(false);
     const [rating, setRating] = useState<number | null>(null);
+    const [toast, setToast] = useState<string | null>(null);
+    const toastTimer = useRef<number | null>(null);
     const [clipBlocked, setClipBlocked] = useState(false);
     const [timerActive, setTimerActive] = useState(false);
     const [selectedOption, setSelectedOption] = useState<string | null>(null);
@@ -535,8 +602,12 @@ export default function GamePlayer() {
 
         if (restart) {
             audio.pause();
-            audio.currentTime = 0;
-            audio.load();
+            // No audio.load() here: the element preloads on mount (keyed per
+            // round) and the next clip is buffered off-screen during the result
+            // screen, so the bytes are already warm. Calling load() would abort
+            // that buffer and re-fetch, which is exactly what made clips start
+            // slowly on mobile. Just rewind and play off the warm buffer.
+            try { audio.currentTime = 0; } catch { /* metadata not ready yet — play() still starts from 0 */ }
             setTimeLeft(roundSeconds);
         }
 
@@ -635,6 +706,40 @@ export default function GamePlayer() {
         }
     }, [phase, roundsPlayedInSession, prefetchNextQuestion]);
 
+    // Warm the *first* clip while the player is still on the setup screen, so
+    // "Play Round" starts instantly instead of waiting on a cold external fetch —
+    // the one round that previously had no prefetch. Debounced so rapid filter
+    // tweaks don't fire a burst of lookups; filter changes null the warmed
+    // question (in the store), so this re-warms with the latest filters.
+    useEffect(() => {
+        if (phase !== 'idle' || isLoading || question || prefetchedQuestion) return;
+        const t = window.setTimeout(() => {
+            void prefetchNextQuestion();
+        }, 550);
+        return () => window.clearTimeout(t);
+    }, [phase, isLoading, question, prefetchedQuestion, filters, prefetchNextQuestion]);
+
+    // Once the next question is warmed, buffer its audio bytes off-screen so the
+    // upcoming round's <audio> hits the browser cache and plays without a download
+    // stall. Best-effort: errors are ignored and playback still works on miss.
+    useEffect(() => {
+        const nextUrl = prefetchedQuestion?.snippetUrl;
+        // Buffer during the result screen (rounds 2-5) and on the setup screen
+        // (round 1) — both are moments where the next clip is warmed ahead of play.
+        if ((phase !== 'result' && phase !== 'idle') || !nextUrl) return;
+
+        const preloader = new Audio();
+        preloader.preload = 'auto';
+        preloader.src = nextUrl;
+        preloader.load();
+        preloadAudioRef.current = preloader;
+
+        return () => {
+            preloader.src = '';
+            preloadAudioRef.current = null;
+        };
+    }, [phase, prefetchedQuestion?.snippetUrl]);
+
     const handleSelectOption = (option: string) => {
         if (phase !== 'playing' || selectedOption) return;
 
@@ -719,6 +824,27 @@ export default function GamePlayer() {
         resetFilterSession();
     };
 
+    // Floating toast with a short "nope" haptic. Used when a player taps a filter
+    // that's locked because an artist is already set.
+    const showToast = (message: string) => {
+        setToast(message);
+        vibrate([18, 36, 18]);
+        if (toastTimer.current) window.clearTimeout(toastTimer.current);
+        toastTimer.current = window.setTimeout(() => setToast(null), 2400);
+    };
+
+    useEffect(() => () => {
+        if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    }, []);
+
+    // Picking a specific artist overrides genre + language on the server, so we
+    // lock both rails and explain why on tap rather than letting them silently
+    // do nothing.
+    const artistLocksFilters = filters.artist !== 'all';
+    const handleLockedFilterTap = () => {
+        showToast('Artist is set — clear it to pick a genre or language.');
+    };
+
     const isResult = phase === 'result' && !!result;
     const isCorrect = !!result?.correct;
     const isUrgent = timerActive && timeLeft <= 2;
@@ -727,10 +853,12 @@ export default function GamePlayer() {
         : (artistOptions.find((artist) => artist.value === filters.artist)?.label ?? filters.artist);
     const recapArtist = result?.correctArtist || (filters.artist === 'all' ? 'your mystery artist' : selectedArtistLabel);
     const activeGenreLabel = filters.genre === 'all' ? 'mixed genre' : titleCase(filters.genre);
+    // When an artist is set, genre/language are ignored by the server, so leave
+    // them out of the summary to keep it honest (reads "Artist · Difficulty").
     const filtersSummary = [
         selectedArtistLabel,
-        GENRE_OPTIONS.find((o) => o.value === filters.genre)?.label ?? 'All',
-        LANGUAGE_OPTIONS.find((o) => o.value === filters.language)?.label ?? 'Any',
+        filters.artist === 'all' ? GENRE_OPTIONS.find((o) => o.value === filters.genre)?.label ?? 'All' : null,
+        filters.artist === 'all' ? LANGUAGE_OPTIONS.find((o) => o.value === filters.language)?.label ?? 'Any' : null,
         DIFFICULTY_OPTIONS.find((o) => o.value === filters.difficulty)?.label ?? '',
     ].filter(Boolean).join(' · ');
     const summary = sessionSummary ?? {
@@ -854,25 +982,34 @@ export default function GamePlayer() {
                         >
                             {/* Mouse-reactive amber spotlight — translate-positioned blob.
                                 Centered via left/top offsets (not translate) so framer's
-                                x/y transform is purely the parallax movement. */}
-                            <motion.div
-                                aria-hidden
-                                className="pointer-events-none absolute left-[15%] top-[-10%] h-[120%] w-[70%] rounded-full blur-3xl will-change-transform"
-                                style={{
-                                    x: glowX,
-                                    y: glowY,
-                                    background: 'radial-gradient(circle, rgba(244,162,97,0.14), transparent 70%)',
-                                }}
-                            />
+                                x/y transform is purely the parallax movement. Skipped on
+                                mobile: there's no mouse to drive it, and the blur-3xl layer
+                                is the heaviest thing on the card. */}
+                            {!lite ? (
+                                <motion.div
+                                    aria-hidden
+                                    className="pointer-events-none absolute left-[15%] top-[-10%] h-[120%] w-[70%] rounded-full blur-3xl will-change-transform"
+                                    style={{
+                                        x: glowX,
+                                        y: glowY,
+                                        background: 'radial-gradient(circle, rgba(244,162,97,0.14), transparent 70%)',
+                                    }}
+                                />
+                            ) : null}
 
-                            {/* Breathing ambient glow — pulses with timer */}
+                            {/* Breathing ambient glow — pulses with timer. On mobile it's
+                                held at a static glow (no infinite per-frame repaint). */}
                             <motion.div
                                 aria-hidden
                                 className="pointer-events-none absolute inset-0"
-                                animate={timerActive
-                                    ? { opacity: isUrgent ? [0.55, 1, 0.55] : [0.32, 0.72, 0.32] }
-                                    : { opacity: 0.2 }}
-                                transition={{ duration: isUrgent ? 0.85 : 2.6, repeat: Infinity, repeatType: 'mirror', ease: 'easeInOut' }}
+                                animate={lite
+                                    ? { opacity: timerActive ? (isUrgent ? 0.7 : 0.5) : 0.2 }
+                                    : timerActive
+                                        ? { opacity: isUrgent ? [0.55, 1, 0.55] : [0.32, 0.72, 0.32] }
+                                        : { opacity: 0.2 }}
+                                transition={lite
+                                    ? { duration: 0.3 }
+                                    : { duration: isUrgent ? 0.85 : 2.6, repeat: Infinity, repeatType: 'mirror', ease: 'easeInOut' }}
                                 style={{
                                     background: isUrgent
                                         ? 'radial-gradient(46% 54% at 50% 92%, rgba(251,146,60,0.22), transparent)'
@@ -901,7 +1038,10 @@ export default function GamePlayer() {
                             <div aria-hidden className="absolute inset-x-0 bottom-0 h-px bg-white/[0.045]" />
 
                             {/* ── Card content — transitions between phases ── */}
-                            <AnimatePresence mode="wait">
+                            {/* On mobile, crossfade ('sync') instead of 'wait': 'wait' holds
+                                the new state until the old one finishes exiting, which is the
+                                ~0.6s "reveal is slow" gap. 'sync' shows the answer immediately. */}
+                            <AnimatePresence mode={lite ? 'sync' : 'wait'}>
                                 {isLoading && !question ? (
 
                                     /* Loading state */
@@ -917,8 +1057,8 @@ export default function GamePlayer() {
                                             <motion.div
                                                 aria-hidden
                                                 className="pointer-events-none absolute bottom-0 left-1/2 -translate-x-1/2 h-8 w-40 rounded-full blur-xl"
-                                                animate={{ opacity: [0.25, 0.55, 0.25] }}
-                                                transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+                                                animate={lite ? { opacity: 0.45 } : { opacity: [0.25, 0.55, 0.25] }}
+                                                transition={lite ? { duration: 0.3 } : { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
                                                 style={{ background: 'radial-gradient(ellipse, rgba(244,162,97,0.6), transparent 68%)' }}
                                             />
                                             <AudioVisualizer active urgent={false} hero />
@@ -942,16 +1082,31 @@ export default function GamePlayer() {
                                         transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
                                         className="relative grid w-full max-w-[900px] items-center gap-2 px-2 py-2 sm:gap-5 sm:px-4 sm:py-3 grid-cols-[56px_minmax(0,1fr)] text-left sm:grid-cols-[152px_minmax(0,1fr)]"
                                     >
-                                        <motion.img
-                                            src={result.artworkUrl}
-                                            alt=""
-                                            initial={{ opacity: 0, scale: 0.88, filter: 'blur(10px)' }}
-                                            animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-                                            transition={{ duration: 0.52, ease: [0.22, 1, 0.36, 1] }}
-                                            className={`aspect-square w-full object-cover rounded-[0.65rem] sm:rounded-[0.85rem] shadow-[0_20px_52px_rgba(0,0,0,0.42)] ${
-                                                isCorrect ? 'ring-1 ring-emerald-400/30' : 'ring-1 ring-rose-400/22'
-                                            }`}
-                                        />
+                                        <div className="relative">
+                                            <motion.img
+                                                src={result.artworkUrl}
+                                                alt=""
+                                                {...({ fetchpriority: 'high' } as Record<string, string>)}
+                                                decoding="async"
+                                                initial={lite ? { opacity: 0, scale: 0.9 } : { opacity: 0, scale: 0.82, filter: 'blur(10px)' }}
+                                                animate={lite ? { opacity: 1, scale: 1 } : { opacity: 1, scale: 1, filter: 'blur(0px)' }}
+                                                transition={lite ? { duration: 0.22, ease: [0.22, 1, 0.36, 1] } : { type: 'spring', stiffness: 320, damping: 26, mass: 0.6 }}
+                                                className={`aspect-square w-full object-cover rounded-[0.65rem] sm:rounded-[0.85rem] shadow-[0_20px_52px_rgba(0,0,0,0.42)] ${
+                                                    isCorrect ? 'ring-1 ring-emerald-400/30' : 'ring-1 ring-rose-400/22'
+                                                }`}
+                                            />
+                                            {/* One-shot burst ring that flares out the moment a correct
+                                                answer reveals — the little "yes!" punch the reveal was missing. */}
+                                            {isCorrect ? (
+                                                <motion.span
+                                                    aria-hidden
+                                                    className="pointer-events-none absolute inset-0 rounded-[0.65rem] ring-2 ring-emerald-300/70 sm:rounded-[0.85rem]"
+                                                    initial={{ opacity: 0.7, scale: 1 }}
+                                                    animate={{ opacity: 0, scale: 1.35 }}
+                                                    transition={{ duration: 0.7, ease: 'easeOut' }}
+                                                />
+                                            ) : null}
+                                        </div>
                                         <div className="min-w-0 space-y-1 sm:space-y-2">
                                             <p className={`label-xs ${isCorrect ? 'text-emerald-200/85' : 'text-rose-200/85'}`}>
                                                 {isCorrect ? 'Correct' : 'Wrong'}
@@ -981,13 +1136,15 @@ export default function GamePlayer() {
                                             <motion.div
                                                 aria-hidden
                                                 className="pointer-events-none absolute bottom-0 left-1/2 -translate-x-1/2 h-10 w-52 rounded-full blur-2xl"
-                                                animate={timerActive
-                                                    ? {
-                                                        opacity: isUrgent ? [0.45, 0.95, 0.45] : [0.22, 0.6, 0.22],
-                                                        scaleX: isUrgent ? [1, 1.2, 1] : [1, 1.12, 1],
-                                                      }
-                                                    : { opacity: 0.18, scaleX: 1 }}
-                                                transition={{ duration: isUrgent ? 0.8 : 2.3, repeat: Infinity, repeatType: 'mirror', ease: 'easeInOut' }}
+                                                animate={lite
+                                                    ? { opacity: timerActive ? (isUrgent ? 0.85 : 0.5) : 0.18, scaleX: 1 }
+                                                    : timerActive
+                                                        ? {
+                                                            opacity: isUrgent ? [0.45, 0.95, 0.45] : [0.22, 0.6, 0.22],
+                                                            scaleX: isUrgent ? [1, 1.2, 1] : [1, 1.12, 1],
+                                                          }
+                                                        : { opacity: 0.18, scaleX: 1 }}
+                                                transition={lite ? { duration: 0.3 } : { duration: isUrgent ? 0.8 : 2.3, repeat: Infinity, repeatType: 'mirror', ease: 'easeInOut' }}
                                                 style={{
                                                     background: isUrgent
                                                         ? 'radial-gradient(ellipse, rgba(251,146,60,0.75), transparent 68%)'
@@ -1020,8 +1177,8 @@ export default function GamePlayer() {
                                                                 : isUrgent ? 'bg-orange-300/55'
                                                                 : 'bg-emerald-300/55'
                                                             }`}
-                                                            animate={{ scale: [1, 2.2, 1], opacity: [0.6, 0, 0.6] }}
-                                                            transition={{ duration: phase === 'answered' ? 0.68 : isUrgent ? 0.5 : 1.5, repeat: Infinity, ease: 'easeOut' }}
+                                                            animate={lite ? { scale: 1.6, opacity: 0.28 } : { scale: [1, 2.2, 1], opacity: [0.6, 0, 0.6] }}
+                                                            transition={lite ? { duration: 0.3 } : { duration: phase === 'answered' ? 0.68 : isUrgent ? 0.5 : 1.5, repeat: Infinity, ease: 'easeOut' }}
                                                         />
                                                         {/* Solid dot */}
                                                         <span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${
@@ -1075,21 +1232,21 @@ export default function GamePlayer() {
                                     <motion.button
                                         key={`${question.songId}-${option}`}
                                         type="button"
-                                        initial={{ opacity: 0, y: 12 }}
+                                        initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
-                                        transition={{ duration: 0.38, delay: index * 0.055, ease: [0.22, 1, 0.36, 1] }}
+                                        transition={{ duration: 0.3, delay: index * 0.03, ease: [0.22, 1, 0.36, 1] }}
                                         whileHover={phase === 'playing' && !selectedOption ? { y: -2, scale: 1.005 } : undefined}
                                         whileTap={phase === 'playing' && !selectedOption ? { scale: 0.99 } : undefined}
                                         onClick={() => handleSelectOption(option)}
                                         disabled={!!selectedOption || phase !== 'playing'}
-                                        className={`min-h-[52px] rounded-[0.75rem] px-3 py-2.5 text-left text-text-1 transition-all duration-200 sm:min-h-[78px] sm:rounded-[0.85rem] sm:px-4 ${
+                                        className={`flex min-h-[60px] items-center rounded-[1.25rem] px-4 py-3 text-left text-text-1 transition-all duration-200 sm:min-h-[84px] sm:rounded-[1.6rem] sm:px-5 ${
                                             isCorrectOption
-                                                ? 'bg-emerald-400/18 ring-1 ring-emerald-300/55 shadow-[0_18px_45px_rgba(16,185,129,0.14),inset_0_1px_0_rgba(52,211,153,0.15)]'
+                                                ? 'bg-[linear-gradient(180deg,rgba(16,185,129,0.22),rgba(16,185,129,0.08))] ring-1 ring-emerald-300/55 shadow-[0_18px_45px_rgba(16,185,129,0.16),inset_0_1px_0_rgba(52,211,153,0.18)]'
                                                 : isWrongOption
-                                                  ? 'bg-rose-400/18 ring-1 ring-rose-300/55 shadow-[0_18px_45px_rgba(244,63,94,0.14),inset_0_1px_0_rgba(251,113,133,0.15)]'
+                                                  ? 'bg-[linear-gradient(180deg,rgba(244,63,94,0.22),rgba(244,63,94,0.08))] ring-1 ring-rose-300/55 shadow-[0_18px_45px_rgba(244,63,94,0.16),inset_0_1px_0_rgba(251,113,133,0.18)]'
                                                   : isSelected
-                                                    ? 'bg-amber/16 ring-1 ring-amber/30 shadow-[inset_0_1px_0_rgba(244,162,97,0.2)]'
-                                                    : 'bg-white/[0.045] ring-1 ring-white/[0.045] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] hover:bg-white/[0.08] hover:ring-white/[0.07] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.09)]'
+                                                    ? 'bg-[linear-gradient(180deg,rgba(244,162,97,0.2),rgba(244,162,97,0.07))] ring-1 ring-amber/35 shadow-[0_14px_36px_rgba(244,162,97,0.14),inset_0_1px_0_rgba(244,162,97,0.2)]'
+                                                    : 'bg-[linear-gradient(180deg,rgba(255,255,255,0.07),rgba(255,255,255,0.022))] ring-1 ring-white/[0.06] shadow-[0_10px_26px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.08)] hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.1),rgba(255,255,255,0.035))] hover:ring-white/[0.1] hover:shadow-[0_16px_34px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.12)]'
                                         } disabled:opacity-100`}
                                     >
                                         <span className="line-clamp-2 block text-[clamp(0.95rem,3.6vw,1.25rem)] font-bold leading-tight tracking-[-0.01em]">
@@ -1112,50 +1269,72 @@ export default function GamePlayer() {
                                 </div>
                             </div>
                         ) : isResult && result ? (
-                            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 sm:gap-2">
-                                <div className="min-w-0">
-                                    <p className={`text-xs font-semibold sm:text-sm ${isCorrect ? 'text-emerald-100' : 'text-rose-100'}`}>
-                                        {isCorrect ? `+${result.pointsAwarded} pts` : 'Missed this one'}
-                                    </p>
-                                    <p className={`truncate text-[11px] font-semibold sm:text-xs ${
-                                        rating ? (rating >= 4 ? 'text-emerald-100' : rating <= 2 ? 'text-rose-100' : 'text-amber-100') : 'text-text-4'
+                            <div className="flex h-full flex-col justify-center gap-2">
+                                {/* ── Rate section ── points badge + clear prompt, then big star row ── */}
+                                <div className="flex items-center justify-between gap-2">
+                                    <motion.span
+                                        key={isCorrect ? 'pts' : 'missed'}
+                                        initial={{ scale: 0.8, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        transition={{ type: 'spring', stiffness: 520, damping: 24 }}
+                                        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                                            isCorrect ? 'bg-emerald-400/15 text-emerald-100' : 'bg-rose-400/15 text-rose-100'
+                                        }`}
+                                    >
+                                        {isCorrect ? <>+<CountUp value={result.pointsAwarded} duration={0.7} /> pts</> : 'Missed'}
+                                    </motion.span>
+                                    <span className={`truncate text-[10px] font-semibold uppercase tracking-[0.12em] ${
+                                        rating ? (rating >= 4 ? 'text-emerald-200/90' : rating <= 2 ? 'text-rose-200/90' : 'text-amber-200/90') : 'text-text-4'
                                     }`}>
-                                        {roundsPlayedInSession >= ROUND_LIMIT ? 'Round complete. Your score is landing.' : getRatingMessage(rating)}
-                                    </p>
+                                        {rating ? getRatingMessage(rating) : 'Rate this track'}
+                                    </span>
                                 </div>
-                                <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-                                    {[1, 2, 3, 4, 5].map((value) => (
-                                        <button
-                                            key={value}
-                                            type="button"
-                                            onClick={() => void handleRate(value)}
-                                            disabled={isRating}
-                                            className={`h-7 w-7 rounded-[0.45rem] text-[10px] font-semibold transition-all sm:h-10 sm:w-10 sm:rounded-[0.6rem] sm:text-sm ${getRatingTone(value, rating)} disabled:opacity-70`}
-                                        >
-                                            {value}
-                                        </button>
-                                    ))}
-                                    {roundsPlayedInSession >= ROUND_LIMIT ? (
-                                        <motion.span
-                                            animate={{ opacity: [0.55, 1, 0.55] }}
-                                            transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
-                                            className="ml-1 inline-flex items-center gap-1.5 rounded-[0.6rem] bg-amber/14 px-3 py-1.5 text-[10px] font-semibold text-amber sm:px-5 sm:text-xs"
-                                        >
-                                            <span className="h-1.5 w-1.5 rounded-full bg-amber" />
-                                            Recap loading
-                                        </motion.span>
-                                    ) : (
-                                        <motion.button
-                                            whileHover={{ scale: 1.02, y: -1 }}
-                                            whileTap={{ scale: 0.98 }}
-                                            onClick={handleNext}
-                                            disabled={isLoading}
-                                            className="btn-primary ml-1 min-h-8 rounded-[0.6rem] px-2 py-1.5 text-[10px] disabled:opacity-60 sm:min-h-11 sm:px-5 sm:text-xs"
-                                        >
-                                            {isLoading ? '...' : `Next ${attemptsLeft}`}
-                                        </motion.button>
-                                    )}
+
+                                <div className="grid grid-cols-5 gap-1.5">
+                                    {[1, 2, 3, 4, 5].map((value) => {
+                                        const filled = !!rating && value <= rating;
+                                        return (
+                                            <motion.button
+                                                key={value}
+                                                type="button"
+                                                whileTap={{ scale: 0.92 }}
+                                                onClick={() => void handleRate(value)}
+                                                disabled={isRating}
+                                                aria-label={`Rate ${value} of 5`}
+                                                className={`flex min-h-10 items-center justify-center rounded-[0.6rem] transition-all duration-200 ${
+                                                    filled
+                                                        ? 'bg-amber/18 ring-1 ring-amber/45'
+                                                        : 'bg-white/[0.045] ring-1 ring-white/[0.05] hover:bg-white/[0.08]'
+                                                } disabled:opacity-70`}
+                                            >
+                                                <svg viewBox="0 0 24 24" fill="currentColor" className={`h-4 w-4 transition-colors ${filled ? 'text-amber' : 'text-text-4'}`} aria-hidden>
+                                                    <path d="M12 2.6l2.9 5.88 6.49.94-4.7 4.58 1.11 6.46L12 17.9l-5.8 3.04 1.1-6.46-4.69-4.58 6.49-.94z" />
+                                                </svg>
+                                            </motion.button>
+                                        );
+                                    })}
                                 </div>
+
+                                {/* ── Next section ── single dominant action ── */}
+                                {roundsPlayedInSession >= ROUND_LIMIT ? (
+                                    <motion.div
+                                        animate={{ opacity: [0.55, 1, 0.55] }}
+                                        transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+                                        className="flex min-h-11 items-center justify-center gap-2 rounded-[0.7rem] bg-amber/14 text-xs font-semibold text-amber"
+                                    >
+                                        <span className="h-1.5 w-1.5 rounded-full bg-amber" />
+                                        Tallying your recap…
+                                    </motion.div>
+                                ) : (
+                                    <motion.button
+                                        whileTap={{ scale: 0.985 }}
+                                        onClick={handleNext}
+                                        disabled={isLoading}
+                                        className="btn-primary min-h-11 w-full rounded-[0.7rem] text-sm font-semibold disabled:opacity-60"
+                                    >
+                                        {isLoading ? 'Loading…' : `Next clip · ${attemptsLeft} left`}
+                                    </motion.button>
+                                )}
                             </div>
                         ) : (
                             <div className="flex items-center justify-between gap-2">
@@ -1188,16 +1367,16 @@ export default function GamePlayer() {
                 <AnimatePresence>
                     {isSummaryVisible ? (
                         <motion.div
-                            className="absolute inset-0 z-20 flex items-center justify-center bg-black/64 px-3 py-4 backdrop-blur-md"
+                            className={`absolute inset-0 z-20 flex items-center justify-center px-3 py-4 ${lite ? 'bg-black/85' : 'bg-black/64 backdrop-blur-md'}`}
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                         >
                             <motion.div
-                                initial={{ opacity: 0, y: 28, scale: 0.96, filter: 'blur(12px)' }}
-                                animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+                                initial={lite ? { opacity: 0, y: 20, scale: 0.97 } : { opacity: 0, y: 28, scale: 0.96, filter: 'blur(12px)' }}
+                                animate={lite ? { opacity: 1, y: 0, scale: 1 } : { opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
                                 exit={{ opacity: 0, y: 18, scale: 0.98 }}
-                                transition={{ duration: 0.58, ease: [0.22, 1, 0.36, 1] }}
+                                transition={lite ? { duration: 0.32, ease: [0.22, 1, 0.36, 1] } : { duration: 0.58, ease: [0.22, 1, 0.36, 1] }}
                                 className="relative w-full max-w-[920px] overflow-hidden rounded-[1.25rem] bg-[linear-gradient(145deg,rgba(18,24,22,0.98),rgba(8,8,12,0.98))] p-4 shadow-[0_38px_120px_rgba(0,0,0,0.55)] ring-1 ring-white/[0.08] sm:p-6"
                             >
                                 <div aria-hidden className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(244,162,97,0.18),transparent_34%),radial-gradient(circle_at_88%_18%,rgba(16,185,129,0.16),transparent_32%)]" />
@@ -1296,6 +1475,27 @@ export default function GamePlayer() {
         <div className="space-y-8">
             {question ? <audio key={question.songId} ref={audioRef} src={question.snippetUrl} preload="auto" /> : null}
 
+            <AnimatePresence>
+                {toast ? (
+                    <motion.div
+                        key="filter-toast"
+                        initial={{ opacity: 0, y: -16, x: '-50%' }}
+                        animate={{ opacity: 1, y: 0, x: '-50%' }}
+                        exit={{ opacity: 0, y: -12, x: '-50%' }}
+                        transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                        role="status"
+                        aria-live="polite"
+                        className="fixed left-1/2 top-5 z-50 flex items-center gap-2 rounded-full bg-[linear-gradient(180deg,rgba(28,29,38,0.98),rgba(16,16,22,0.98))] px-4 py-2.5 text-xs font-semibold text-text-1 shadow-[0_18px_46px_rgba(0,0,0,0.5)] ring-1 ring-amber/25"
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5 shrink-0 text-amber" aria-hidden>
+                            <rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" strokeWidth="2.2" />
+                            <path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+                        </svg>
+                        {toast}
+                    </motion.div>
+                ) : null}
+            </AnimatePresence>
+
             <div>
                 {/* Mobile: one tappable summary row that expands the filters. Hidden on desktop. */}
                 <button
@@ -1326,8 +1526,8 @@ export default function GamePlayer() {
                         disabled={isLoading}
                         language={filters.language}
                     />
-                    <FilterRail label="Genre" options={GENRE_OPTIONS} value={filters.genre} onChange={handleGenreChange} disabled={isLoading} />
-                    <FilterRail label="Language" options={LANGUAGE_OPTIONS} value={filters.language} onChange={handleLanguageChange} disabled={isLoading} />
+                    <FilterRail label="Genre" options={GENRE_OPTIONS} value={filters.genre} onChange={handleGenreChange} disabled={isLoading} locked={artistLocksFilters} onLockedTap={handleLockedFilterTap} />
+                    <FilterRail label="Language" options={LANGUAGE_OPTIONS} value={filters.language} onChange={handleLanguageChange} disabled={isLoading} locked={artistLocksFilters} onLockedTap={handleLockedFilterTap} />
                     <FilterRail label="Difficulty" options={DIFFICULTY_OPTIONS} value={filters.difficulty} onChange={handleDifficultyChange} disabled={isLoading} />
                 </div>
             </div>
@@ -1546,8 +1746,14 @@ export default function GamePlayer() {
                             <div className="grid gap-8 xl:grid-cols-[280px_minmax(0,1fr)] xl:items-start">
                                 <div className="space-y-4">
                                     <motion.div
-                                        initial={{ opacity: 0, scale: 0.94, filter: 'blur(10px)' }}
-                                        animate={{
+                                        initial={lite ? { opacity: 0, scale: 0.96 } : { opacity: 0, scale: 0.94, filter: 'blur(10px)' }}
+                                        animate={lite ? {
+                                            opacity: 1,
+                                            scale: 1,
+                                            boxShadow: isCorrect
+                                                ? '0 26px 70px rgba(16,185,129,0.22)'
+                                                : '0 26px 70px rgba(244,63,94,0.18)',
+                                        } : {
                                             opacity: 1,
                                             scale: isCorrect ? [1, 1.02, 1] : 1,
                                             filter: 'blur(0px)',
@@ -1555,13 +1761,13 @@ export default function GamePlayer() {
                                                 ? '0 26px 70px rgba(16,185,129,0.22)'
                                                 : '0 26px 70px rgba(244,63,94,0.18)',
                                         }}
-                                        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                                        transition={lite ? { duration: 0.3, ease: [0.22, 1, 0.36, 1] } : { duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
                                         className={`overflow-hidden rounded-[1rem] ${
                                             isCorrect ? 'ring-1 ring-emerald-400/30' : 'ring-1 ring-rose-400/24'
                                         }`}
                                     >
                                         {result.artworkUrl ? (
-                                            <img src={result.artworkUrl} alt="" width={600} height={600} loading="lazy" decoding="async" className="aspect-square w-full object-cover" />
+                                            <img src={result.artworkUrl} alt="" width={300} height={300} decoding="async" {...({ fetchpriority: 'high' } as Record<string, string>)} className="aspect-square w-full object-cover" />
                                         ) : (
                                             <div className="aspect-square w-full bg-gradient-to-br from-white/10 to-transparent" />
                                         )}

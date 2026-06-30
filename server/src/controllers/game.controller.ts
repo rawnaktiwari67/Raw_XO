@@ -458,8 +458,12 @@ const getPeriodStart = (period: LeaderboardPeriod): Date | null => {
     return start;
 };
 
-const artworkLarge = (url = ''): string =>
-    url.replace(/100x100bb\.(jpg|png|webp)$/i, '600x600bb.$1');
+// iTunes lets us swap the size segment in the artwork URL. The reveal thumbnail
+// peaks around 152px, so 300px is crisp at 2x while downloading ~4x faster than
+// the old 600px upscale — the difference between art that snaps in and art that
+// lags behind the reveal animation.
+const artworkSized = (url = ''): string =>
+    url.replace(/100x100bb\.(jpg|png|webp)$/i, '300x300bb.$1');
 
 // ─── Guest identity ──────────────────────────────────────────────────────────
 // Anonymous players get a stable id stored in a cookie so their scores group
@@ -635,9 +639,22 @@ const getSpotifyJson = async (url: string): Promise<unknown> => {
     throw lastError ?? new Error('Spotify API request failed');
 };
 
+// The reveal card shows art at ~56px (mobile) up to ~152px (desktop), so a
+// ~300px source is ample at 2x density. Picking Spotify's smallest image that's
+// still >=300px (rather than its largest 640px cover) roughly quarters the bytes,
+// so the reveal art appears instantly instead of popping in after the animation.
+const SPOTIFY_TARGET_IMAGE_PX = 300;
 const bestSpotifyImage = (images: SpotifyImage[] = []): string => {
-    const sorted = [...images].sort((a, b) => (b.width ?? 0) - (a.width ?? 0));
-    return sorted.find((image) => image.url)?.url ?? '';
+    const withUrls = images.filter((image) => image.url);
+    if (withUrls.length === 0) return '';
+
+    const bigEnough = withUrls
+        .filter((image) => (image.width ?? 0) >= SPOTIFY_TARGET_IMAGE_PX)
+        .sort((a, b) => (a.width ?? 0) - (b.width ?? 0));
+    if (bigEnough.length > 0) return bigEnough[0].url!;
+
+    // Nothing reaches the target — fall back to the largest available.
+    return [...withUrls].sort((a, b) => (b.width ?? 0) - (a.width ?? 0))[0].url!;
 };
 
 const spotifyReleaseYear = (releaseDate?: string): number => {
@@ -870,7 +887,7 @@ const fetchItunesSongPool = async (
             releaseYear: item.releaseDate ? new Date(item.releaseDate).getFullYear() : 0,
             durationMs: item.trackTimeMillis ?? 0,
             snippetUrl: item.previewUrl,
-            artworkUrl: artworkLarge(item.artworkUrl100),
+            artworkUrl: artworkSized(item.artworkUrl100),
             trackUrl: item.trackViewUrl ?? '',
             // Rank-based approximation (0–100). Real Spotify popularity, when the
             // pool also has a Spotify entry for this track, wins via the dedupe

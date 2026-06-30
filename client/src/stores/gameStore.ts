@@ -114,9 +114,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     setArtist: (artist) => set((state) => ({ filters: { ...state.filters, artist }, prefetchedQuestion: null })),
 
     startFreshSession: async () => {
+        // Keep any question warmed on the setup screen — startRound will play it
+        // instantly. Filter changes already null it out, so it's never stale.
         set({
             question: null,
-            prefetchedQuestion: null,
             phase: 'idle',
             selectedAnswer: null,
             result: null,
