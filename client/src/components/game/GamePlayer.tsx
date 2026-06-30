@@ -547,7 +547,12 @@ export default function GamePlayer() {
     const preloadAudioRef = useRef<HTMLAudioElement | null>(null);
     const roundStartedAtRef = useRef<number | null>(null);
     const heroCardRef = useRef<HTMLDivElement>(null);
-    const [timeLeft, setTimeLeft] = useState(roundSeconds);
+    // timeLeft is tracked in a ref so per-second ticks never trigger a React
+    // re-render of the entire GamePlayer tree. The timer text elements are
+    // updated via direct DOM mutation; isUrgent is a one-shot setState.
+    const timeLeftRef = useRef(roundSeconds);
+    const headerTimerRef = useRef<HTMLSpanElement>(null);
+    const sidebarTimerRef = useRef<HTMLSpanElement>(null);
     // Filters collapse into a compact "Customize" panel on phones so Play isn't
     // buried under four tall cards. Always expanded on desktop (lg+).
     const [filtersOpen, setFiltersOpen] = useState(false);
@@ -556,6 +561,7 @@ export default function GamePlayer() {
     const toastTimer = useRef<number | null>(null);
     const [clipBlocked, setClipBlocked] = useState(false);
     const [timerActive, setTimerActive] = useState(false);
+    const [isUrgent, setIsUrgent] = useState(false);
     const [selectedOption, setSelectedOption] = useState<string | null>(null);
 
     // Hero card — mouse-reactive glow (parallax spotlight effect).
@@ -586,7 +592,8 @@ export default function GamePlayer() {
             audioRef.current.pause();
             audioRef.current.currentTime = 0;
         }
-        setTimeLeft(roundSeconds);
+        timeLeftRef.current = roundSeconds;
+        setIsUrgent(false);
         setClipBlocked(false);
         setTimerActive(false);
         setSelectedOption(null);
@@ -609,7 +616,10 @@ export default function GamePlayer() {
             // that buffer and re-fetch, which is exactly what made clips start
             // slowly on mobile. Just rewind and play off the warm buffer.
             try { audio.currentTime = 0; } catch { /* metadata not ready yet — play() still starts from 0 */ }
-            setTimeLeft(roundSeconds);
+            timeLeftRef.current = roundSeconds;
+            setIsUrgent(false);
+            if (headerTimerRef.current) headerTimerRef.current.textContent = String(roundSeconds);
+            if (sidebarTimerRef.current) sidebarTimerRef.current.textContent = String(roundSeconds);
         }
 
         try {
@@ -648,9 +658,22 @@ export default function GamePlayer() {
     useEffect(() => {
         if (phase !== 'playing' || !question || !timerActive) return;
 
+        timeLeftRef.current = roundSeconds;
+
         const tick = window.setInterval(() => {
-            setTimeLeft((currentValue) => Math.max(0, currentValue - 1));
+            const t = Math.max(0, timeLeftRef.current - 1);
+            timeLeftRef.current = t;
+            // Direct DOM mutation — no React re-render per tick.
+            if (headerTimerRef.current) headerTimerRef.current.textContent = String(t);
+            if (sidebarTimerRef.current) sidebarTimerRef.current.textContent = String(t);
+            if (t === 1) { playTick(); vibrate(20); }
         }, 1000);
+
+        // One-shot: flip isUrgent state exactly once at the 2-second mark.
+        const urgentMs = Math.max(0, (roundSeconds - 2) * 1000);
+        const urgentTimeout = urgentMs > 0
+            ? window.setTimeout(() => setIsUrgent(true), urgentMs)
+            : null;
 
         const timeout = window.setTimeout(() => {
             if (audioRef.current) audioRef.current.pause();
@@ -660,17 +683,10 @@ export default function GamePlayer() {
 
         return () => {
             window.clearInterval(tick);
+            if (urgentTimeout !== null) window.clearTimeout(urgentTimeout);
             window.clearTimeout(timeout);
         };
     }, [phase, question?.songId, submitAnswer, timerActive, roundSeconds]);
-
-    // Single tick on the last second of the round (plus a light haptic tap).
-    useEffect(() => {
-        if (phase === 'playing' && timerActive && timeLeft === 1) {
-            playTick();
-            vibrate(20);
-        }
-    }, [phase, timerActive, timeLeft]);
 
     // Reveal cue: a rising chime for a correct guess, a dry buzz for a miss.
     useEffect(() => {
@@ -719,6 +735,15 @@ export default function GamePlayer() {
         }, 550);
         return () => window.clearTimeout(t);
     }, [phase, isLoading, question, prefetchedQuestion, filters, prefetchNextQuestion]);
+
+    // Preload the result artwork while the clip is playing so the reveal is
+    // instant — the URL is embedded in the question batch and known ahead of time.
+    useEffect(() => {
+        const url = question?.reveal?.artworkUrl;
+        if (phase !== 'playing' || !url) return;
+        const img = new Image();
+        img.src = url;
+    }, [phase, question?.reveal?.artworkUrl]);
 
     // Once the next question is warmed, buffer its audio bytes off-screen so the
     // upcoming round's <audio> hits the browser cache and plays without a download
@@ -850,7 +875,6 @@ export default function GamePlayer() {
 
     const isResult = phase === 'result' && !!result;
     const isCorrect = !!result?.correct;
-    const isUrgent = timerActive && timeLeft <= 2;
     const selectedArtistLabel = filters.artist === 'all'
         ? 'Any artist'
         : (artistOptions.find((artist) => artist.value === filters.artist)?.label ?? filters.artist);
@@ -943,11 +967,13 @@ export default function GamePlayer() {
                                 <SoundToggle />
                             </div>
                             <div className="mt-1.5 h-1.5 w-full max-w-[420px] overflow-hidden rounded-full bg-white/[0.08] sm:h-2">
-                                <motion.div
-                                    className={`h-full ${isUrgent ? 'bg-orange-300' : isResult && isCorrect ? 'bg-emerald-300' : isResult ? 'bg-rose-300' : 'bg-amber'}`}
-                                    initial={false}
-                                    animate={{ width: `${(timeLeft / roundSeconds) * 100}%` }}
-                                    transition={{ duration: 0.18, ease: 'linear' }}
+                                <div
+                                    key={`header-timer-${question?.songId}`}
+                                    className={`h-full rounded-full ${isUrgent ? 'bg-orange-300' : isResult && isCorrect ? 'bg-emerald-300' : isResult ? 'bg-rose-300' : 'bg-amber'}`}
+                                    style={{
+                                        animation: `barDrain ${roundSeconds}s linear both`,
+                                        animationPlayState: timerActive ? 'running' : 'paused',
+                                    }}
                                 />
                             </div>
                         </div>
@@ -956,7 +982,11 @@ export default function GamePlayer() {
                             <div>
                                 <p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-text-3 sm:text-[0.6875rem] sm:tracking-[0.12em]">Time</p>
                                 <p className={`font-heading text-[1.15rem] leading-none sm:text-[2.2rem] ${isUrgent ? 'text-orange-100' : 'text-text-1'}`}>
-                                    {phase === 'playing' ? timeLeft : isResult ? formatResponseTime(result?.responseTimeMs) : '--'}
+                                    {phase === 'playing'
+                                        ? <span ref={headerTimerRef}>{roundSeconds}</span>
+                                        : isResult
+                                            ? formatResponseTime(result?.responseTimeMs)
+                                            : '--'}
                                 </p>
                             </div>
                             <div>
@@ -1235,10 +1265,10 @@ export default function GamePlayer() {
                                     <motion.button
                                         key={`${question.songId}-${option}`}
                                         type="button"
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
+                                        initial={lite ? { opacity: 0 } : { opacity: 0, y: 10 }}
+                                        animate={lite ? { opacity: 1 } : { opacity: 1, y: 0 }}
                                         transition={{ duration: 0.3, delay: index * 0.03, ease: [0.22, 1, 0.36, 1] }}
-                                        whileHover={phase === 'playing' && !selectedOption ? { y: -2, scale: 1.005 } : undefined}
+                                        whileHover={!lite && phase === 'playing' && !selectedOption ? { y: -2, scale: 1.005 } : undefined}
                                         whileTap={phase === 'playing' && !selectedOption ? { scale: 0.99 } : undefined}
                                         onClick={() => handleSelectOption(option)}
                                         disabled={!!selectedOption || phase !== 'playing'}
@@ -1590,11 +1620,13 @@ export default function GamePlayer() {
                     </div>
 
                     <div className={`h-1.5 overflow-hidden rounded-full bg-white/[0.06] ${phase === 'idle' ? 'hidden sm:block' : ''}`}>
-                        <motion.div
-                            className={`h-full ${isUrgent ? 'bg-orange-300' : 'bg-amber'}`}
-                            initial={false}
-                            animate={{ width: `${(timeLeft / roundSeconds) * 100}%` }}
-                            transition={{ duration: 0.18, ease: 'linear' }}
+                        <div
+                            key={`desktop-timer-${question?.songId}`}
+                            className={`h-full rounded-full ${isUrgent ? 'bg-orange-300' : 'bg-amber'}`}
+                            style={{
+                                animation: `barDrain ${roundSeconds}s linear both`,
+                                animationPlayState: timerActive ? 'running' : 'paused',
+                            }}
                         />
                     </div>
 
@@ -1632,7 +1664,9 @@ export default function GamePlayer() {
                                 <div className="flex items-center justify-between gap-4">
                                     <p className="label-xs">Choose Fast</p>
                                     <p className="text-sm text-text-4">
-                                        {phase === 'playing' ? `${timeLeft}s left` : 'Resolving'}
+                                        {phase === 'playing'
+                                            ? <><span ref={sidebarTimerRef}>{roundSeconds}</span>s left</>
+                                            : 'Resolving'}
                                     </p>
                                 </div>
 
