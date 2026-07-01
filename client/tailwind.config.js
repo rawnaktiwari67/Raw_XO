@@ -39,9 +39,9 @@ export default {
                 'accent': '#F4A261',
             },
             fontFamily: {
-                heading: ['"Barlow Condensed"', '-apple-system', 'sans-serif'],
+                heading: ['"Barlow Condensed"', '"Barlow Condensed Fallback"', '-apple-system', 'sans-serif'],
                 body: ['"Inter"', '-apple-system', 'sans-serif'],
-                brand: ['"Barlow Condensed"', '-apple-system', 'sans-serif'],
+                brand: ['"Barlow Condensed"', '"Barlow Condensed Fallback"', '-apple-system', 'sans-serif'],
             },
             letterSpacing: {
                 tightest: '-0.045em',

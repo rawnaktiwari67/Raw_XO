@@ -33,6 +33,14 @@
     <meta name="twitter:image" content="/og-cover.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Preload the two most-used Barlow Condensed weights (Latin basic subset)
+         so the font binary is cached before the stylesheet applies it. This
+         shrinks the font-swap window to near-zero and prevents the CLS that
+         occurs when the condensed glyphs replace the wider system fallback. -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin
+          href="https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B46r2z3bWuQ.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin
+          href="https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B4873z3bWuQ.woff2" />
     <!-- Load fonts without blocking render: fetch as a preload, then flip to a
          stylesheet on load. display=swap means text paints immediately in the
          fallback face and swaps to Barlow/Inter once they arrive — so the font

@@ -5,6 +5,18 @@
 
 /* Fonts are loaded via <link> in index.html (earlier discovery, non-blocking). */
 
+/* Metric-matched Arial fallback for Barlow Condensed. size-adjust: 78% scales
+   glyph advance widths to match Barlow Condensed's condensed character widths,
+   so the font-display swap causes no measurable horizontal reflow or CLS. */
+@font-face {
+  font-family: 'Barlow Condensed Fallback';
+  src: local('Arial'), local('Helvetica Neue'), local('sans-serif');
+  size-adjust: 78%;
+  ascent-override: 90%;
+  descent-override: 22%;
+  line-gap-override: 0%;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -147,7 +159,7 @@ h3,
 h4,
 h5,
 h6 {
-  font-family: 'Barlow Condensed', -apple-system, sans-serif;
+  font-family: 'Barlow Condensed', 'Barlow Condensed Fallback', -apple-system, sans-serif;
   letter-spacing: 0;
   line-height: 1.02;
   font-weight: 700;
@@ -337,7 +349,7 @@ h6 {
 
   /* ── Typography scale ── */
   .display-xl {
-    font-family: 'Barlow Condensed', sans-serif;
+    font-family: 'Barlow Condensed', 'Barlow Condensed Fallback', sans-serif;
     font-size: 5.5rem;
     font-weight: 800;
     letter-spacing: 0.01em;
@@ -346,7 +358,7 @@ h6 {
   }
 
   .display-lg {
-    font-family: 'Barlow Condensed', sans-serif;
+    font-family: 'Barlow Condensed', 'Barlow Condensed Fallback', sans-serif;
     font-size: 4rem;
     font-weight: 800;
     letter-spacing: 0.01em;
@@ -355,7 +367,7 @@ h6 {
   }
 
   .section-title {
-    font-family: 'Barlow Condensed', sans-serif;
+    font-family: 'Barlow Condensed', 'Barlow Condensed Fallback', sans-serif;
     font-size: 2.5rem;
     font-weight: 700;
     letter-spacing: 0.01em;
@@ -386,7 +398,7 @@ h6 {
   }
 
   .brand-mark {
-    font-family: 'Barlow Condensed', sans-serif;
+    font-family: 'Barlow Condensed', 'Barlow Condensed Fallback', sans-serif;
     font-style: normal;
     font-weight: 700;
     letter-spacing: 0.04em;
