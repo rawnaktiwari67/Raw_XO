@@ -82,6 +82,9 @@ interface GameState {
     leaderboard: LeaderboardEntry[];
     leaderboardPeriod: LeaderboardPeriod;
     leaderboardRank: number | null;
+    leaderboardScope: LeaderboardScope;
+    leaderboardScopeValue: string;
+    leaderboardLoading: boolean;
     history: GameSession[];
     stats: GameStats | null;
     isLoading: boolean;
@@ -131,6 +134,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     leaderboard: [],
     leaderboardPeriod: 'all-time',
     leaderboardRank: null,
+    leaderboardScope: 'global',
+    leaderboardScopeValue: '',
+    leaderboardLoading: false,
     history: [],
     stats: null,
     isLoading: false,
@@ -408,19 +414,32 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
     },
 
-    fetchLeaderboard: async (period, scope = 'global', scopeValue) => {
+    fetchLeaderboard: async (period, scope, scopeValue) => {
         const requestedPeriod = period ?? get().leaderboardPeriod;
+        const requestedScope = scope ?? get().leaderboardScope;
+        const requestedScopeValue = scopeValue ?? get().leaderboardScopeValue;
+        set({ leaderboardLoading: true });
         try {
-            const res = await gameService.getLeaderboard(requestedPeriod, scope, scopeValue);
+            const res = await gameService.getLeaderboard(requestedPeriod, requestedScope, requestedScopeValue);
             const payload = getApiData<LeaderboardData>(res);
 
             set({
                 leaderboard: Array.isArray(payload?.entries) ? payload.entries : [],
                 leaderboardRank: payload?.userRank ?? null,
                 leaderboardPeriod: payload?.period ?? requestedPeriod,
+                leaderboardScope: requestedScope,
+                leaderboardScopeValue: requestedScopeValue,
+                leaderboardLoading: false,
             });
         } catch {
-            set({ leaderboard: [], leaderboardRank: null, leaderboardPeriod: requestedPeriod });
+            set({
+                leaderboard: [],
+                leaderboardRank: null,
+                leaderboardPeriod: requestedPeriod,
+                leaderboardScope: requestedScope,
+                leaderboardScopeValue: requestedScopeValue,
+                leaderboardLoading: false,
+            });
         }
     },
 

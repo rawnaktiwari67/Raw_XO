@@ -641,6 +641,10 @@ export default function GamePlayer() {
         if (phase === 'idle' && !question) {
             resetPlaybackState();
         }
+        // resetPlaybackState/playClip are plain functions redefined every render;
+        // depending on question?.songId (not question or the functions) is what
+        // keeps this from re-firing on every re-render during playback.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [phase, question?.songId]);
 
     useEffect(() => {
@@ -649,10 +653,12 @@ export default function GamePlayer() {
         resetPlaybackState();
         void playClip(true);
 
+        const audio = audioRef.current;
         return () => {
-            if (audioRef.current) audioRef.current.pause();
+            if (audio) audio.pause();
             setTimerActive(false);
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [phase, question?.songId]);
 
     useEffect(() => {
@@ -686,6 +692,9 @@ export default function GamePlayer() {
             if (urgentTimeout !== null) window.clearTimeout(urgentTimeout);
             window.clearTimeout(timeout);
         };
+        // Keyed on question?.songId rather than question itself, matching the
+        // other playback effects above.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [phase, question?.songId, submitAnswer, timerActive, roundSeconds]);
 
     // Reveal cue: a rising chime for a correct guess, a dry buzz for a miss.

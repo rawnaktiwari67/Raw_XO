@@ -21,7 +21,7 @@ const GROUPS = [
 
 export default function Footer() {
     return (
-        <footer className="border-t border-white/[0.08] mt-20">
+        <footer className="pb-safe border-t border-white/[0.08] mt-20">
             <div className="max-w-[1280px] mx-auto px-6 md:px-12 py-16">
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-12">
                     <div className="md:col-span-5">

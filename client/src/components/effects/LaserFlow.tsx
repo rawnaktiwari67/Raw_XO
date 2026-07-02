@@ -569,6 +569,10 @@ export default function LaserFlow({
             renderer.forceContextLoss();
             if (mount.contains(canvas)) mount.removeChild(canvas);
         };
+        // Scene setup runs once per dpr/mouseSmoothTime change; the other visual
+        // props are read as initial uniform values here and kept live afterward
+        // by the effect below, so the WebGL context isn't torn down on every prop tick.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [dpr, mouseSmoothTime]);
 
     useEffect(() => {

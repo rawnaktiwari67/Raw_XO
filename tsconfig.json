@@ -18,6 +18,7 @@
     "node_modules",
     "client",
     "server/dist",
-    "dist"
+    "dist",
+    "server/src/**/*.test.ts"
   ]
 }

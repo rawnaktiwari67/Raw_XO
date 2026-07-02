@@ -62,7 +62,7 @@ export default function Navbar() {
                     borderBottom: isScrolled ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(255,255,255,0.03)',
                 }}
             >
-                <div className="mx-auto flex h-[62px] max-w-[1280px] items-center justify-between gap-4 px-4 md:h-[76px] md:px-12">
+                <div className="pt-safe mx-auto flex h-[62px] max-w-[1280px] items-center justify-between gap-4 px-4 md:h-[76px] md:px-12">
                     <Link to="/" className="shrink-0" aria-label="Raw XO home">
                         <span className="brand-mark text-[1.6rem] leading-none text-gradient-gold md:text-[1.9rem]">
                             Raw XO

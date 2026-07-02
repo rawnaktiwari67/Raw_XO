@@ -12,6 +12,9 @@ export interface NormalizedMusicItem {
     releaseYear: number;
     genre: string;
     artistPhase: string;
+    // True for the hand-curated tracks that carry a real lyric hook + seed meaning.
+    // Catalog tracks (pulled broadly for browse depth) are false.
+    featured?: boolean;
 }
 
 export interface MeaningOption {
@@ -44,6 +47,7 @@ export interface MeaningEntry {
     popularity: number;
     releaseYear: number;
     artistPhase: string;
+    featured?: boolean;
     meanings: MeaningOption[];
     reactions: ReactionOption[];
 }

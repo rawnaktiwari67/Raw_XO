@@ -6,10 +6,30 @@ import { isDbConnected } from '../config/db';
 import { devStore } from '../utils/devStore';
 import { successResponse, errorResponse } from '../utils/apiResponse';
 
-const sanitizeSignal = (signal: { trackId: string; meaningVotes?: Record<string, number>; reactions?: Record<string, number> }) => ({
+type RawSignal = {
+    trackId: string;
+    meaningVotes?: Record<string, number>;
+    reactions?: Record<string, number>;
+    meaningVoters?: Record<string, string>;
+    reactionVoters?: Record<string, string>;
+};
+
+// Identify the voter so a vote can switch rather than stack, and so a returning
+// voter sees their own pick highlighted. Signed-in users key by id; anonymous
+// players fall back to their stable guest cookie. No identity => no dedup.
+const getVoterKey = (req: Request): string => {
+    if (req.userId) return req.userId;
+    const guest = typeof req.cookies?.xo_guest === 'string' ? req.cookies.xo_guest.trim() : '';
+    return guest ? `guest:${guest}` : '';
+};
+
+const sanitizeSignal = (signal: RawSignal, voterKey = '') => ({
     trackId: signal.trackId,
     meaningVotes: signal.meaningVotes || {},
     reactions: signal.reactions || {},
+    // The requester's own current selections — never expose the full voter maps.
+    userMeaning: voterKey ? signal.meaningVoters?.[voterKey] || null : null,
+    userReaction: voterKey ? signal.reactionVoters?.[voterKey] || null : null,
 });
 
 const cleanText = (value: unknown, maxLength: number): string =>
@@ -41,11 +61,12 @@ export const getSignals = async (req: Request, res: Response): Promise<void> => 
             return;
         }
 
+        const voterKey = getVoterKey(req);
         const signals = !isDbConnected()
             ? devStore.getCultureSignals(trackIds)
             : await CultureSignal.find({ trackId: { $in: trackIds } }).lean();
 
-        res.json(successResponse(signals.map((signal) => sanitizeSignal(signal))));
+        res.json(successResponse(signals.map((signal) => sanitizeSignal(signal as RawSignal, voterKey))));
     } catch {
         res.status(500).json(errorResponse('Server error'));
     }
@@ -64,22 +85,42 @@ export const voteMeaning = async (req: Request, res: Response): Promise<void> =>
             return;
         }
 
+        const voterKey = getVoterKey(req);
+
         if (!isDbConnected()) {
-            const signal = devStore.voteCultureMeaning(trackId, meaningId);
-            res.json(successResponse(sanitizeSignal(signal), 'Meaning vote saved'));
+            const signal = devStore.voteCultureMeaning(trackId, meaningId, voterKey);
+            res.json(successResponse(sanitizeSignal(signal, voterKey), 'Meaning vote saved'));
             return;
         }
 
+        // One meaning vote per voter per track: if they already picked a different
+        // meaning, move the vote instead of adding a second one.
+        const existing = voterKey
+            ? await CultureSignal.findOne({ trackId }).select('meaningVoters').lean()
+            : null;
+        const previousMeaning = existing?.meaningVoters?.[voterKey];
+
+        if (previousMeaning === meaningId) {
+            const signal = await CultureSignal.findOne({ trackId }).lean();
+            res.json(successResponse(signal ? sanitizeSignal(signal as RawSignal, voterKey) : null, 'Meaning vote saved'));
+            return;
+        }
+
+        const inc: Record<string, number> = { [`meaningVotes.${meaningId}`]: 1 };
+        if (previousMeaning) inc[`meaningVotes.${previousMeaning}`] = -1;
+        const update: Record<string, unknown> = {
+            $setOnInsert: { trackId },
+            $inc: inc,
+        };
+        if (voterKey) update.$set = { [`meaningVoters.${voterKey}`]: meaningId };
+
         const signal = await CultureSignal.findOneAndUpdate(
             { trackId },
-            {
-                $setOnInsert: { trackId },
-                $inc: { [`meaningVotes.${meaningId}`]: 1 },
-            },
+            update,
             { new: true, upsert: true }
         ).lean();
 
-        res.json(successResponse(signal ? sanitizeSignal(signal) : null, 'Meaning vote saved'));
+        res.json(successResponse(signal ? sanitizeSignal(signal as RawSignal, voterKey) : null, 'Meaning vote saved'));
     } catch {
         res.status(500).json(errorResponse('Server error'));
     }
@@ -98,22 +139,41 @@ export const reactToTrack = async (req: Request, res: Response): Promise<void> =
             return;
         }
 
+        const voterKey = getVoterKey(req);
+
         if (!isDbConnected()) {
-            const signal = devStore.reactCultureTrack(trackId, reactionId);
-            res.json(successResponse(sanitizeSignal(signal), 'Reaction saved'));
+            const signal = devStore.reactCultureTrack(trackId, reactionId, voterKey);
+            res.json(successResponse(sanitizeSignal(signal, voterKey), 'Reaction saved'));
             return;
         }
 
+        // One reaction per voter per track: switch it if they tap a different one.
+        const existing = voterKey
+            ? await CultureSignal.findOne({ trackId }).select('reactionVoters').lean()
+            : null;
+        const previousReaction = existing?.reactionVoters?.[voterKey];
+
+        if (previousReaction === reactionId) {
+            const signal = await CultureSignal.findOne({ trackId }).lean();
+            res.json(successResponse(signal ? sanitizeSignal(signal as RawSignal, voterKey) : null, 'Reaction saved'));
+            return;
+        }
+
+        const inc: Record<string, number> = { [`reactions.${reactionId}`]: 1 };
+        if (previousReaction) inc[`reactions.${previousReaction}`] = -1;
+        const update: Record<string, unknown> = {
+            $setOnInsert: { trackId },
+            $inc: inc,
+        };
+        if (voterKey) update.$set = { [`reactionVoters.${voterKey}`]: reactionId };
+
         const signal = await CultureSignal.findOneAndUpdate(
             { trackId },
-            {
-                $setOnInsert: { trackId },
-                $inc: { [`reactions.${reactionId}`]: 1 },
-            },
+            update,
             { new: true, upsert: true }
         ).lean();
 
-        res.json(successResponse(signal ? sanitizeSignal(signal) : null, 'Reaction saved'));
+        res.json(successResponse(signal ? sanitizeSignal(signal as RawSignal, voterKey) : null, 'Reaction saved'));
     } catch {
         res.status(500).json(errorResponse('Server error'));
     }

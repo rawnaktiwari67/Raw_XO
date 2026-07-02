@@ -93,6 +93,8 @@ body {
 /* Layer 2 — warm radial light, top-right (directional cinematic light) */
 body.gameplay-locked {
   height: 100vh;
+  height: 100dvh; /* dvh tracks the *visible* viewport, so the URL bar on mobile
+                     Safari/Chrome no longer pushes gameplay content off-screen. */
   overflow: hidden;
 }
 
@@ -104,6 +106,7 @@ body.gameplay-locked #root > div > main + footer {
 
 body.gameplay-locked #root {
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -272,6 +275,22 @@ h6 {
    Utility Classes
    ───────────────────────────── */
 @layer utilities {
+
+  /* ── Safe-area insets (notches, rounded corners, home indicator) ──
+     Paired with viewport-fit=cover in index.html. max() keeps a sane minimum
+     on devices that report 0 insets so spacing never collapses. */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .px-safe {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
 
   /* ── Surfaces ── */
   .surface-0 {
@@ -519,12 +538,27 @@ h6 {
 
   /* ── Rating dots ── */
   .rating-dot {
+    position: relative;
     width: 8px;
     height: 8px;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.12);
     cursor: pointer;
     transition: background 0.15s ease-out, transform 0.15s ease-out;
+  }
+
+  /* On touch devices the 8px dot is far below the 44px minimum tap target, so
+     an invisible expanded hit area is layered on top (no visual change). */
+  @media (pointer: coarse) {
+    .rating-dot::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 44px;
+      height: 44px;
+      transform: translate(-50%, -50%);
+    }
   }
 
   .rating-dot:hover,

@@ -80,6 +80,8 @@ export interface LeaderboardEntry {
     levelBadge: string;
     totalScore: number;
     sessions: number;
+    accuracy?: number;
+    avgResponseMs?: number;
     isGuest?: boolean;
 }
 

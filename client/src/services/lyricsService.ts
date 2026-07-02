@@ -238,8 +238,14 @@ const applyFeedback = (entry: MeaningEntry): MeaningEntry => {
     };
 };
 
+export type TrackSelection = { meaningId?: string; reactionId?: string };
+export type MeaningEntriesResult = {
+    entries: MeaningEntry[];
+    selections: Record<string, TrackSelection>;
+};
+
 export const lyricsService = {
-    async getMeaningEntries(tracks: NormalizedMusicItem[]): Promise<MeaningEntry[]> {
+    async getMeaningEntries(tracks: NormalizedMusicItem[]): Promise<MeaningEntriesResult> {
         const baseEntries = tracks.map((track) => {
             const seed = matchSeed(track);
             const entry: MeaningEntry = seed
@@ -266,13 +272,23 @@ export const lyricsService = {
                 trackId: string;
                 meaningVotes?: Record<string, number>;
                 reactions?: Record<string, number>;
+                userMeaning?: string | null;
+                userReaction?: string | null;
             }> : [];
 
             const signalMap = new Map(signals.map((signal) => [signal.trackId, signal]));
+            const selections: Record<string, TrackSelection> = {};
 
-            return baseEntries.map((entry) => {
+            const entries = baseEntries.map((entry) => {
                 const signal = signalMap.get(entry.trackId);
                 if (!signal) return entry;
+
+                if (signal.userMeaning || signal.userReaction) {
+                    selections[entry.trackId] = {
+                        meaningId: signal.userMeaning || undefined,
+                        reactionId: signal.userReaction || undefined,
+                    };
+                }
 
                 return {
                     ...entry,
@@ -286,8 +302,10 @@ export const lyricsService = {
                     })),
                 };
             });
+
+            return { entries, selections };
         } catch {
-            return baseEntries;
+            return { entries: baseEntries, selections: {} };
         }
     },
 

@@ -7,6 +7,7 @@ import { isDbConnected } from '../config/db';
 import { devStore } from '../utils/devStore';
 import { successResponse, errorResponse } from '../utils/apiResponse';
 import { calculateLevel, calculateGameXP } from '../utils/xpUtils';
+import { shuffle, roundWindowMs, calculateScorePayload, guestNameFromId } from '../utils/gameLogic';
 import { env } from '../config/env';
 import {
     CURATED_ARTISTS,
@@ -14,7 +15,6 @@ import {
     LANGUAGE_QUERY_MAP,
     INDIA_FOCUSED_LANGUAGES,
     INDIA_FOCUSED_ARTISTS,
-    DIFFICULTY_ROUND_SECONDS,
     type ArtistProfile,
 } from '../config/gameConstants';
 
@@ -202,19 +202,6 @@ const decodeSongToken = (token: string): SongPreview | null => {
     } catch {
         return null;
     }
-};
-
-// Fisher–Yates: a uniform shuffle where every element is equally likely to land
-// in any position. The old `sort(() => Math.random() - 0.5)` was biased — for a
-// 4-item array it left the first element (always the correct answer) in slot 0
-// far more than 25% of the time, so the right answer kept showing up as option 1.
-const shuffle = <T>(arr: T[]): T[] => {
-    const result = [...arr];
-    for (let i = result.length - 1; i > 0; i -= 1) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [result[i], result[j]] = [result[j], result[i]];
-    }
-    return result;
 };
 
 const normalizeTitle = (value: string): string =>
@@ -422,35 +409,6 @@ const applyDifficulty = (songs: SongPreview[], difficulty: GameDifficulty): Song
     return (medium.length >= 4 ? medium : byRecent).slice(0, Math.min(54, source.length));
 };
 
-const roundWindowMs = (difficulty: GameDifficulty): number =>
-    (DIFFICULTY_ROUND_SECONDS[difficulty] ?? DIFFICULTY_ROUND_SECONDS.medium) * 1000;
-
-const calculateScorePayload = (
-    correct: boolean,
-    streak: number,
-    responseTimeMs: number,
-    difficulty: GameDifficulty
-) => {
-    if (!correct) {
-        return {
-            pointsAwarded: 0,
-            speedBonus: 0,
-            multiplier: 1,
-        };
-    }
-
-    // Speed bonus is measured against the clock you actually had. Hard rounds are
-    // short, so a 2s answer there earns a bigger share of the window than the same
-    // 2s on a 10s easy round — rewarding leaving time on the table at any level.
-    const speedWindowMs = roundWindowMs(difficulty);
-    const safeResponseTime = responseTimeMs > 0 ? Math.min(responseTimeMs, speedWindowMs) : speedWindowMs;
-    const speedBonus = Math.max(0, Math.round(((speedWindowMs - safeResponseTime) / speedWindowMs) * 60));
-    const multiplier = Math.min(1 + Math.floor(streak / 3) * 0.25, 2);
-    const pointsAwarded = Math.round((100 + speedBonus) * multiplier);
-
-    return { pointsAwarded, speedBonus, multiplier };
-};
-
 const getPeriodStart = (period: LeaderboardPeriod): Date | null => {
     if (period !== 'daily') return null;
     const start = new Date();
@@ -468,22 +426,7 @@ const artworkSized = (url = ''): string =>
 // ─── Guest identity ──────────────────────────────────────────────────────────
 // Anonymous players get a stable id stored in a cookie so their scores group
 // into a single leaderboard entry across rounds, with a friendly display name
-// derived deterministically from that id.
-const GUEST_ADJECTIVES = ['Swift', 'Golden', 'Midnight', 'Electric', 'Velvet', 'Neon', 'Cosmic', 'Silent', 'Crimson', 'Lunar', 'Wild', 'Hidden'];
-const GUEST_NOUNS = ['Listener', 'Crate', 'Vinyl', 'Echo', 'Pulse', 'Tempo', 'Riff', 'Encore', 'Bassline', 'Hook', 'Anthem', 'Groove'];
-
-const guestNameFromId = (guestId: string): string => {
-    let hash = 0;
-    for (let i = 0; i < guestId.length; i += 1) {
-        hash = (hash * 31 + guestId.charCodeAt(i)) >>> 0;
-    }
-    // Use unsigned shift (>>>) — a signed >> can go negative for large hashes,
-    // producing a negative index and an "undefined" noun.
-    const adjective = GUEST_ADJECTIVES[hash % GUEST_ADJECTIVES.length];
-    const noun = GUEST_NOUNS[(hash >>> 8) % GUEST_NOUNS.length];
-    return `${adjective} ${noun}`;
-};
-
+// derived deterministically from that id (see utils/gameLogic).
 const getOrCreateGuest = (req: Request, res: Response): { guestId: string; guestName: string } => {
     const existing = typeof req.cookies?.xo_guest === 'string' ? req.cookies.xo_guest.trim() : '';
     const guestId = existing && existing.length >= 8 ? existing : crypto.randomBytes(12).toString('base64url');
@@ -1518,6 +1461,8 @@ export const getLeaderboard = async (_req: Request, res: Response): Promise<void
                     guestName: { $first: '$guestName' },
                     totalScore: { $sum: '$score' },
                     sessions: { $sum: 1 },
+                    correctCount: { $sum: { $cond: ['$correct', 1, 0] } },
+                    avgResponseMs: { $avg: '$responseTimeMs' },
                     xpTotal: { $sum: '$xpEarned' },
                 },
             },
@@ -1533,6 +1478,14 @@ export const getLeaderboard = async (_req: Request, res: Response): Promise<void
                     isGuest: { $cond: [{ $ifNull: ['$user', false] }, false, true] },
                     totalScore: 1,
                     sessions: 1,
+                    accuracy: {
+                        $cond: [
+                            { $gt: ['$sessions', 0] },
+                            { $round: [{ $multiply: [{ $divide: ['$correctCount', '$sessions'] }, 100] }, 0] },
+                            0,
+                        ],
+                    },
+                    avgResponseMs: { $round: [{ $ifNull: ['$avgResponseMs', 0] }, 0] },
                     xpTotal: 1,
                 },
             },
@@ -1556,6 +1509,150 @@ export const getLeaderboard = async (_req: Request, res: Response): Promise<void
         }));
     } catch {
         res.status(500).json(errorResponse('Server error'));
+    }
+};
+
+// The artists whose catalogs seed the Culture archive's browse pool, each tagged
+// with a mood bucket. We assign mood from the searched artist rather than the
+// track's genres because Spotify's /v1/artists (genres) endpoint is 403 for
+// development-mode apps — search is the only reliable surface.
+const CULTURE_CATALOG_SEEDS: Array<{ name: string; mood: string; genre: string }> = [
+    { name: 'The Weeknd', mood: 'after midnight', genre: 'r&b' },
+    { name: 'SZA', mood: 'after midnight', genre: 'r&b' },
+    { name: 'Drake', mood: 'pressure', genre: 'hip-hop' },
+    { name: 'Kendrick Lamar', mood: 'pressure', genre: 'hip-hop' },
+    { name: 'Travis Scott', mood: 'adrenaline', genre: 'hip-hop' },
+    { name: 'Doja Cat', mood: 'gloss and damage', genre: 'pop' },
+    { name: 'Taylor Swift', mood: 'gloss and damage', genre: 'pop' },
+    { name: 'Dua Lipa', mood: 'high pulse', genre: 'dance' },
+    { name: 'The Chainsmokers', mood: 'high pulse', genre: 'dance' },
+    { name: 'Arijit Singh', mood: 'devotion', genre: 'bollywood' },
+    { name: 'Diljit Dosanjh', mood: 'victory lap', genre: 'punjabi' },
+    { name: 'AP Dhillon', mood: 'cold heartbreak', genre: 'punjabi' },
+    { name: 'Karan Aujla', mood: 'swagger', genre: 'punjabi' },
+    { name: 'Shubh', mood: 'late night', genre: 'punjabi' },
+];
+
+type CultureCatalogItem = {
+    trackId: string;
+    title: string;
+    artist: string;
+    album: string;
+    albumArt: string;
+    previewUrl: string;
+    trackUrl: string;
+    lyricsSnippet: string;
+    mood: string;
+    popularity: number;
+    releaseYear: number;
+    genre: string;
+    artistPhase: string;
+    featured: boolean;
+};
+
+let cultureCatalogCache: { items: CultureCatalogItem[]; fetchedAt: number } | null = null;
+const CULTURE_CATALOG_TTL_MS = 10 * 60_000;
+
+// GET /culture/catalog — Spotify-powered browse pool for the Culture archive.
+// Returns [] (not an error) when Spotify isn't configured, so the client falls
+// back cleanly to its iTunes catalog.
+export const getCultureCatalog = async (_req: Request, res: Response): Promise<void> => {
+    try {
+        if (!hasSpotifyCredentials) {
+            res.json(successResponse([]));
+            return;
+        }
+
+        if (cultureCatalogCache && Date.now() - cultureCatalogCache.fetchedAt < CULTURE_CATALOG_TTL_MS) {
+            res.json(successResponse(cultureCatalogCache.items));
+            return;
+        }
+
+        const market = SPOTIFY_MARKET;
+        const searches = await Promise.all(
+            CULTURE_CATALOG_SEEDS.map(async (seed) => {
+                try {
+                    const url = `${SPOTIFY_SEARCH_ENDPOINT}?q=${encodeURIComponent(seed.name)}&type=track&limit=8&market=${market}`;
+                    const payload = (await getSpotifyJson(url)) as SpotifySearchPayload;
+                    return (payload.tracks?.items ?? []).map((track) => ({ track, seed }));
+                } catch {
+                    return [];
+                }
+            })
+        );
+
+        // Spotify omits `popularity` for dev-mode apps, so synthesize a stable
+        // score from recency + a per-track hash — enough for Hottest/Newest sorts.
+        const currentYear = new Date().getFullYear();
+        const hashString = (value: string): number => {
+            let hash = 0;
+            for (let i = 0; i < value.length; i += 1) hash = (hash * 31 + value.charCodeAt(i)) | 0;
+            return Math.abs(hash);
+        };
+        const synthPopularity = (id: string, year: number): number => {
+            const recency = year > 0 ? Math.min(34, (currentYear - year) * 2) : 20;
+            return Math.min(99, Math.max(52, 92 - recency + (hashString(id) % 10)));
+        };
+
+        // Normalize each artist's results into its own list (de-duped globally),
+        // then round-robin so every mood is represented within the 60-item cap
+        // instead of the first few artists filling it.
+        const seenIds = new Set<string>();
+        const titleSeen = new Set<string>();
+        const perSeed: CultureCatalogItem[][] = searches.map((group) => {
+            const list: CultureCatalogItem[] = [];
+            for (const { track, seed } of group) {
+                const id = track.id ?? '';
+                const title = track.name ?? '';
+                const artistNames = (track.artists ?? []).map((a) => a.name).filter(Boolean) as string[];
+                const artist = artistNames.join(', ') || 'Unknown';
+                const albumArt = bestSpotifyImage(track.album?.images);
+                if (!title || !albumArt || (id && seenIds.has(id))) continue;
+                const titleKey = `${title}|${artist}`.toLowerCase();
+                if (titleSeen.has(titleKey)) continue;
+                if (id) seenIds.add(id);
+                titleSeen.add(titleKey);
+
+                const releaseYear = spotifyReleaseYear(track.album?.release_date);
+                list.push({
+                    trackId: id || titleKey,
+                    title,
+                    artist,
+                    album: track.album?.name ?? '',
+                    albumArt,
+                    previewUrl: track.preview_url ?? '',
+                    trackUrl: track.external_urls?.spotify ?? '',
+                    lyricsSnippet: title,
+                    mood: seed.mood,
+                    popularity: synthPopularity(id || titleKey, releaseYear),
+                    releaseYear,
+                    genre: seed.genre,
+                    artistPhase: 'in rotation',
+                    featured: false,
+                });
+            }
+            return list;
+        });
+
+        const items: CultureCatalogItem[] = [];
+        for (let round = 0; items.length < 60; round += 1) {
+            let addedThisRound = false;
+            for (const list of perSeed) {
+                if (list[round]) {
+                    items.push(list[round]);
+                    addedThisRound = true;
+                    if (items.length >= 60) break;
+                }
+            }
+            if (!addedThisRound) break;
+        }
+
+        const result = items;
+        cultureCatalogCache = { items: result, fetchedAt: Date.now() };
+        res.json(successResponse(result));
+    } catch {
+        // Never hard-fail — the client treats [] as "use the iTunes fallback".
+        res.json(successResponse([]));
     }
 };
 

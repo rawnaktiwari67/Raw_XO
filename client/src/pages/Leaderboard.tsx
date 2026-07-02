@@ -12,8 +12,8 @@ export default function LeaderboardPage() {
             <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
                 <p className="label-xs mb-4">Community Scores</p>
                 <h1 className="display-lg mb-4">Top listeners this season</h1>
-                <p className="text-text-3 text-sm mb-8">Ranking is based on total points from game sessions.</p>
-                <Leaderboard />
+                <p className="text-text-3 text-sm mb-8">Ranking is based on total points from game sessions. Slice it by genre or artist, and chase the rank above you.</p>
+                <Leaderboard variant="full" />
             </motion.div>
         </div>
     );

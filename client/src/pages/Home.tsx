@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import ReelsFeed from '../components/culture/ReelsFeed';
 import { useDocumentMeta } from '../hooks/useDocumentMeta';
 import { musicService } from '../services/musicService';
 import { lyricsService } from '../services/lyricsService';
@@ -8,6 +9,7 @@ import { cultureService } from '../services/cultureService';
 import { gameService } from '../services/gameService';
 import type { CultureReview, LyricGuessRound, MeaningEntry } from '../types/culture';
 import { useAuthStore } from '../stores/authStore';
+import FilterPills from '../components/ui/FilterPills';
 
 const pageReveal = {
     hidden: { opacity: 0, y: 28 },
@@ -74,7 +76,26 @@ export default function Home() {
     const [guessChoice, setGuessChoice] = useState('');
     const [guessRevealed, setGuessRevealed] = useState(false);
     const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+    const [browseMood, setBrowseMood] = useState<'all' | string>('all');
+    const [browseSort, setBrowseSort] = useState<'popularity' | 'recent'>('popularity');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [gridCount, setGridCount] = useState(9);
+    const [reelsOpen, setReelsOpen] = useState(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    const meaningLabRef = useRef<HTMLDivElement | null>(null);
+    const gridObserverRef = useRef<IntersectionObserver | null>(null);
+
+    // Activating a track is the page's core interaction — every "card" should be a
+    // shortcut into the Meaning Lab for that song, not a dead end.
+    const activateTrack = (trackId: string, scroll = false) => {
+        const entry = entries.find((item) => item.trackId === trackId);
+        if (!entry) return;
+        setActiveTrackId(trackId);
+        setReviewMood(entry.mood);
+        if (scroll && meaningLabRef.current) {
+            meaningLabRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    };
 
     useEffect(() => {
         let mounted = true;
@@ -84,14 +105,29 @@ export default function Home() {
             setError('');
 
             try {
+                const reviewsPromise = cultureService.getReviews();
                 const tracks = await musicService.getTrendingTracks();
-                const nextEntries = await lyricsService.getMeaningEntries(tracks);
+                const { entries: nextEntries, selections } = await lyricsService.getMeaningEntries(tracks);
                 if (!mounted) return;
 
                 setEntries(nextEntries);
                 setActiveTrackId(nextEntries[0]?.trackId || '');
                 setReviewMood(nextEntries[0]?.mood || moodOptions[0]);
-                setReviews(await cultureService.getReviews());
+
+                // Re-hydrate the viewer's saved picks so their votes stay highlighted
+                // across reloads instead of looking unvoted every visit.
+                const meaningPicks: Record<string, string> = {};
+                const reactionPicks: Record<string, string> = {};
+                for (const [trackId, picked] of Object.entries(selections)) {
+                    if (picked.meaningId) meaningPicks[trackId] = picked.meaningId;
+                    if (picked.reactionId) reactionPicks[trackId] = picked.reactionId;
+                }
+                setSelectedMeaning(meaningPicks);
+                setSelectedReaction(reactionPicks);
+
+                const reviews = await reviewsPromise;
+                if (!mounted) return;
+                setReviews(reviews);
             } catch {
                 if (!mounted) return;
                 setError('Apple music data slipped. The fallback room is still live.');
@@ -155,18 +191,105 @@ export default function Home() {
         }
     }, [guessIndex]);
 
+    const browseMoods = useMemo(() => {
+        const moods = new Set<string>();
+        entries.forEach((entry) => entry.mood && moods.add(entry.mood));
+        return ['all', ...Array.from(moods)];
+    }, [entries]);
+
+    const visibleEntries = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase();
+        return entries
+            .filter((entry) => browseMood === 'all' || entry.mood === browseMood)
+            .filter(
+                (entry) =>
+                    !query ||
+                    entry.title.toLowerCase().includes(query) ||
+                    entry.artist.toLowerCase().includes(query) ||
+                    entry.lyricsSnippet.toLowerCase().includes(query)
+            )
+            .sort((a, b) =>
+                browseSort === 'recent' ? b.releaseYear - a.releaseYear : b.popularity - a.popularity
+            );
+    }, [entries, browseMood, browseSort, searchQuery]);
+
+    // Progressive/infinite grid: reveal a page at a time and loop the catalog so
+    // scrolling never dead-ends. Keys carry the cycle so duplicated tracks stay
+    // distinct to React across loops.
+    const pagedEntries = useMemo(() => {
+        if (visibleEntries.length === 0) return [];
+        return Array.from({ length: gridCount }, (_, index) => {
+            const entry = visibleEntries[index % visibleEntries.length];
+            return { entry, key: `${entry.trackId}-${Math.floor(index / visibleEntries.length)}` };
+        });
+    }, [visibleEntries, gridCount]);
+
+    // A new filter/search should start the grid fresh rather than keep a long,
+    // half-scrolled loop from the previous result set.
+    useEffect(() => {
+        setGridCount(9);
+    }, [browseMood, browseSort, searchQuery]);
+
+    const extendGrid = useCallback(() => setGridCount((current) => current + 9), []);
+
+    // Callback ref: attach the observer the moment the sentinel mounts (and
+    // reattach if it remounts). More reliable than a useEffect+useRef pair, which
+    // could tear the observer down before its first async callback under StrictMode.
+    const gridSentinelRef = useCallback(
+        (node: HTMLDivElement | null) => {
+            gridObserverRef.current?.disconnect();
+            if (!node) return;
+            gridObserverRef.current = new IntersectionObserver(
+                (observed) => {
+                    if (observed.some((item) => item.isIntersecting)) extendGrid();
+                },
+                { rootMargin: '400px' }
+            );
+            gridObserverRef.current.observe(node);
+        },
+        [extendGrid]
+    );
+
+    const openLabFromReels = (trackId: string) => {
+        setReelsOpen(false);
+        activateTrack(trackId, true);
+    };
+
+    const myContributions = useMemo(() => {
+        const name = user?.username?.trim().toLowerCase();
+        if (!name) return [];
+        return reviews.filter((review) => (review as CultureReview & { username?: string }).username?.trim().toLowerCase() === name);
+    }, [reviews, user]);
+
+    // With a deep catalog we can't list every track as a tab. Show the curated
+    // featured tracks, and append the active one if the viewer drilled into a
+    // catalog track so it stays selectable.
+    const meaningLabTabs = useMemo(() => {
+        const featured = entries.filter((entry) => entry.featured).slice(0, 8);
+        if (activeEntry && !featured.some((entry) => entry.trackId === activeEntry.trackId)) {
+            return [activeEntry, ...featured].slice(0, 9);
+        }
+        return featured;
+    }, [entries, activeEntry]);
+
     const totalVotes = (entry: MeaningEntry) => entry.meanings.reduce((sum, meaning) => sum + meaning.votes, 0);
 
     const chooseMeaning = async (entry: MeaningEntry, meaningId: string) => {
-        await lyricsService.voteMeaning(entry.trackId, meaningId);
+        const previous = selectedMeaning[entry.trackId];
+        if (previous === meaningId) return; // already this pick — server won't re-count
+        void lyricsService.voteMeaning(entry.trackId, meaningId);
+        // Optimistic: move the vote (drop the old pick, add the new) to mirror the
+        // one-vote-per-listener rule the server now enforces.
         setEntries((current) =>
             current.map((item) =>
                 item.trackId === entry.trackId
                     ? {
                         ...item,
-                        meanings: item.meanings.map((meaning) =>
-                            meaning.id === meaningId ? { ...meaning, votes: meaning.votes + 1 } : meaning
-                        ),
+                        meanings: item.meanings.map((meaning) => {
+                            if (meaning.id === meaningId) return { ...meaning, votes: meaning.votes + 1 };
+                            if (meaning.id === previous) return { ...meaning, votes: Math.max(0, meaning.votes - 1) };
+                            return meaning;
+                        }),
                     }
                     : item
             )
@@ -175,15 +298,19 @@ export default function Home() {
     };
 
     const chooseReaction = async (entry: MeaningEntry, reactionId: string) => {
-        await lyricsService.react(entry.trackId, reactionId);
+        const previous = selectedReaction[entry.trackId];
+        if (previous === reactionId) return;
+        void lyricsService.react(entry.trackId, reactionId);
         setEntries((current) =>
             current.map((item) =>
                 item.trackId === entry.trackId
                     ? {
                         ...item,
-                        reactions: item.reactions.map((reaction) =>
-                            reaction.id === reactionId ? { ...reaction, count: reaction.count + 1 } : reaction
-                        ),
+                        reactions: item.reactions.map((reaction) => {
+                            if (reaction.id === reactionId) return { ...reaction, count: reaction.count + 1 };
+                            if (reaction.id === previous) return { ...reaction, count: Math.max(0, reaction.count - 1) };
+                            return reaction;
+                        }),
                     }
                     : item
             )
@@ -285,6 +412,9 @@ export default function Home() {
                             </a>
                             <Link to="/" className="btn-secondary rounded-2xl">
                                 Play the game
+                            </Link>
+                            <Link to="/leaderboard" className="btn-secondary rounded-2xl">
+                                See the rankings
                             </Link>
                         </div>
                         {error ? <p className="text-sm text-amber mt-6">{error}</p> : null}
@@ -393,7 +523,12 @@ export default function Home() {
                             <div className="space-y-3">
                                 {communityStats.freshTakes.length > 0 ? (
                                     communityStats.freshTakes.map((review) => (
-                                        <div key={review.id} className="rounded-2xl bg-black/20 px-4 py-3">
+                                        <button
+                                            key={review.id}
+                                            type="button"
+                                            onClick={() => activateTrack(review.trackId, true)}
+                                            className="block w-full rounded-2xl bg-black/20 px-4 py-3 text-left transition-colors hover:bg-black/30"
+                                        >
                                             <div className="flex items-center justify-between gap-4">
                                                 <div>
                                                     <p className="font-heading font-bold text-text-1 text-lg">
@@ -406,7 +541,7 @@ export default function Home() {
                                                 <span className="text-amber text-sm">{review.rating}/5</span>
                                             </div>
                                             <p className="text-text-2 text-sm mt-3">{review.take}</p>
-                                        </div>
+                                        </button>
                                     ))
                                 ) : (
                                     <div className="rounded-2xl bg-black/20 px-4 py-4">
@@ -421,50 +556,98 @@ export default function Home() {
                 </motion.section>
 
                 <section id="trending" className="mt-16">
-                    <div className="flex items-end justify-between gap-4 mb-6">
+                    <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
                         <div>
                             <p className="label-xs mb-3">Trending</p>
                             <h2 className="font-heading font-bold text-4xl text-text-1 leading-tight">
                                 Songs moving through the room right now.
                             </h2>
                         </div>
-                        <p className="text-text-4 text-sm max-w-sm text-right">
-                            Real track data from Apple. Lyric meaning and reactions layered on top.
-                        </p>
+                        <input
+                            value={searchQuery}
+                            onChange={(event) => setSearchQuery(event.target.value)}
+                            placeholder="Search track, artist, or lyric…"
+                            className="w-full sm:w-72 rounded-full border border-white/10 bg-black/20 px-4 py-2.5 text-sm text-text-1 placeholder:text-text-4 focus:border-amber/40 focus:outline-none"
+                        />
                     </div>
 
-                    <motion.div
-                        variants={staggerContainer}
-                        initial="hidden"
-                        whileInView="visible"
-                        viewport={{ once: true, margin: '-80px' }}
-                        className="flex gap-4 overflow-x-auto pb-2"
-                    >
-                        {entries.map((entry) => (
-                            <motion.article
-                                key={entry.trackId}
-                                variants={staggerItem}
-                                whileHover={{ scale: 1.02, y: -2 }}
-                                className="min-w-[280px] max-w-[280px] shrink-0 rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                    <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+                        <FilterPills
+                            options={browseMoods.map((mood) => ({ value: mood, label: mood === 'all' ? 'All moods' : mood }))}
+                            value={browseMood}
+                            onChange={setBrowseMood}
+                            size="sm"
+                        />
+                        <div className="flex items-center gap-3">
+                            <FilterPills
+                                options={[
+                                    { value: 'popularity', label: 'Hottest' },
+                                    { value: 'recent', label: 'Newest' },
+                                ]}
+                                value={browseSort}
+                                onChange={(value) => setBrowseSort(value as 'popularity' | 'recent')}
+                                size="sm"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setReelsOpen(true)}
+                                disabled={visibleEntries.length === 0}
+                                className="rounded-full border border-amber/35 bg-amber-dim px-4 py-1.5 text-xs font-semibold text-amber transition-colors hover:bg-amber/15 disabled:opacity-40"
                             >
-                                <div className="flex items-center gap-4">
-                                    <img src={entry.albumArt} alt={entry.title} width={80} height={80} loading="lazy" decoding="async" className="h-20 w-20 rounded-2xl object-cover" />
-                                    <div>
-                                        <p className="font-heading font-bold text-xl text-text-1">{entry.title}</p>
-                                        <p className="text-text-3 text-sm mt-1">{entry.artist}</p>
-                                        <p className="text-text-4 text-xs mt-2">
-                                            {entry.mood} · {entry.popularity}/100
+                                ▶ Reels
+                            </button>
+                        </div>
+                    </div>
+
+                    {visibleEntries.length === 0 ? (
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.02] px-6 py-10 text-center">
+                            <p className="text-text-2 text-sm">Nothing matches that yet. Clear the filters to see the full room.</p>
+                        </div>
+                    ) : (
+                        <motion.div
+                            variants={staggerContainer}
+                            initial="hidden"
+                            whileInView="visible"
+                            viewport={{ once: true, margin: '-80px' }}
+                            className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                        >
+                            {pagedEntries.map(({ entry, key }) => {
+                                const active = entry.trackId === activeTrackId;
+                                return (
+                                    <motion.button
+                                        key={key}
+                                        type="button"
+                                        variants={staggerItem}
+                                        whileHover={{ scale: 1.02, y: -2 }}
+                                        onClick={() => activateTrack(entry.trackId, true)}
+                                        className={`w-full rounded-2xl border p-4 text-left transition-colors ${
+                                            active ? 'border-amber/40 bg-amber-dim/40' : 'border-white/10 bg-white/[0.03] hover:border-white/20'
+                                        }`}
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <img src={entry.albumArt} alt={entry.title} width={80} height={80} loading="lazy" decoding="async" className="h-20 w-20 rounded-2xl object-cover" />
+                                            <div>
+                                                <p className="font-heading font-bold text-xl text-text-1">{entry.title}</p>
+                                                <p className="text-text-3 text-sm mt-1">{entry.artist}</p>
+                                                <p className="text-text-4 text-xs mt-2">
+                                                    {entry.mood} · {entry.popularity}/100
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <p className="text-text-2 text-sm mt-4">
+                                            {entry.featured ? entry.lyricsSnippet : entry.album}
                                         </p>
-                                    </div>
-                                </div>
-                                <p className="text-text-2 text-sm mt-4">{entry.lyricsSnippet}</p>
-                            </motion.article>
-                        ))}
-                    </motion.div>
+                                    </motion.button>
+                                );
+                            })}
+                        </motion.div>
+                    )}
+                    {visibleEntries.length > 0 ? <div ref={gridSentinelRef} className="h-px w-full" /> : null}
                 </section>
 
-                <section className="grid grid-cols-12 gap-8 mt-16 items-start">
+                <section id="meaning-lab" className="grid grid-cols-12 gap-8 mt-16 items-start scroll-mt-28">
                     <motion.div
+                        ref={meaningLabRef}
                         initial={{ opacity: 0, y: 24 }}
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true, margin: '-80px' }}
@@ -482,7 +665,7 @@ export default function Home() {
                                         <p className="text-text-2 text-base mt-4 max-w-xl">{activeEntry.shortTake}</p>
                                     </div>
                                     <div className="flex flex-wrap gap-2">
-                                        {entries.map((entry) => (
+                                        {meaningLabTabs.map((entry) => (
                                             <button
                                                 key={entry.trackId}
                                                 type="button"
@@ -622,8 +805,8 @@ export default function Home() {
                                         <button
                                             key={entry.trackId}
                                             type="button"
-                                            onClick={() => setActiveTrackId(entry.trackId)}
-                                            className="w-full rounded-2xl bg-black/20 p-4 text-left"
+                                            onClick={() => activateTrack(entry.trackId, true)}
+                                            className="w-full rounded-2xl bg-black/20 p-4 text-left transition-colors hover:bg-black/30"
                                         >
                                             <p className="font-heading font-bold text-text-1 text-xl">{entry.title}</p>
                                             <p className="text-text-3 text-sm mt-1">{entry.artist}</p>
@@ -818,6 +1001,25 @@ export default function Home() {
                         transition={{ duration: 0.72, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
                         className="col-span-12 lg:col-span-5 rounded-3xl border border-white/10 bg-white/[0.035] p-6"
                     >
+                        {myContributions.length > 0 ? (
+                            <div className="mb-6 rounded-2xl border border-amber/20 bg-amber-dim/30 p-4">
+                                <p className="label-xs mb-3">Your takes</p>
+                                <div className="space-y-3">
+                                    {myContributions.slice(0, 3).map((review) => (
+                                        <button
+                                            key={review.id}
+                                            type="button"
+                                            onClick={() => activateTrack(review.trackId, true)}
+                                            className="block w-full text-left"
+                                        >
+                                            <p className="text-sm font-semibold text-text-1">{review.title}</p>
+                                            <p className="mt-1 text-xs text-text-3">{review.take}</p>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : null}
+
                         <p className="label-xs mb-4">Recent reviews</p>
                         <div className="space-y-4">
                             {reviews.length === 0 ? (
@@ -827,7 +1029,12 @@ export default function Home() {
                                 </div>
                             ) : (
                                 reviews.slice(0, 4).map((review) => (
-                                    <article key={review.id} className="rounded-2xl bg-black/20 p-4">
+                                    <button
+                                        key={review.id}
+                                        type="button"
+                                        onClick={() => activateTrack(review.trackId, true)}
+                                        className="block w-full rounded-2xl bg-black/20 p-4 text-left transition-colors hover:bg-black/30"
+                                    >
                                         <div className="flex items-center gap-4">
                                             <img src={review.albumArt} alt={review.title} width={56} height={56} loading="lazy" decoding="async" className="h-14 w-14 rounded-2xl object-cover" />
                                             <div>
@@ -840,7 +1047,7 @@ export default function Home() {
                                             <span>{review.moodTag}</span>
                                             <span>{review.rating}/5</span>
                                         </div>
-                                    </article>
+                                    </button>
                                 ))
                             )}
                         </div>
@@ -865,6 +1072,20 @@ export default function Home() {
                     </Link>
                 </motion.section>
             </div>
+
+            <AnimatePresence>
+                {reelsOpen ? (
+                    <ReelsFeed
+                        entries={visibleEntries}
+                        selectedMeaning={selectedMeaning}
+                        selectedReaction={selectedReaction}
+                        onChooseMeaning={chooseMeaning}
+                        onChooseReaction={chooseReaction}
+                        onOpenLab={openLabFromReels}
+                        onClose={() => setReelsOpen(false)}
+                    />
+                ) : null}
+            </AnimatePresence>
         </div>
     );
 }

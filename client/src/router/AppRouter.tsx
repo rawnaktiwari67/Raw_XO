@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
+import ScrollToTop from '../components/layout/ScrollToTop';
 // Game is the landing route ("/"). Import it eagerly so the first paint doesn't
 // wait on a second chunk fetch — that extra waterfall hop was inflating LCP.
 // Every other route stays lazy, so the rest of the app is still code-split.
@@ -67,6 +68,7 @@ function PageLoader() {
 export default function AppRouter() {
     return (
         <div className="min-h-screen flex flex-col">
+            <ScrollToTop />
             <Navbar />
             <main className="flex-1">
                 <Suspense fallback={<PageLoader />}>

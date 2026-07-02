@@ -9,11 +9,16 @@
     "build:apps": "npm run build --workspace xo-universe-server && npm run build --workspace xo-universe-client",
     "build:vercel": "npm run typecheck:vercel && npm run build:apps",
     "build": "npm run build:apps",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "dev:server": "npm run dev --workspace xo-universe-server",
     "dev:client": "npm run dev --workspace xo-universe-client -- --host 127.0.0.1"
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.61.5",
     "@clerk/express": "^2.1.5"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.9"
   }
 }

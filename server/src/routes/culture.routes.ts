@@ -6,13 +6,15 @@ import {
     reactToTrack,
     voteMeaning,
 } from '../controllers/culture.controller';
+import { getCultureCatalog } from '../controllers/game.controller';
 import { optionalProtect } from '../middleware/auth.middleware';
 import { cultureWriteLimiter } from '../middleware/rateLimiter';
 import { requireCultureWriteAuth } from '../middleware/security.middleware';
 
 const router = Router();
 
-router.get('/signals', getSignals);
+router.get('/catalog', getCultureCatalog);
+router.get('/signals', optionalProtect, getSignals);
 router.get('/reviews', getReviews);
 router.post('/meaning', optionalProtect, requireCultureWriteAuth, cultureWriteLimiter, voteMeaning);
 router.post('/reaction', optionalProtect, requireCultureWriteAuth, cultureWriteLimiter, reactToTrack);

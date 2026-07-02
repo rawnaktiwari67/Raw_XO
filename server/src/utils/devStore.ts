@@ -62,6 +62,8 @@ type DevCultureSignal = {
     trackId: string;
     meaningVotes: Record<string, number>;
     reactions: Record<string, number>;
+    meaningVoters?: Record<string, string>;
+    reactionVoters?: Record<string, string>;
     updatedAt: string;
 };
 
@@ -330,6 +332,8 @@ export const devStore = {
                         score.artistName.toLowerCase().includes(normalizedScopeValue)) &&
                     (scope !== 'genre' || !normalizedScopeValue || (score.genre || 'all').toLowerCase() === normalizedScopeValue)
                 );
+                const correctCount = scores.filter((score) => score.correct).length;
+                const timed = scores.filter((score) => score.responseTimeMs > 0);
                 return {
                     _id: user._id,
                     username: user.username,
@@ -337,6 +341,10 @@ export const devStore = {
                     levelBadge: user.levelBadge,
                     totalScore: scores.reduce((sum, score) => sum + score.score, 0),
                     sessions: scores.length,
+                    accuracy: scores.length > 0 ? Math.round((correctCount / scores.length) * 100) : 0,
+                    avgResponseMs: timed.length > 0
+                        ? Math.round(timed.reduce((sum, score) => sum + score.responseTimeMs, 0) / timed.length)
+                        : 0,
                     xpTotal: scores.reduce((sum, score) => sum + score.xpEarned, 0),
                 };
             })
@@ -359,29 +367,39 @@ export const devStore = {
         return db.cultureSignals.filter((signal) => requested.has(signal.trackId));
     },
 
-    voteCultureMeaning(trackId: string, meaningId: string) {
+    voteCultureMeaning(trackId: string, meaningId: string, voterKey = '') {
         const db = readDb();
         const now = new Date().toISOString();
         let signal = db.cultureSignals.find((entry) => entry.trackId === trackId);
         if (!signal) {
-            signal = { trackId, meaningVotes: {}, reactions: {}, updatedAt: now };
+            signal = { trackId, meaningVotes: {}, reactions: {}, meaningVoters: {}, reactionVoters: {}, updatedAt: now };
             db.cultureSignals.push(signal);
         }
+        signal.meaningVoters = signal.meaningVoters || {};
+        const previous = voterKey ? signal.meaningVoters[voterKey] : undefined;
+        if (previous === meaningId) return signal;
+        if (previous) signal.meaningVotes[previous] = Math.max(0, (signal.meaningVotes[previous] || 0) - 1);
         signal.meaningVotes[meaningId] = (signal.meaningVotes[meaningId] || 0) + 1;
+        if (voterKey) signal.meaningVoters[voterKey] = meaningId;
         signal.updatedAt = now;
         writeDb(db);
         return signal;
     },
 
-    reactCultureTrack(trackId: string, reactionId: string) {
+    reactCultureTrack(trackId: string, reactionId: string, voterKey = '') {
         const db = readDb();
         const now = new Date().toISOString();
         let signal = db.cultureSignals.find((entry) => entry.trackId === trackId);
         if (!signal) {
-            signal = { trackId, meaningVotes: {}, reactions: {}, updatedAt: now };
+            signal = { trackId, meaningVotes: {}, reactions: {}, meaningVoters: {}, reactionVoters: {}, updatedAt: now };
             db.cultureSignals.push(signal);
         }
+        signal.reactionVoters = signal.reactionVoters || {};
+        const previous = voterKey ? signal.reactionVoters[voterKey] : undefined;
+        if (previous === reactionId) return signal;
+        if (previous) signal.reactions[previous] = Math.max(0, (signal.reactions[previous] || 0) - 1);
         signal.reactions[reactionId] = (signal.reactions[reactionId] || 0) + 1;
+        if (voterKey) signal.reactionVoters[voterKey] = reactionId;
         signal.updatedAt = now;
         writeDb(db);
         return signal;
