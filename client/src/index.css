@@ -754,6 +754,19 @@ h6 {
     rgba(244, 162, 97, 0.36);
 }
 
+/* Fully hides the scrollbar (used by cover carousels that scroll via drag +
+   arrow controls, so the native track never shows). */
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
 /* ─────────────────────────────
    Focus
    ───────────────────────────── */

@@ -9,7 +9,7 @@ import ScrollToTop from '../components/layout/ScrollToTop';
 // Every other route stays lazy, so the rest of the app is still code-split.
 import Game from '../pages/Game';
 
-const Home = lazy(() => import('../pages/Home'));
+const Culture = lazy(() => import('../pages/Culture'));
 const EraPage = lazy(() => import('../pages/EraPage'));
 const ThreadDetail = lazy(() => import('../pages/ThreadDetail'));
 const Profile = lazy(() => import('../pages/Profile'));
@@ -74,7 +74,7 @@ export default function AppRouter() {
                 <Suspense fallback={<PageLoader />}>
                     <Routes>
                         <Route path="/" element={<PageTransition><Game /></PageTransition>} />
-                        <Route path="/archive" element={<PageTransition><Home /></PageTransition>} />
+                        <Route path="/archive" element={<PageTransition><Culture /></PageTransition>} />
                         <Route path="/era/:slug" element={<PageTransition><EraPage /></PageTransition>} />
                         <Route path="/thread/:id" element={<PageTransition><ThreadDetail /></PageTransition>} />
                         <Route path="/login/*" element={<PageTransition><Login /></PageTransition>} />

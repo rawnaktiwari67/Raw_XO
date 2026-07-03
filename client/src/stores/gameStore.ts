@@ -18,6 +18,7 @@ import type {
     GameSession,
 } from '../types/game';
 import { gameService } from '../services/gameService';
+import { useDiaryStore } from './diaryStore';
 
 type Phase = 'idle' | 'playing' | 'answered' | 'result';
 const ROUND_LIMIT = 5;
@@ -303,6 +304,22 @@ export const useGameStore = create<GameState>((set, get) => ({
                         : s.recentSongIds,
                 };
             });
+
+            // Log the heard track into the local listening diary so the culture
+            // page auto-fills from play. songKey embeds the real track id as its
+            // first segment, which is stable across plays (unlike the per-request
+            // token in trackId) and matches the culture catalog's ids.
+            const diaryId = reveal.songKey ? decodeURIComponent(reveal.songKey.split('~')[0]) : reveal.trackId;
+            if (diaryId && reveal.artworkUrl) {
+                useDiaryStore.getState().logPlay({
+                    trackId: diaryId,
+                    title: reveal.correctAnswer,
+                    artist: reveal.correctArtist ?? '',
+                    album: reveal.album,
+                    albumArt: reveal.artworkUrl,
+                    trackUrl: reveal.trackUrl,
+                });
+            }
 
             // Persist in the background — the reveal already showed instantly.
             void gameService.submitAnswer(question.songId, answer, streak, responseTimeMs, roundFilters).catch(() => {});
