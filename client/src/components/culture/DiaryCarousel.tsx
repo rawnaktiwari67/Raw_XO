@@ -33,7 +33,7 @@ function StarRow({ value, onPick }: { value: number | null; onPick: (rating: num
                         aria-label={`Rate ${star} of 5`}
                         onMouseEnter={() => setHover(star)}
                         onClick={() => onPick(star)}
-                        className="rounded text-[18px] leading-none transition-transform duration-150 hover:scale-[1.35] active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/50"
+                        className="rounded px-0.5 py-1.5 text-[18px] leading-none transition-transform duration-150 hover:scale-[1.35] active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/50"
                         style={{
                             color: filled ? '#F4A261' : 'rgba(255,255,255,0.18)',
                             textShadow: filled ? '0 0 10px rgba(244,162,97,0.45)' : 'none',

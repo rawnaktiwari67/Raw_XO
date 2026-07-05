@@ -102,10 +102,10 @@ export default function Culture() {
                 }}
             />
 
-            <div className="relative mx-auto max-w-[1280px] px-6 pb-24 pt-28 md:px-12">
+            <div className="relative mx-auto max-w-[1280px] px-5 pb-20 pt-24 sm:px-6 md:px-12 md:pb-24 md:pt-28">
                 <motion.section variants={pageReveal} initial="hidden" animate="visible">
                     <p className="label-xs mb-4">Your diary</p>
-                    <h1 className="max-w-2xl font-heading text-5xl font-bold leading-[0.95] text-text-1 md:text-7xl">
+                    <h1 className="max-w-2xl font-heading text-[2.5rem] font-bold leading-[0.95] text-text-1 sm:text-5xl md:text-7xl">
                         Every track you&apos;ve called.
                     </h1>
                     <p className="mt-6 max-w-md text-base leading-relaxed text-text-3">
@@ -113,36 +113,42 @@ export default function Culture() {
                         someone else&apos;s opinions.
                     </p>
 
-                    <div className="mt-8 flex flex-wrap gap-3">
-                        <div className="rounded-2xl bg-white/[0.04] px-4 py-3">
-                            <p className="label-xs">Logged</p>
-                            <p className="mt-1 font-heading text-2xl font-bold text-text-1">{stats.logged}</p>
+                    <div className="mt-8 space-y-4">
+                        {/* 3-up grid on phones so the stats stay even instead of wrapping raggedly. */}
+                        <div className="grid grid-cols-3 gap-2.5 sm:inline-grid sm:grid-flow-col sm:auto-cols-max sm:gap-3">
+                            <div className="min-w-0 rounded-2xl bg-white/[0.04] px-3 py-3 sm:px-4">
+                                <p className="label-xs">Logged</p>
+                                <p className="mt-1 font-heading text-2xl font-bold text-text-1">{stats.logged}</p>
+                            </div>
+                            <div className="min-w-0 rounded-2xl bg-white/[0.04] px-3 py-3 sm:px-4">
+                                <p className="label-xs">Avg rating</p>
+                                <p className="mt-1 font-heading text-2xl font-bold text-amber">
+                                    {stats.avgRating !== null ? stats.avgRating.toFixed(1) : '—'}
+                                    <span className="text-sm text-text-4">/5</span>
+                                </p>
+                            </div>
+                            <div className="min-w-0 rounded-2xl bg-white/[0.04] px-3 py-3 sm:px-4">
+                                <p className="label-xs">Top artist</p>
+                                <p className="mt-1 truncate font-heading text-lg font-bold text-text-1 sm:max-w-[10rem]">
+                                    {stats.topArtist ?? '—'}
+                                </p>
+                            </div>
                         </div>
-                        <div className="rounded-2xl bg-white/[0.04] px-4 py-3">
-                            <p className="label-xs">Avg rating</p>
-                            <p className="mt-1 font-heading text-2xl font-bold text-amber">
-                                {stats.avgRating !== null ? stats.avgRating.toFixed(1) : '—'}
-                                <span className="text-sm text-text-4">/5</span>
-                            </p>
+                        {/* Full-width, stacked actions on phones for easy thumb reach. */}
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                            {crate.length > 0 ? (
+                                <button
+                                    type="button"
+                                    onClick={() => setReelsOpen(true)}
+                                    className="btn-primary w-full justify-center rounded-2xl transition-transform hover:-translate-y-0.5 active:scale-[0.99] sm:w-auto"
+                                >
+                                    ▶ Reels
+                                </button>
+                            ) : null}
+                            <Link to="/" className="btn-secondary w-full justify-center rounded-2xl sm:w-auto">
+                                Play a round →
+                            </Link>
                         </div>
-                        <div className="rounded-2xl bg-white/[0.04] px-4 py-3">
-                            <p className="label-xs">Top artist</p>
-                            <p className="mt-1 max-w-[10rem] truncate font-heading text-lg font-bold text-text-1">
-                                {stats.topArtist ?? '—'}
-                            </p>
-                        </div>
-                        {crate.length > 0 ? (
-                            <button
-                                type="button"
-                                onClick={() => setReelsOpen(true)}
-                                className="btn-primary self-center rounded-2xl transition-transform hover:-translate-y-0.5 active:scale-[0.99]"
-                            >
-                                ▶ Reels
-                            </button>
-                        ) : null}
-                        <Link to="/" className="btn-secondary self-center rounded-2xl">
-                            Play a round →
-                        </Link>
                     </div>
                 </motion.section>
 
@@ -183,7 +189,7 @@ export default function Culture() {
                 <motion.div
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-full border border-white/12 bg-black/80 px-5 py-2.5 text-sm text-text-1 backdrop-blur"
+                    className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] left-1/2 z-[60] max-w-[90vw] -translate-x-1/2 truncate rounded-full border border-white/12 bg-black/80 px-5 py-2.5 text-sm text-text-1 backdrop-blur"
                 >
                     {toast}
                 </motion.div>
