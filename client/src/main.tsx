@@ -4,6 +4,7 @@ import { ClerkProvider } from '@clerk/clerk-react';
 import App from './App';
 import './index.css';
 import { clerkPublishableKey, clerkSignInUrl, clerkSignUpUrl, shouldUseClerk } from './services/authMode';
+import { initAnalytics } from './services/analytics';
 
 // Mount film grain layer outside React tree — survives re-renders, no layout impact
 const grain = document.createElement('div');
@@ -20,6 +21,9 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
         });
     });
 }
+
+// Load privacy-friendly analytics (production only, no-op without a website id).
+initAnalytics();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
