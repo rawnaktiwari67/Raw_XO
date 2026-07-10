@@ -40,6 +40,16 @@ export const gameLimiter = rateLimit({
     legacyHeaders: false,
 });
 
+// Stricter than gameLimiter: every request costs a Groq completion (and the
+// trivia route an embedding pass on top).
+export const aiLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 10,
+    message: { success: false, error: 'AI rate limit exceeded, give it a minute.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
 export const voteLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 60,

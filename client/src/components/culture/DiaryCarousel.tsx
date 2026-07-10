@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import type { DiaryTrackSeed } from '../../stores/diaryStore';
+import ScrollReveal from '../motion/ScrollReveal';
+import CoverReveal from '../motion/CoverReveal';
 
 // A card is any track we can show + rate. `rating` is the viewer's current
 // rating for it (null = unrated), overlaid on the cover as a badge.
@@ -58,7 +60,9 @@ export default function DiaryCarousel({ title, hint, cards, onRate, emptyText }:
         <section className="mt-10">
             <div className="mb-4 flex items-baseline justify-between gap-4">
                 <div className="flex items-baseline gap-3">
-                    <h2 className="font-heading text-2xl font-bold leading-tight text-text-1">{title}</h2>
+                    <ScrollReveal as="h2" className="font-heading text-2xl font-bold leading-tight text-text-1">
+                        {title}
+                    </ScrollReveal>
                     {hint ? <span className="text-xs uppercase tracking-[0.16em] text-text-4">{hint}</span> : null}
                 </div>
                 {cards.length > 0 ? (
@@ -97,13 +101,14 @@ export default function DiaryCarousel({ title, hint, cards, onRate, emptyText }:
                     ref={scrollRef}
                     className="hide-scrollbar flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-1"
                 >
-                    {cards.map((card) => (
+                    {cards.map((card, index) => (
                         <motion.div
                             key={card.trackId}
                             whileHover={{ y: -5 }}
                             transition={{ type: 'spring', stiffness: 320, damping: 24 }}
                             className="group w-[154px] flex-none snap-start"
                         >
+                            <CoverReveal delay={Math.min(index * 0.05, 0.35)}>
                             <div className="relative overflow-hidden rounded-2xl bg-white/[0.04] shadow-[0_8px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/5 transition-all duration-300 group-hover:shadow-[0_16px_48px_rgba(0,0,0,0.5)] group-hover:ring-amber/40">
                                 <img
                                     src={card.albumArt}
@@ -125,6 +130,7 @@ export default function DiaryCarousel({ title, hint, cards, onRate, emptyText }:
                                     </span>
                                 ) : null}
                             </div>
+                            </CoverReveal>
                             <p className="mt-2.5 truncate text-sm font-bold text-text-1" title={card.title}>
                                 {card.title}
                             </p>

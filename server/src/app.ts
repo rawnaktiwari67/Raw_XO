@@ -18,6 +18,7 @@ import tourRoutes from './routes/tour.routes';
 import userRoutes from './routes/user.routes';
 import eraRoutes from './routes/era.routes';
 import cultureRoutes from './routes/culture.routes';
+import aiRoutes from './routes/ai.routes';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -100,6 +101,7 @@ app.use('/api/v1/tours', tourRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/eras', eraRoutes);
 app.use('/api/v1/culture', cultureRoutes);
+app.use('/api/v1/ai', aiRoutes);
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 // Public response only exposes coarse status. The raw connection error (which can

@@ -4,6 +4,8 @@ import { tourService } from '../services/tourService';
 import { useDocumentMeta } from '../hooks/useDocumentMeta';
 import type { Tour } from '../types/tour';
 import SpotlightCard from '../components/ui/SpotlightCard';
+import Parallax from '../components/motion/Parallax';
+import Magnetic from '../components/motion/Magnetic';
 
 const FALLBACK_TOURS: Tour[] = [
     {
@@ -200,15 +202,15 @@ export default function Tours() {
                         </p>
 
                         <div className="mt-8 grid grid-cols-3 gap-3">
-                            <div className="rounded-[0.9rem] bg-black/20 p-4">
+                            <div className="rounded-[0.9rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(0,0,0,0.2))] p-4 ring-1 ring-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
                                 <p className="text-xs uppercase tracking-[0.16em] text-text-4">Shows</p>
                                 <p className="mt-2 font-heading text-3xl font-bold text-text-1">{filteredTours.length}</p>
                             </div>
-                            <div className="rounded-[0.9rem] bg-black/20 p-4">
+                            <div className="rounded-[0.9rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(0,0,0,0.2))] p-4 ring-1 ring-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
                                 <p className="text-xs uppercase tracking-[0.16em] text-text-4">Cities</p>
                                 <p className="mt-2 font-heading text-3xl font-bold text-text-1">{cities.length - 1}</p>
                             </div>
-                            <div className="rounded-[0.9rem] bg-black/20 p-4">
+                            <div className="rounded-[0.9rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(0,0,0,0.2))] p-4 ring-1 ring-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
                                 <p className="text-xs uppercase tracking-[0.16em] text-text-4">Source</p>
                                 <p className="mt-2 font-heading text-3xl font-bold text-emerald-200">Live</p>
                             </div>
@@ -218,6 +220,7 @@ export default function Tours() {
                     <aside className="col-span-12 lg:col-span-5 rounded-[1.2rem] border border-white/10 bg-black/25 p-5">
                         <p className="label-xs mb-4">Tonight's first pull</p>
                         {featured ? (
+                            <Parallax distance={18}>
                             <div className={`rounded-[1rem] bg-gradient-to-br ${cityTone(1)} p-5`}>
                                 <p className="font-heading text-3xl font-bold leading-tight text-text-1">
                                     {featured.eventName}
@@ -245,6 +248,7 @@ export default function Tours() {
                                     </a>
                                 </div>
                             </div>
+                            </Parallax>
                         ) : (
                             <div className="rounded-[1rem] bg-white/[0.03] p-5 text-sm text-text-3">No shows loaded yet.</div>
                         )}
@@ -351,14 +355,16 @@ export default function Tours() {
                                                 Open Spotify
                                             </a>
                                             {tour.ticketsAvailable ? (
-                                                <a
-                                                    href={tour.ticketUrl || '#'}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="btn-primary h-10 rounded-full px-4 py-0"
-                                                >
-                                                    Tickets
-                                                </a>
+                                                <Magnetic strength={0.3}>
+                                                    <a
+                                                        href={tour.ticketUrl || '#'}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="btn-primary h-10 rounded-full px-4 py-0"
+                                                    >
+                                                        Tickets
+                                                    </a>
+                                                </Magnetic>
                                             ) : (
                                                 <span className="inline-flex h-10 items-center rounded-full border border-white/12 bg-white/[0.02] px-4 text-xs text-text-3">
                                                     Sold Out

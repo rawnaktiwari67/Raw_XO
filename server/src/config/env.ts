@@ -23,6 +23,8 @@ const getEnv = () => ({
     GAME_ITUNES_TIMEOUT_MS: process.env.GAME_ITUNES_TIMEOUT_MS || '4500',
     GAME_MAX_QUERY_TERMS: process.env.GAME_MAX_QUERY_TERMS || '6',
     GAME_TRACK_CACHE_MS: process.env.GAME_TRACK_CACHE_MS || '600000',
+    GROQ_API_KEY: (process.env.GROQ_API_KEY || '').trim(),
+    GROQ_MODEL: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
     SPOTIFY_CLIENT_ID: process.env.SPOTIFY_CLIENT_ID || '',
     SPOTIFY_CLIENT_SECRET: process.env.SPOTIFY_CLIENT_SECRET || '',
     GAME_SPOTIFY_MARKET: process.env.GAME_SPOTIFY_MARKET || 'US',

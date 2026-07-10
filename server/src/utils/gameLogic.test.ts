@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateScorePayload, guestNameFromId, roundWindowMs, shuffle, GUEST_ADJECTIVES, GUEST_NOUNS } from './gameLogic';
+import { calculateScorePayload, guestNameFromId, roundWindowMs, shuffle, GUEST_ADJECTIVES, GUEST_NOUNS, HINT_POINT_PENALTY, MAX_HINTS_PER_ROUND } from './gameLogic';
 import { DIFFICULTY_ROUND_SECONDS } from '../config/gameConstants';
 
 describe('calculateScorePayload', () => {
@@ -53,6 +53,24 @@ describe('calculateScorePayload', () => {
         const { speedBonus, pointsAwarded } = calculateScorePayload(true, 0, 999999, 'hard');
         expect(speedBonus).toBe(0);
         expect(pointsAwarded).toBe(100);
+    });
+
+    it('deducts the hint penalty from the base before the multiplier', () => {
+        const windowMs = roundWindowMs('medium');
+        // Full window, no bonus: base 100 − 15/hint.
+        expect(calculateScorePayload(true, 0, windowMs, 'medium', 1).pointsAwarded).toBe(100 - HINT_POINT_PENALTY);
+        expect(calculateScorePayload(true, 0, windowMs, 'medium', 2).pointsAwarded).toBe(100 - 2 * HINT_POINT_PENALTY);
+        // The streak multiplier applies AFTER the penalty: (100 − 15) × 1.25.
+        expect(calculateScorePayload(true, 3, windowMs, 'medium', 1).pointsAwarded).toBe(Math.round((100 - HINT_POINT_PENALTY) * 1.25));
+    });
+
+    it('clamps hint counts to the per-round maximum and never goes negative', () => {
+        const windowMs = roundWindowMs('medium');
+        const atMax = calculateScorePayload(true, 0, windowMs, 'medium', MAX_HINTS_PER_ROUND);
+        expect(calculateScorePayload(true, 0, windowMs, 'medium', 99).pointsAwarded).toBe(atMax.pointsAwarded);
+        expect(atMax.pointsAwarded).toBeGreaterThanOrEqual(0);
+        // Negative/missing counts behave like zero hints.
+        expect(calculateScorePayload(true, 0, windowMs, 'medium', -2).pointsAwarded).toBe(100);
     });
 
     it('steps the streak multiplier by 0.25 every 3 streak, capped at 2x', () => {
