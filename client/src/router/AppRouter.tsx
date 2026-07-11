@@ -1,9 +1,12 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { motion, useReducedMotion } from 'framer-motion';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { useSmoothScroll } from '../hooks/useSmoothScroll';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
 import ScrollToTop from '../components/layout/ScrollToTop';
+import IntroReveal from '../components/layout/IntroReveal';
+import ChatWidget from '../components/chat/ChatWidget';
 // Game is the landing route ("/"). Import it eagerly so the first paint doesn't
 // wait on a second chunk fetch — that extra waterfall hop was inflating LCP.
 // Every other route stays lazy, so the rest of the app is still code-split.
@@ -66,13 +69,26 @@ function PageLoader() {
 }
 
 export default function AppRouter() {
+    const location = useLocation();
+    const reducedMotion = useReducedMotion();
+    useSmoothScroll();
+
     return (
         <div className="min-h-screen flex flex-col">
+            <IntroReveal />
             <ScrollToTop />
             <Navbar />
             <main className="flex-1">
                 <Suspense fallback={<PageLoader />}>
-                    <Routes>
+                    {/* Exit is a quick pure fade: ScrollToTop jumps to the top the
+                        moment the path changes, so any transform-based exit would
+                        visibly drag the old page around during that jump. */}
+                    <AnimatePresence mode="wait" initial={false}>
+                        <motion.div
+                            key={location.pathname}
+                            exit={reducedMotion ? undefined : { opacity: 0, transition: { duration: 0.18, ease: 'easeOut' } }}
+                        >
+                    <Routes location={location}>
                         <Route path="/" element={<PageTransition><Game /></PageTransition>} />
                         <Route path="/archive" element={<PageTransition><Culture /></PageTransition>} />
                         <Route path="/era/:slug" element={<PageTransition><EraPage /></PageTransition>} />
@@ -85,9 +101,12 @@ export default function AppRouter() {
                         <Route path="/leaderboard" element={<PageTransition><LeaderboardPage /></PageTransition>} />
                         <Route path="*" element={<Navigate to="/" replace />} />
                     </Routes>
+                        </motion.div>
+                    </AnimatePresence>
                 </Suspense>
             </main>
             <Footer />
+            <ChatWidget />
         </div>
     );
 }

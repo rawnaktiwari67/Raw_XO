@@ -172,6 +172,7 @@ export default function CrateReels({ cards, onRate, onClose }: CrateReelsProps) 
             <div
                 ref={scrollRef}
                 onScroll={handleScroll}
+                data-lenis-prevent
                 className="hide-scrollbar h-[100dvh] w-full snap-y snap-mandatory overflow-y-scroll overscroll-contain"
             >
                 {slides.map(({ card, key }, index) => (

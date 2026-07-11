@@ -117,7 +117,9 @@ export default function Leaderboard({ variant = 'compact' }: LeaderboardProps) {
     };
 
     const podium = isFull ? leaderboard.slice(0, 3) : [];
-    const rest = isFull ? leaderboard.slice(3) : leaderboard;
+    // The compact sidebar shows only the top 5 to stay tight; the full board lives
+    // on the Rank page (linked below). The full variant lists everyone past the podium.
+    const rest = isFull ? leaderboard.slice(3) : leaderboard.slice(0, 5);
 
     // Who is the player chasing? The entry directly above their rank, if visible.
     const yourEntry = useMemo(
@@ -319,6 +321,19 @@ export default function Leaderboard({ variant = 'compact' }: LeaderboardProps) {
                     <ol className="flex flex-col gap-3">
                         {rest.map((entry, index) => renderRow(entry, (isFull ? 4 : 1) + index))}
                     </ol>
+
+                    {/* Compact board is capped at 5 — send the rest to the Rank page. */}
+                    {!isFull && leaderboard.length > 5 ? (
+                        <Link
+                            to="/leaderboard"
+                            className="mt-4 flex items-center justify-center gap-1.5 rounded-[1rem] bg-white/[0.03] px-4 py-3 text-[11px] uppercase tracking-[0.14em] text-text-3 transition-colors hover:bg-white/[0.05] hover:text-text-1"
+                        >
+                            See full leaderboard
+                            <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-3.5 w-3.5">
+                                <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                        </Link>
+                    ) : null}
                 </>
             )}
         </div>

@@ -5,6 +5,7 @@ import { UserButton, useClerk } from '@clerk/clerk-react';
 import { useAuthStore } from '../../stores/authStore';
 import { shouldUseClerk } from '../../services/authMode';
 import { authService } from '../../services/authService';
+import RollText from '../motion/RollText';
 
 const LINKS = [
     { to: '/', label: 'Play' },
@@ -20,8 +21,8 @@ function NavLink({ to, label, onClick }: { to: string; label: string; onClick?: 
         : pathname === to;
 
     return (
-        <Link to={to} onClick={onClick} className={`nav-link ${active ? 'nav-link-active' : ''}`}>
-            {label}
+        <Link to={to} onClick={onClick} className={`nav-link roll-trigger ${active ? 'nav-link-active' : ''}`}>
+            <RollText>{label}</RollText>
         </Link>
     );
 }
@@ -47,8 +48,11 @@ export default function Navbar() {
 
     return (
         <motion.header
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
+            // Opacity only — no transform. A residual transform on this element
+            // (even translateY(0)) makes it a containing block that kills the inner
+            // bar's backdrop-filter blur, so the entrance can't use x/y/scale.
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
             className="fixed inset-x-0 top-0 z-50"
         >
@@ -116,7 +120,7 @@ export default function Navbar() {
                                 >
                                     Sign In
                                 </Link>
-                                <Link to="/register" className="btn-secondary rounded-[1.1rem] px-4 py-2 text-[11px] md:px-5 md:text-xs">
+                                <Link to="/register" className="btn-secondary rounded-[1.1rem] px-4 py-2 text-[11px] opacity-75 transition-opacity hover:opacity-100 md:px-5 md:text-xs">
                                     Join
                                 </Link>
                             </>

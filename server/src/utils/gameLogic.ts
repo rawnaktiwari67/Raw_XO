@@ -18,11 +18,19 @@ export const shuffle = <T>(arr: T[]): T[] => {
 export const roundWindowMs = (difficulty: GameDifficulty): number =>
     (DIFFICULTY_ROUND_SECONDS[difficulty] ?? DIFFICULTY_ROUND_SECONDS.medium) * 1000;
 
+// Each AI hint (POST /ai/hint) shaves points off the round's base score before
+// the streak multiplier. Mirrored by the client's scoreAnswerLocally
+// (stores/gameStore.ts) — change both together or reveals will drift from the
+// server's authoritative re-score.
+export const HINT_POINT_PENALTY = 15;
+export const MAX_HINTS_PER_ROUND = 3;
+
 export const calculateScorePayload = (
     correct: boolean,
     streak: number,
     responseTimeMs: number,
-    difficulty: GameDifficulty
+    difficulty: GameDifficulty,
+    hintsUsed = 0
 ) => {
     if (!correct) {
         return {
@@ -40,7 +48,8 @@ export const calculateScorePayload = (
     const safeResponseTime = responseTimeMs > 0 ? Math.min(responseTimeMs, speedWindowMs) : speedWindowMs;
     const speedBonus = Math.max(0, Math.round(((speedWindowMs - safeResponseTime) / speedWindowMs) * 60));
     const multiplier = Math.min(1 + Math.floor(streak / 3) * 0.25, 2);
-    const pointsAwarded = Math.round((100 + speedBonus) * multiplier);
+    const hintPenalty = Math.min(MAX_HINTS_PER_ROUND, Math.max(0, hintsUsed)) * HINT_POINT_PENALTY;
+    const pointsAwarded = Math.round(Math.max(0, 100 + speedBonus - hintPenalty) * multiplier);
 
     return { pointsAwarded, speedBonus, multiplier };
 };

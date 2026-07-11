@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { animate, AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
-import { useGameStore } from '../../stores/gameStore';
+import { useGameStore, HINT_POINT_PENALTY } from '../../stores/gameStore';
 import { gameService } from '../../services/gameService';
+import { aiService } from '../../services/aiService';
 import { roundSecondsFor } from '../../config/gameConfig';
 import ShareButton from './ShareButton';
 import SoundToggle from './SoundToggle';
@@ -10,6 +11,14 @@ import { unlock, playTick, playCorrect, playWrong, playComplete, vibrate } from 
 import type { GameArtistOption, GameDifficulty, GameGenre, GameLanguage, LeaderboardData } from '../../types/game';
 
 const ROUND_LIMIT = 5;
+
+// Each press of the Hint button walks the server's guessesUsed specificity
+// ladder (see POST /ai/hint: 1-2 vague, 3-4 genre/era, 5+ near-giveaway), so
+// three presses cover the whole range: atmospheric → concrete → almost-there.
+// Every press costs points — the count feeds submitAnswer, where the score
+// penalty is applied (mirrored client/server, see gameStore's HINT_POINT_PENALTY).
+const HINT_LADDER = [1, 3, 5];
+const MAX_HINTS = HINT_LADDER.length;
 
 const GENRE_OPTIONS: Array<{ label: string; value: GameGenre }> = [
     { label: 'All', value: 'all' },
@@ -182,7 +191,7 @@ function FilterRail<T extends string>({
     const interactive = !disabled && !locked;
 
     return (
-        <div className={`min-h-[174px] rounded-[1.1rem] bg-white/[0.025] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] transition-opacity duration-300 ${locked ? 'opacity-55' : ''}`}>
+        <div className={`min-h-0 rounded-[1.1rem] bg-white/[0.025] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] lg:min-h-[200px] transition-opacity duration-300 ${locked ? 'opacity-55' : ''}`}>
             <div className="mb-3 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <p className="label-xs">{label}</p>
@@ -210,8 +219,9 @@ function FilterRail<T extends string>({
                         <motion.button
                             key={option.value}
                             type="button"
-                            whileHover={interactive ? { y: -1, scale: 1.01 } : undefined}
-                            whileTap={interactive ? { scale: 0.99 } : undefined}
+                            whileHover={interactive ? { y: -3, scale: 1.03 } : undefined}
+                            whileTap={interactive ? { scale: 0.98 } : undefined}
+                            transition={{ type: 'spring', stiffness: 420, damping: 26 }}
                             onClick={() => {
                                 if (locked) {
                                     onLockedTap?.();
@@ -221,13 +231,25 @@ function FilterRail<T extends string>({
                             }}
                             disabled={disabled}
                             aria-disabled={locked}
-                            className={`min-h-10 rounded-[0.85rem] px-4 py-2 text-[11px] uppercase tracking-[0.12em] transition-all duration-300 ${
+                            className={`relative min-h-10 rounded-[0.85rem] px-4 py-2 text-[11px] uppercase tracking-[0.12em] transition-[color,background-color,box-shadow] duration-300 ${
                                 active
-                                    ? 'bg-[linear-gradient(180deg,rgba(244,162,97,0.24),rgba(244,162,97,0.09))] text-text-1 ring-1 ring-amber/20'
-                                    : 'bg-white/[0.035] text-text-3 hover:text-text-1'
+                                    ? 'font-semibold text-text-1'
+                                    : 'bg-white/[0.035] text-text-3 hover:bg-white/[0.07] hover:text-text-1 hover:ring-1 hover:ring-white/10 hover:shadow-[0_8px_20px_rgba(0,0,0,0.35)]'
                             } disabled:opacity-60 ${locked ? 'cursor-not-allowed' : ''}`}
                         >
-                            {option.label}
+                            {/* Shared-layout highlight: one pill per rail, matched by
+                                layoutId, so selecting a chip glides the amber fill over
+                                from the previous chip. Sized slightly beyond the chip
+                                (-inset) with an amber bloom so the selection reads bigger. */}
+                            {active ? (
+                                <motion.span
+                                    layoutId={`rail-active-${label}`}
+                                    aria-hidden
+                                    className="absolute -inset-0.5 rounded-[0.95rem] bg-[linear-gradient(180deg,rgba(244,162,97,0.28),rgba(244,162,97,0.11))] ring-1 ring-amber/30 shadow-[0_0_20px_rgba(244,162,97,0.22)]"
+                                    transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                                />
+                            ) : null}
+                            <span className="relative z-[1]">{option.label}</span>
                         </motion.button>
                     );
                 })}
@@ -315,7 +337,7 @@ function ArtistPicker({
     }, [language, normalizedQuery]);
 
     return (
-        <div className="min-h-[174px] rounded-[1.1rem] bg-white/[0.025] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+        <div className="min-h-0 rounded-[1.1rem] bg-white/[0.025] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] lg:min-h-[200px]">
             <div className="mb-3 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <p className="label-xs">Artist Pool</p>
@@ -335,7 +357,19 @@ function ArtistPicker({
                 ) : null}
             </div>
 
-            <div className="relative">
+            {/* This search is the first real interaction, so it's given weight: a
+                leading icon, a brighter resting border, and an amber inset-glow that
+                blooms on focus (the `peer` drives the icon's colour shift too). */}
+            <div className="group relative">
+                <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    aria-hidden
+                    className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-4 transition-colors duration-300 peer-focus:text-amber group-focus-within:text-amber"
+                >
+                    <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+                    <path d="M20 20l-3.2-3.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
                 <input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
@@ -346,7 +380,7 @@ function ArtistPicker({
                     }}
                     placeholder="Search any artist — Don Toliver, Ed Sheeran…"
                     disabled={disabled}
-                    className="h-10 w-full rounded-[0.85rem] bg-black/15 pl-3 pr-9 text-sm text-text-1 outline-none ring-1 ring-white/[0.04] transition-all placeholder:text-text-4 focus:bg-black/20 focus:ring-amber/30"
+                    className="peer h-11 w-full rounded-[0.85rem] bg-black/20 pl-9 pr-9 text-sm text-text-1 outline-none ring-1 ring-white/[0.10] transition-all duration-300 placeholder:text-text-4 focus:bg-black/25 focus:ring-amber/45 focus:shadow-[inset_0_0_0_1px_rgba(244,162,97,0.35),0_0_22px_rgba(244,162,97,0.14)]"
                 />
                 {isSearching ? (
                     <span
@@ -455,29 +489,51 @@ function AudioVisualizer({ active, urgent, hero = false }: { active: boolean; ur
         ? 'linear-gradient(to top, rgba(251,146,60,0.96), rgba(255,210,140,0.48))'
         : 'linear-gradient(to top, rgba(244,162,97,0.92), rgba(255,255,255,0.42))';
 
+    // One bar. Shared between the real row (grows up from its base) and the
+    // reflection (grows down from the top), so both ride the same keyframes and
+    // stay perfectly in phase — the reflection genuinely mirrors the music.
+    const renderBar = (bar: (typeof VIZ_BARS)[number], i: number, heightScale: number, origin: 'top' | 'bottom') => (
+        <div
+            key={i}
+            style={{
+                width: bar.w * s,
+                height: bar.h * s * heightScale,
+                borderRadius: 999,
+                transformOrigin: origin,
+                background: barGrad,
+                transition: 'background 0.35s ease',
+                ...(active
+                    ? {
+                        animation: `${urgent ? 'audioBarUrgent' : 'audioBar'} ${urgent ? Math.round(bar.dur * 0.65) : bar.dur}ms ease-in-out ${bar.delay}ms infinite`,
+                      }
+                    : {
+                        transform: 'scaleY(0.12)',
+                        opacity: 0.38,
+                      }),
+            }}
+        />
+    );
+
     return (
-        <div className="flex items-end" style={{ height: containerH, gap }} aria-hidden>
-            {VIZ_BARS.map((bar, i) => (
-                <div
-                    key={i}
-                    style={{
-                        width: bar.w * s,
-                        height: bar.h * s,
-                        borderRadius: 999,
-                        transformOrigin: 'bottom',
-                        background: barGrad,
-                        transition: 'background 0.35s ease',
-                        ...(active
-                            ? {
-                                animation: `${urgent ? 'audioBarUrgent' : 'audioBar'} ${urgent ? Math.round(bar.dur * 0.65) : bar.dur}ms ease-in-out ${bar.delay}ms infinite`,
-                              }
-                            : {
-                                transform: 'scaleY(0.12)',
-                                opacity: 0.38,
-                              }),
-                    }}
-                />
-            ))}
+        <div className="flex flex-col items-center" aria-hidden>
+            <div className="flex items-end" style={{ height: containerH, gap }}>
+                {VIZ_BARS.map((bar, i) => renderBar(bar, i, 1, 'bottom'))}
+            </div>
+            {/* Reflection — a dim, downward-fading echo of the bars for an
+                equalizer-on-glass sheen. Strongest at the waterline, gone by the bottom. */}
+            <div
+                className="pointer-events-none flex items-start"
+                style={{
+                    height: containerH * 0.42,
+                    gap,
+                    marginTop: 2,
+                    opacity: 0.16,
+                    maskImage: 'linear-gradient(to bottom, #000, transparent)',
+                    WebkitMaskImage: 'linear-gradient(to bottom, #000, transparent)',
+                }}
+            >
+                {VIZ_BARS.map((bar, i) => renderBar(bar, i, 0.42, 'top'))}
+            </div>
         </div>
     );
 }
@@ -552,6 +608,9 @@ export default function GamePlayer() {
     // updated via direct DOM mutation; isUrgent is a one-shot setState.
     const timeLeftRef = useRef(roundSeconds);
     const headerTimerRef = useRef<HTMLSpanElement>(null);
+    // The draining bright overlay copy of the header countdown digit; kept in sync
+    // with headerTimerRef on every tick so the number reads correctly under the fill.
+    const headerTimerFillRef = useRef<HTMLSpanElement>(null);
     const sidebarTimerRef = useRef<HTMLSpanElement>(null);
     // Filters collapse into a compact "Customize" panel on phones so Play isn't
     // buried under four tall cards. Always expanded on desktop (lg+).
@@ -563,6 +622,15 @@ export default function GamePlayer() {
     const [timerActive, setTimerActive] = useState(false);
     const [isUrgent, setIsUrgent] = useState(false);
     const [selectedOption, setSelectedOption] = useState<string | null>(null);
+    // AI hints for the current round. hintsUsedRef mirrors hints.length for the
+    // submit paths (including the timeout effect, which must not re-run — and
+    // reset its clock — when a hint arrives mid-round).
+    const [hints, setHints] = useState<string[]>([]);
+    const [hintLoading, setHintLoading] = useState(false);
+    const hintsUsedRef = useRef(0);
+    // Auto-advance countdown shown on the result screen: 3 → 2 → 1, then the
+    // next clip loads on its own so the session keeps its rhythm. null = off.
+    const [autoNextIn, setAutoNextIn] = useState<number | null>(null);
 
     // Hero card — mouse-reactive glow (parallax spotlight effect).
     // Moved a translate-positioned blurred blob instead of animating a CSS radial
@@ -574,6 +642,41 @@ export default function GamePlayer() {
     const sMY = useSpring(rawMY, { stiffness: 90, damping: 24 });
     const glowX = useTransform(sMX, [0, 1], ['-22%', '22%']);
     const glowY = useTransform(sMY, [0, 1], ['-30%', '30%']);
+
+    // ── "The room listens" ──────────────────────────────────────────────
+    // The signature moment: while a clip plays, an amber pulse swells through the
+    // whole round in time with a beat. The clip audio is cross-origin (iTunes
+    // previews) so it can't be analysed for real amplitude; instead a synthetic
+    // envelope at ~118 BPM — sharp attack, quick decay, plus a softer off-beat —
+    // drives a motion value the backdrop and hero card read from. Skipped on
+    // reduced-motion/low-power (lite) since it's a per-frame animation.
+    const beat = useMotionValue(0);
+    const beatBgOpacity = useTransform(beat, [0, 1], [0, 0.9]);
+    const beatBgScale = useTransform(beat, [0, 1], [1, 1.06]);
+    const beatCardScale = useTransform(beat, [0, 1], [1, 1.012]);
+    const beatGlowOpacity = useTransform(beat, [0, 1], [0.34, 0.95]);
+
+    useEffect(() => {
+        if (lite || phase !== 'playing' || !timerActive) {
+            beat.set(0);
+            return;
+        }
+        let raf = 0;
+        const startedAt = performance.now();
+        const interval = 60 / 118; // seconds per beat
+        const loop = (now: number) => {
+            const t = (now - startedAt) / 1000;
+            const kick = Math.pow(1 - (t % interval) / interval, 2.4);
+            const off = Math.pow(1 - ((t + interval / 2) % interval) / interval, 3) * 0.35;
+            beat.set(Math.min(1, kick + off));
+            raf = requestAnimationFrame(loop);
+        };
+        raf = requestAnimationFrame(loop);
+        return () => {
+            cancelAnimationFrame(raf);
+            beat.set(0);
+        };
+    }, [lite, phase, timerActive, beat]);
 
     const handleHeroMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
         const rect = heroCardRef.current?.getBoundingClientRect();
@@ -619,6 +722,7 @@ export default function GamePlayer() {
             timeLeftRef.current = roundSeconds;
             setIsUrgent(false);
             if (headerTimerRef.current) headerTimerRef.current.textContent = String(roundSeconds);
+            if (headerTimerFillRef.current) headerTimerFillRef.current.textContent = String(roundSeconds);
             if (sidebarTimerRef.current) sidebarTimerRef.current.textContent = String(roundSeconds);
         }
 
@@ -650,6 +754,11 @@ export default function GamePlayer() {
     useEffect(() => {
         if (phase !== 'playing' || !question) return;
 
+        // Fresh round, fresh hint budget.
+        setHints([]);
+        setHintLoading(false);
+        hintsUsedRef.current = 0;
+
         resetPlaybackState();
         void playClip(true);
 
@@ -671,6 +780,7 @@ export default function GamePlayer() {
             timeLeftRef.current = t;
             // Direct DOM mutation — no React re-render per tick.
             if (headerTimerRef.current) headerTimerRef.current.textContent = String(t);
+            if (headerTimerFillRef.current) headerTimerFillRef.current.textContent = String(t);
             if (sidebarTimerRef.current) sidebarTimerRef.current.textContent = String(t);
             if (t === 1) { playTick(); vibrate(20); }
         }, 1000);
@@ -684,7 +794,7 @@ export default function GamePlayer() {
         const timeout = window.setTimeout(() => {
             if (audioRef.current) audioRef.current.pause();
             setTimerActive(false);
-            void submitAnswer('__timeout__', roundSeconds * 1000);
+            void submitAnswer('__timeout__', roundSeconds * 1000, hintsUsedRef.current);
         }, roundSeconds * 1000);
 
         return () => {
@@ -788,7 +898,7 @@ export default function GamePlayer() {
         const responseTimeMs = roundStartedAtRef.current
             ? Math.max(0, Math.round(performance.now() - roundStartedAtRef.current))
             : 0;
-        void submitAnswer(option, responseTimeMs);
+        void submitAnswer(option, responseTimeMs, hintsUsedRef.current);
     };
 
     const handleReveal = () => {
@@ -798,7 +908,25 @@ export default function GamePlayer() {
         const responseTimeMs = roundStartedAtRef.current
             ? Math.max(0, Math.round(performance.now() - roundStartedAtRef.current))
             : 0;
-        void submitAnswer('__skip__', responseTimeMs);
+        void submitAnswer('__skip__', responseTimeMs, hintsUsedRef.current);
+    };
+
+    const handleHint = async () => {
+        if (phase !== 'playing' || !question || hintLoading || hints.length >= MAX_HINTS) return;
+
+        setHintLoading(true);
+        try {
+            const res = await aiService.getHint(question.songId, HINT_LADDER[hints.length]);
+            const hint: unknown = res.data?.data?.hint;
+            if (typeof hint !== 'string' || !hint) throw new Error('Empty hint');
+            setHints((current) => [...current, hint]);
+            // Only a delivered hint costs points — a failed request stays free.
+            hintsUsedRef.current += 1;
+        } catch {
+            showToast('Hints are offline right now.');
+        } finally {
+            setHintLoading(false);
+        }
     };
 
     const handleRate = async (value: number) => {
@@ -831,6 +959,42 @@ export default function GamePlayer() {
         clearSession();
         resetRound();
     };
+
+    // Auto-advance: once a result is on screen (and it isn't the final round),
+    // count 3 → 2 → 1 with a haptic tick each second, then load the next clip so
+    // the session keeps its rhythm. Tapping "Next" advances immediately; leaving
+    // the result screen (or reaching the last round) clears the countdown.
+    useEffect(() => {
+        if (phase !== 'result' || !result || roundsPlayedInSession >= ROUND_LIMIT) {
+            setAutoNextIn(null);
+            return;
+        }
+
+        setAutoNextIn(3);
+        vibrate(12);
+
+        // Track the countdown in a closure and only pass plain values to setState.
+        // Side effects (haptics, advancing the round) run here in the interval body,
+        // never inside a setState updater — an updater that calls store setters fires
+        // "cannot update a component while rendering" because updaters must be pure.
+        let n = 3;
+        const iv = window.setInterval(() => {
+            n -= 1;
+            if (n <= 0) {
+                window.clearInterval(iv);
+                setAutoNextIn(null);
+                vibrate([22, 30, 44]);
+                void handleNext();
+                return;
+            }
+            setAutoNextIn(n);
+            vibrate(12);
+        }, 1000);
+
+        return () => window.clearInterval(iv);
+        // Keyed on the round + phase; handleNext reads live store state on call.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [phase, result, roundsPlayedInSession]);
 
     const resetFilterSession = () => {
         resetPlaybackState();
@@ -946,6 +1110,23 @@ export default function GamePlayer() {
                 />
                 <div aria-hidden className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.42)_76%)]" />
 
+                {/* Beat swell — the whole room brightens on the pulse while a clip
+                    plays. Mounted only during 'playing' so it never touches the
+                    result/idle states, and only when motion is allowed. */}
+                {phase === 'playing' && !lite ? (
+                    <motion.div
+                        aria-hidden
+                        className="pointer-events-none absolute inset-0"
+                        style={{
+                            opacity: beatBgOpacity,
+                            scale: beatBgScale,
+                            background: isUrgent
+                                ? 'radial-gradient(52% 46% at 50% 40%, rgba(251,146,60,0.22), transparent 68%)'
+                                : 'radial-gradient(52% 46% at 50% 40%, rgba(244,162,97,0.18), transparent 68%)',
+                        }}
+                    />
+                ) : null}
+
                 <motion.section
                     initial={{ opacity: 0, scale: 0.985 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -992,7 +1173,23 @@ export default function GamePlayer() {
                                 <p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-text-3 sm:text-[0.6875rem] sm:tracking-[0.12em]">Time</p>
                                 <p className={`font-heading text-[1.15rem] leading-none sm:text-[2.2rem] ${isUrgent ? 'text-orange-100' : 'text-text-1'}`}>
                                     {phase === 'playing'
-                                        ? <span ref={headerTimerRef}>{roundSeconds}</span>
+                                        ? (
+                                            <span className="relative inline-block">
+                                                {/* Dim base digit… */}
+                                                <span ref={headerTimerRef} className="opacity-25">{roundSeconds}</span>
+                                                {/* …with a bright copy whose fill drains away over the round. */}
+                                                <span
+                                                    key={`num-fill-${question?.songId}`}
+                                                    ref={headerTimerFillRef}
+                                                    aria-hidden
+                                                    className={`absolute inset-0 ${isUrgent ? 'text-orange-200' : 'text-amber'}`}
+                                                    style={{
+                                                        animation: `numberDrain ${roundSeconds}s linear both`,
+                                                        animationPlayState: timerActive ? 'running' : 'paused',
+                                                    }}
+                                                >{roundSeconds}</span>
+                                            </span>
+                                        )
                                         : isResult
                                             ? formatResponseTime(result?.responseTimeMs)
                                             : '--'}
@@ -1020,7 +1217,9 @@ export default function GamePlayer() {
                             onMouseMove={handleHeroMouseMove}
                             onMouseLeave={handleHeroMouseLeave}
                             className="relative flex min-h-0 items-center justify-center overflow-hidden rounded-[0.9rem] bg-[linear-gradient(158deg,rgba(20,21,28,0.97),rgba(10,10,14,0.99))] sm:rounded-[1.1rem]"
-                            style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.075), 0 0 0 1px rgba(255,255,255,0.05)' }}
+                            // scale pumps a hair on each beat so the focal card feels
+                            // like it's breathing with the track (1.000 when idle).
+                            style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.075), 0 0 0 1px rgba(255,255,255,0.05)', scale: beatCardScale }}
                         >
                             {/* Mouse-reactive amber spotlight — translate-positioned blob.
                                 Centered via left/top offsets (not translate) so framer's
@@ -1058,6 +1257,21 @@ export default function GamePlayer() {
                                         : 'radial-gradient(46% 54% at 50% 92%, rgba(244,162,97,0.18), transparent)',
                                 }}
                             />
+
+                            {/* Beat throb — the card's amber floor lights up on each
+                                pulse, layered over the slow breath above. Playing only. */}
+                            {phase === 'playing' && !lite ? (
+                                <motion.div
+                                    aria-hidden
+                                    className="pointer-events-none absolute inset-0"
+                                    style={{
+                                        opacity: beatGlowOpacity,
+                                        background: isUrgent
+                                            ? 'radial-gradient(50% 60% at 50% 100%, rgba(251,146,60,0.28), transparent 72%)'
+                                            : 'radial-gradient(50% 60% at 50% 100%, rgba(244,162,97,0.24), transparent 72%)',
+                                    }}
+                                />
+                            ) : null}
 
                             {/* Result-state tint — overlays whole card */}
                             <motion.div
@@ -1250,15 +1464,27 @@ export default function GamePlayer() {
                                             What track is this?
                                         </motion.h2>
 
-                                        {/* Subtitle */}
-                                        <motion.p
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            transition={{ duration: 0.55, delay: 0.2 }}
-                                            className="text-[11px] tracking-[0.04em] text-text-4 sm:text-[12px]"
-                                        >
-                                            Five seconds. Four options. One instinct.
-                                        </motion.p>
+                                        {/* Subtitle — swaps to the latest AI hint once one is bought. */}
+                                        {hints.length > 0 ? (
+                                            <motion.p
+                                                key={`hint-${hints.length}`}
+                                                initial={{ opacity: 0, y: 6 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                                                className="mx-auto max-w-[560px] text-[12px] italic leading-relaxed text-amber/90 sm:text-[13px]"
+                                            >
+                                                “{hints[hints.length - 1]}”
+                                            </motion.p>
+                                        ) : (
+                                            <motion.p
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                transition={{ duration: 0.55, delay: 0.2 }}
+                                                className="text-[11px] tracking-[0.04em] text-text-4 sm:text-[12px]"
+                                            >
+                                                Five seconds. Four options. One instinct.
+                                            </motion.p>
+                                        )}
                                     </motion.div>
                                 )}
                             </AnimatePresence>
@@ -1372,9 +1598,38 @@ export default function GamePlayer() {
                                         whileTap={{ scale: 0.985 }}
                                         onClick={handleNext}
                                         disabled={isLoading}
-                                        className="btn-primary min-h-11 w-full rounded-[0.7rem] text-sm font-semibold disabled:opacity-60"
+                                        className="btn-primary relative min-h-11 w-full overflow-hidden rounded-[0.7rem] text-sm font-semibold disabled:opacity-60"
                                     >
-                                        {isLoading ? 'Loading…' : `Next clip · ${attemptsLeft} left`}
+                                        {/* Countdown progress sweep behind the label. */}
+                                        {autoNextIn !== null ? (
+                                            <motion.span
+                                                aria-hidden
+                                                className="absolute inset-y-0 left-0 bg-black/[0.08]"
+                                                initial={{ width: '100%' }}
+                                                animate={{ width: '0%' }}
+                                                transition={{ duration: 3, ease: 'linear' }}
+                                            />
+                                        ) : null}
+                                        <span className="relative flex items-center justify-center gap-2">
+                                            {isLoading ? (
+                                                'Loading…'
+                                            ) : autoNextIn !== null ? (
+                                                <>
+                                                    Next song in
+                                                    <motion.span
+                                                        key={autoNextIn}
+                                                        initial={{ scale: 0.35, opacity: 0 }}
+                                                        animate={{ scale: 1, opacity: 1 }}
+                                                        transition={{ type: 'spring', stiffness: 520, damping: 20 }}
+                                                        className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-black/15 px-1.5 font-bold tabular-nums"
+                                                    >
+                                                        {autoNextIn}
+                                                    </motion.span>
+                                                </>
+                                            ) : (
+                                                `Next clip · ${attemptsLeft} left`
+                                            )}
+                                        </span>
                                     </motion.button>
                                 )}
                             </div>
@@ -1384,6 +1639,23 @@ export default function GamePlayer() {
                                     {phase === 'answered' ? 'Resolving...' : selectedOption ? 'Locked.' : 'Tap an answer.'}
                                 </p>
                                 <div className="flex shrink-0 gap-1.5 sm:gap-2">
+                                    <motion.button
+                                        type="button"
+                                        whileTap={{ scale: 0.97 }}
+                                        onClick={() => void handleHint()}
+                                        disabled={hintLoading || hints.length >= MAX_HINTS}
+                                        className={`min-h-8 rounded-[0.75rem] px-3 py-2 text-[10px] font-semibold transition-colors sm:min-h-11 sm:rounded-[0.85rem] sm:px-4 sm:py-3 sm:text-xs ${
+                                            hints.length >= MAX_HINTS
+                                                ? 'bg-white/[0.04] text-text-4 ring-1 ring-white/[0.05]'
+                                                : 'bg-amber-dim text-amber ring-1 ring-amber/25 shadow-[inset_0_1px_0_rgba(244,162,97,0.15)] hover:bg-amber/[0.16]'
+                                        } disabled:opacity-70`}
+                                    >
+                                        {hintLoading
+                                            ? 'Hint…'
+                                            : hints.length >= MAX_HINTS
+                                                ? 'No hints left'
+                                                : `Hint −${HINT_POINT_PENALTY} (${MAX_HINTS - hints.length})`}
+                                    </motion.button>
                                     <motion.button
                                         type="button"
                                         whileTap={{ scale: 0.97 }}
@@ -1544,7 +1816,7 @@ export default function GamePlayer() {
                     type="button"
                     onClick={() => setFiltersOpen((open) => !open)}
                     aria-expanded={filtersOpen}
-                    className="flex w-full items-center gap-3 rounded-[1.1rem] bg-white/[0.025] px-4 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] lg:hidden"
+                    className="flex w-full items-center gap-3 rounded-[1.1rem] bg-white/[0.04] px-4 py-3.5 text-left ring-1 ring-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition-colors hover:bg-white/[0.055] lg:hidden"
                 >
                     <span className="min-w-0 flex-1">
                         <span className="label-xs block">Customize</span>
@@ -1560,14 +1832,20 @@ export default function GamePlayer() {
                     </svg>
                 </button>
 
-                <div className={`gap-4 md:grid-cols-2 xl:grid-cols-4 lg:grid ${filtersOpen ? 'mt-4 grid' : 'hidden'}`}>
-                    <ArtistPicker
-                        artists={artistOptions}
-                        value={filters.artist}
-                        onChange={handleArtistChange}
-                        disabled={isLoading}
-                        language={filters.language}
-                    />
+                {/* <640: single column (cards are short now). 640–1279: artist
+                    picker spans full width, the three rails sit 2-up. xl: 4 across. */}
+                {/* Artist gets the widest column — picking an artist is the highest-
+                    stakes choice, so it carries more visual weight than the three rails. */}
+                <div className={`grid-cols-1 gap-3 sm:grid-cols-2 lg:grid xl:grid-cols-[1.6fr_1fr_1fr_1fr] ${filtersOpen ? 'mt-4 grid' : 'hidden'}`}>
+                    <div className="sm:col-span-2 xl:col-span-1">
+                        <ArtistPicker
+                            artists={artistOptions}
+                            value={filters.artist}
+                            onChange={handleArtistChange}
+                            disabled={isLoading}
+                            language={filters.language}
+                        />
+                    </div>
                     <FilterRail label="Genre" options={GENRE_OPTIONS} value={filters.genre} onChange={handleGenreChange} disabled={isLoading} locked={artistLocksFilters} onLockedTap={handleLockedFilterTap} />
                     <FilterRail label="Language" options={LANGUAGE_OPTIONS} value={filters.language} onChange={handleLanguageChange} disabled={isLoading} locked={artistLocksFilters} onLockedTap={handleLockedFilterTap} />
                     <FilterRail label="Difficulty" options={DIFFICULTY_OPTIONS} value={filters.difficulty} onChange={handleDifficultyChange} disabled={isLoading} />
@@ -1588,9 +1866,13 @@ export default function GamePlayer() {
                           : '0 32px 80px rgba(0,0,0,0.22)',
                 }}
                 transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-                className="rounded-[1.5rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.026),rgba(255,255,255,0.012))] p-5 sm:p-8"
+                className="relative overflow-hidden rounded-[1.5rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.055),rgba(255,255,255,0.014))] p-5 ring-1 ring-white/[0.07] sm:p-8"
             >
-                <div className="space-y-6 sm:space-y-8">
+                {/* Material depth: a bright top edge catches the light, and a soft
+                    amber bloom in the corner gives the flat panel a focal warmth. */}
+                <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
+                <div aria-hidden className="pointer-events-none absolute -right-28 -top-28 h-72 w-72 rounded-full bg-[radial-gradient(circle,rgba(244,162,97,0.12),transparent_68%)] blur-2xl" />
+                <div className="relative space-y-6 sm:space-y-8">
                     <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
                         <div className="max-w-2xl space-y-4">
                             <p className="label-xs">Guess Round</p>
@@ -1628,10 +1910,14 @@ export default function GamePlayer() {
                         </div>
                     </div>
 
-                    <div className={`h-1.5 overflow-hidden rounded-full bg-white/[0.06] ${phase === 'idle' ? 'hidden sm:block' : ''}`}>
+                    <div className={`relative h-2 overflow-hidden rounded-full bg-white/[0.05] shadow-[inset_0_1px_2px_rgba(0,0,0,0.4)] ${phase === 'idle' ? 'hidden sm:block' : ''}`}>
                         <div
                             key={`desktop-timer-${question?.songId}`}
-                            className={`h-full rounded-full ${isUrgent ? 'bg-orange-300' : 'bg-amber'}`}
+                            className={`h-full rounded-full ${
+                                isUrgent
+                                    ? 'bg-[linear-gradient(90deg,#fb923c,#fed7a1)] shadow-[0_0_14px_rgba(251,146,60,0.6)]'
+                                    : 'bg-[linear-gradient(90deg,#F6C56B,#F4A261)] shadow-[0_0_14px_rgba(244,162,97,0.5)]'
+                            }`}
                             style={{
                                 animation: `barDrain ${roundSeconds}s linear both`,
                                 animationPlayState: timerActive ? 'running' : 'paused',
@@ -1653,17 +1939,31 @@ export default function GamePlayer() {
                                     {filters.artist === 'all' ? 'The pool spans multiple artists.' : `Now pulling from ${selectedArtistLabel}.`}
                                 </p>
                             </div>
-                            <motion.button
-                                whileHover={{ scale: 1.02, y: -2 }}
-                                whileTap={{ scale: 0.98 }}
-                                onClick={() => {
-                                    void startFreshSession();
-                                }}
-                                disabled={isLoading}
-                                className="btn-primary w-full rounded-[1rem] px-8 py-4 shadow-[0_18px_40px_rgba(244,162,97,0.18)] disabled:opacity-50 sm:w-auto"
-                            >
-                                {isLoading ? 'Loading Clip' : 'Play Round'}
-                            </motion.button>
+                            {/* The primary "where do I click" moment: oversized, amber,
+                                with a soft pulsing bloom behind it so it's the obvious
+                                next action once the filters are set. */}
+                            <div className="relative w-full sm:w-auto">
+                                <motion.span
+                                    aria-hidden
+                                    className="pointer-events-none absolute -inset-2 rounded-[1.6rem] bg-[radial-gradient(circle,rgba(244,162,97,0.4),transparent_70%)] blur-xl"
+                                    animate={isLoading ? { opacity: 0.4 } : { opacity: [0.45, 0.85, 0.45] }}
+                                    transition={isLoading ? { duration: 0.3 } : { duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+                                />
+                                <motion.button
+                                    whileHover={{ scale: 1.03, y: -2 }}
+                                    whileTap={{ scale: 0.97 }}
+                                    onClick={() => {
+                                        void startFreshSession();
+                                    }}
+                                    disabled={isLoading}
+                                    className="btn-primary relative flex w-full items-center justify-center gap-2.5 rounded-[1.15rem] px-10 py-5 text-[15px] font-bold shadow-[0_22px_55px_rgba(244,162,97,0.34)] disabled:opacity-50 sm:w-auto"
+                                >
+                                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-4 w-4 shrink-0">
+                                        <path d="M8 5v14l11-7z" />
+                                    </svg>
+                                    {isLoading ? 'Loading Clip' : 'Start Session'}
+                                </motion.button>
+                            </div>
                         </div>
                     ) : null}
 

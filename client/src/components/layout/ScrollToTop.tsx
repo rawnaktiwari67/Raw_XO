@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { getLenis } from '../../hooks/useSmoothScroll';
 
 // Route changes don't reset scroll on their own. On mobile this made footer links
 // (Create Profile / Sign In) look broken: tapping one from the bottom of a long
@@ -9,7 +10,13 @@ export default function ScrollToTop() {
     const { pathname } = useLocation();
 
     useEffect(() => {
-        window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+        const lenis = getLenis();
+        if (lenis) {
+            // Reset through Lenis so its internal position doesn't fight the jump.
+            lenis.scrollTo(0, { immediate: true, force: true });
+        } else {
+            window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+        }
     }, [pathname]);
 
     return null;

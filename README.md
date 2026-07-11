@@ -15,6 +15,7 @@ No "sign up to continue" wall. Guest mode is instant — you're one tap from a r
 - 🏆 **Leaderboards & profiles.** Daily and all-time boards, sliceable by artist and genre, each with your live rank. Earn XP, climb levels, collect a level badge. Guests rank too — under a stable, randomly-generated handle like "Midnight Vinyl."
 - 📼 **Culture reels.** A scrollable, TikTok-style feed of trending tracks pulled from a curated Spotify pool — sort by Hottest or Newest, vote on what a lyric actually means, react, and leave a rated take.
 - 🎫 **Tour calendar.** Live music listings for Indian cities, with quick links out to tickets.
+- 🔮 **XO Oracle (AI).** A floating trivia chat that answers questions about the game's songs, The Weeknd's album eras, and tour dates — grounded in a locally-embedded knowledge base (RAG), so it says "I don't have info on that" instead of making things up. Plus in-round AI hints that get more specific the more you buy (each costs points, and they never reveal the title or artist). Requires a free `GROQ_API_KEY` — see [AI features](#ai-features-rag-trivia--hints).
 
 ## How a round feels
 
@@ -48,14 +49,15 @@ client/    Vite + React frontend
   src/config/       gameConfig.ts (difficulty timing, mirrors the server)
 
 server/    Express + MongoDB backend
-  src/routes/       auth, game, threads, comments, culture, tours, eras, users
+  src/routes/       auth, game, threads, comments, culture, tours, eras, users, ai
   src/controllers/  business logic per route group
-  src/models/       User, GameScore, TrackRating, Thread, Comment, CultureSignal, CultureReview, Era, Tour
+  src/models/       User, GameScore, TrackRating, Thread, Comment, CultureSignal, CultureReview, Era, Tour, Track, RagChunk
   src/middleware/   auth.middleware.ts, security.middleware.ts, rateLimiter.ts, error.middleware.ts
   src/config/       env.ts, db.ts, gameConstants.ts (difficulty timing, curated artists, genre/language maps)
   src/utils/        gameLogic.ts, xpUtils.ts, jwtUtils.ts, clerkSync.ts, devStore.ts, apiResponse.ts
+  src/ai/           embeddings.ts, vectorStore.ts, groqClient.ts, prompts.ts (RAG pipeline + hint guardrails)
   src/seo/          crawlerMeta.ts (Open Graph tags for bot user-agents)
-  src/data/         seed.ts
+  src/data/         seed.ts, embed.ts (builds the AI knowledge base)
 
 api/index.ts   Serverless entry point that wraps the Express app for Vercel
 ```
@@ -92,13 +94,15 @@ All routes are served under the base path `/api/v1` (mounted in `server/src/app.
 | | `POST /culture/meaning`, `POST /culture/reaction`, `POST /culture/reviews` | optional¹ | Vote a lyric meaning, react, review |
 | Tours | `GET /tours` | — | Live music listings |
 | | `POST /tours`, `PUT /tours/:id` | admin | Create / update a tour record |
+| AI | `POST /ai/trivia` | — | Ask the trivia assistant (RAG over tracks/eras/tours, answers only from retrieved context) |
+| | `POST /ai/hint` | — | Generate a round hint from the encrypted song token; specificity scales with `guessesUsed` |
 | Eras | `GET /eras`, `GET /eras/:slug` | — | Music-era catalog |
 | Users | `GET /users/:username` | — | Public profile |
 | | `GET /users/me/threads`, `GET /users/me/comments`, `PUT /users/me` | auth | Your content / edit profile |
 
 ¹ Culture writes require sign-in when `REQUIRE_AUTH_FOR_CULTURE_WRITES=true`.
 
-Rate limiting is applied per group — `authLimiter`, `apiLimiter`, `writeLimiter`, `voteLimiter`, `cultureWriteLimiter`, and `gameLimiter` all live in `server/src/middleware/rateLimiter.ts`.
+Rate limiting is applied per group — `authLimiter`, `apiLimiter`, `writeLimiter`, `voteLimiter`, `cultureWriteLimiter`, `gameLimiter`, and `aiLimiter` all live in `server/src/middleware/rateLimiter.ts`.
 
 ## Local development
 
@@ -129,6 +133,21 @@ Run the test suite from the repo root:
 npm test
 ```
 
+## AI features (RAG trivia + hints)
+
+The XO Oracle chat and the in-game hint button are powered by two pieces:
+
+- **Groq** (`llama-3.3-70b-versatile`) generates the text. Grab a free API key at [console.groq.com](https://console.groq.com) — no card required — and set `GROQ_API_KEY` in `server/.env`. Without it, the `/ai` routes return 503 and everything else keeps working.
+- **A local knowledge base** grounds the trivia answers. Build it once (and again whenever you reseed):
+
+```
+npm run embed --workspace xo-universe-server
+```
+
+The script snapshots the game's curated song pool into a `Track` collection, renders every Track/Era/Tour document into a sentence, embeds them locally with `@xenova/transformers` (all-MiniLM-L6-v2 — downloaded on first run, no API key), and stores the vectors in a `RagChunk` collection. At question time the server embeds your question with the same model, retrieves the top matches by cosine similarity, and instructs the model to answer **only** from those — anything outside the knowledge base gets "I don't have info on that."
+
+Hints skip retrieval entirely: the round's encrypted song token is decoded server-side, and a tiered prompt (vague → genre/era → near-giveaway, scaling with guesses used) writes the clue. The title and artist are never revealed — that's enforced in the prompt *and* by a deterministic redaction filter on the model's output (`server/src/ai/prompts.ts`). Each hint costs points (`HINT_POINT_PENALTY` in `server/src/utils/gameLogic.ts`, mirrored client-side).
+
 ## Environment variables
 
 ### Frontend
@@ -140,6 +159,13 @@ Required for production:
 - `VITE_API_URL`
 - `VITE_CLERK_PUBLISHABLE_KEY`
 - `VITE_APPLE_MUSIC_COUNTRY`
+
+Optional analytics:
+
+- `VITE_UMAMI_WEBSITE_ID` enables Umami analytics in production builds
+- `VITE_UMAMI_SRC` overrides the tracker script URL (defaults to Umami Cloud)
+- `VITE_UMAMI_HOST_URL` sets Umami's `data-host-url` for self-hosted/proxied collectors
+- `VITE_UMAMI_DOMAINS` limits tracking to a comma-separated hostname allowlist
 
 ### Backend
 
@@ -157,6 +183,8 @@ Create `server/.env` from `server/.env.example`.
 | `GAME_ITUNES_TIMEOUT_MS` | iTunes fetch timeout (clamped 1500–10000ms, default 4500ms) |
 | `GAME_MAX_QUERY_TERMS` | Max artist queries batched per fetch (clamped 2–12, default 6) |
 | `GAME_TRACK_CACHE_MS` | Song-pool cache TTL (default 10 minutes) |
+| `GROQ_API_KEY` | Groq LLM key for the AI trivia chat and hints — free at [console.groq.com](https://console.groq.com), no card required. Optional: without it the `/ai` routes return 503 and the rest of the app is unaffected |
+| `GROQ_MODEL` | Groq model id (default `llama-3.3-70b-versatile`) |
 | `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` | Client Credentials for Spotify public catalog search and the culture-reel catalog |
 | `GAME_SPOTIFY_MARKET` | Spotify market code for popularity/metadata (default `US`) |
 | `GAME_SPOTIFY_TRACK_SEARCH` | Set `true` to use Spotify (instead of iTunes) for game track search |
@@ -210,6 +238,8 @@ GAME_SPOTIFY_MARKET=US
 GAME_SPOTIFY_TRACK_SEARCH=false
 VITE_API_URL=/api/v1
 VITE_APPLE_MUSIC_COUNTRY=IN
+VITE_UMAMI_WEBSITE_ID=your_umami_website_id
+VITE_UMAMI_SRC=https://cloud.umami.is/script.js
 ADMIN_USER_IDS=your_mongo_user_id
 REQUIRE_AUTH_FOR_CULTURE_WRITES=true
 ```
@@ -219,6 +249,13 @@ Optional Spotify artist search and culture catalog:
 ```
 SPOTIFY_CLIENT_ID=your_spotify_client_id
 SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
+```
+
+Optional Umami self-host/proxy settings:
+
+```
+VITE_UMAMI_HOST_URL=https://analytics.your-domain.com
+VITE_UMAMI_DOMAINS=your-domain.com,www.your-domain.com
 ```
 
 `vercel.json` also configures the serverless function (`api/index.ts`, 512MB memory, 30s max duration), a rewrite that routes bot user-agents on `/profile/*`, `/thread/*`, and `/era/*` to the API for server-rendered Open Graph tags (see [Security & performance](#security--performance)), long-lived caching for static assets, and a SPA fallback rewrite (`/* → /index.html`).

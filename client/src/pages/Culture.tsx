@@ -5,6 +5,8 @@ import { useDocumentMeta } from '../hooks/useDocumentMeta';
 import { musicService } from '../services/musicService';
 import type { NormalizedMusicItem } from '../types/culture';
 import DiaryCarousel, { type DiaryCard } from '../components/culture/DiaryCarousel';
+import ScrollReveal from '../components/motion/ScrollReveal';
+import Magnetic from '../components/motion/Magnetic';
 // Lazy: the full-screen crate reels overlay only loads when opened.
 const CrateReels = lazy(() => import('../components/culture/CrateReels'));
 import {
@@ -108,26 +110,26 @@ export default function Culture() {
                     <h1 className="max-w-2xl font-heading text-[2.5rem] font-bold leading-[0.95] text-text-1 sm:text-5xl md:text-7xl">
                         Every track you&apos;ve called.
                     </h1>
-                    <p className="mt-6 max-w-md text-base leading-relaxed text-text-3">
+                    <ScrollReveal className="mt-6 max-w-md text-base leading-relaxed text-text-3">
                         Rate what you hear and it lands here — a running record of your taste, not a wall of
-                        someone else&apos;s opinions.
-                    </p>
+                        someone else's opinions.
+                    </ScrollReveal>
 
                     <div className="mt-8 space-y-4">
                         {/* 3-up grid on phones so the stats stay even instead of wrapping raggedly. */}
                         <div className="grid grid-cols-3 gap-2.5 sm:inline-grid sm:grid-flow-col sm:auto-cols-max sm:gap-3">
-                            <div className="min-w-0 rounded-2xl bg-white/[0.04] px-3 py-3 sm:px-4">
+                            <div className="min-w-0 rounded-2xl bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] px-3 py-3 ring-1 ring-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:px-4">
                                 <p className="label-xs">Logged</p>
                                 <p className="mt-1 font-heading text-2xl font-bold text-text-1">{stats.logged}</p>
                             </div>
-                            <div className="min-w-0 rounded-2xl bg-white/[0.04] px-3 py-3 sm:px-4">
+                            <div className="min-w-0 rounded-2xl bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] px-3 py-3 ring-1 ring-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:px-4">
                                 <p className="label-xs">Avg rating</p>
                                 <p className="mt-1 font-heading text-2xl font-bold text-amber">
                                     {stats.avgRating !== null ? stats.avgRating.toFixed(1) : '—'}
                                     <span className="text-sm text-text-4">/5</span>
                                 </p>
                             </div>
-                            <div className="min-w-0 rounded-2xl bg-white/[0.04] px-3 py-3 sm:px-4">
+                            <div className="min-w-0 rounded-2xl bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] px-3 py-3 ring-1 ring-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:px-4">
                                 <p className="label-xs">Top artist</p>
                                 <p className="mt-1 truncate font-heading text-lg font-bold text-text-1 sm:max-w-[10rem]">
                                     {stats.topArtist ?? '—'}
@@ -137,13 +139,15 @@ export default function Culture() {
                         {/* Full-width, stacked actions on phones for easy thumb reach. */}
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                             {crate.length > 0 ? (
-                                <button
-                                    type="button"
-                                    onClick={() => setReelsOpen(true)}
-                                    className="btn-primary w-full justify-center rounded-2xl transition-transform hover:-translate-y-0.5 active:scale-[0.99] sm:w-auto"
-                                >
-                                    ▶ Reels
-                                </button>
+                                <Magnetic className="w-full sm:w-auto">
+                                    <button
+                                        type="button"
+                                        onClick={() => setReelsOpen(true)}
+                                        className="btn-primary w-full justify-center rounded-2xl transition-transform active:scale-[0.99]"
+                                    >
+                                        ▶ Reels
+                                    </button>
+                                </Magnetic>
                             ) : null}
                             <Link to="/" className="btn-secondary w-full justify-center rounded-2xl sm:w-auto">
                                 Play a round →
