@@ -21,6 +21,7 @@ export default function ThreadDetail() {
     const { user, isAuthenticated } = useAuthStore();
     const [commentBody, setCommentBody] = useState('');
     const [posting, setPosting] = useState(false);
+    const [postError, setPostError] = useState('');
 
     useEffect(() => {
         if (!id) return;
@@ -30,14 +31,21 @@ export default function ThreadDetail() {
     }, [id, fetchThread, fetchComments, clearComments]);
 
     const topLevel = comments.filter((c) => !c.parent);
+    // Tombstones (soft-deleted comments kept to anchor reply chains) shouldn't
+    // inflate the visible count.
+    const visibleCount = comments.filter((c) => !c.isDeleted).length;
 
     const handleComment = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!commentBody.trim() || !id) return;
         setPosting(true);
+        setPostError('');
         try {
             await addComment({ threadId: id, body: commentBody });
             setCommentBody('');
+        } catch {
+            // A swallowed failure looks like a dead button — say what happened.
+            setPostError('Could not post your comment — try again.');
         } finally {
             setPosting(false);
         }
@@ -138,6 +146,7 @@ export default function ThreadDetail() {
 
             {/* Comment Form */}
             {isAuthenticated ? (
+                <>
                 <form onSubmit={handleComment} className="glass-surface p-4 mb-6 flex gap-3">
                     <textarea
                         value={commentBody}
@@ -154,6 +163,10 @@ export default function ThreadDetail() {
                         {posting ? '...' : 'Post'}
                     </button>
                 </form>
+                {postError && (
+                    <p className="-mt-4 mb-6 text-xs text-red-400">{postError}</p>
+                )}
+                </>
             ) : (
                 <div className="glass-surface p-4 mb-6 text-center text-text-subtle text-sm">
                     <Link to="/login" className="text-sunset-orange hover:text-peach-glow">Login</Link> to join the discussion
@@ -162,7 +175,7 @@ export default function ThreadDetail() {
 
             {/* Comments */}
             <div className="glass-surface p-4">
-                <h2 className="font-heading font-semibold text-text-warm mb-4">{comments.length} Comments</h2>
+                <h2 className="font-heading font-semibold text-text-warm mb-4">{visibleCount} Comments</h2>
                 {commentsLoading ? (
                     <div className="flex flex-col gap-3">{[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-white/5 rounded-xl animate-pulse" />)}</div>
                 ) : topLevel.length === 0 ? (

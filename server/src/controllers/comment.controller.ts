@@ -25,13 +25,19 @@ export const getComments = async (req: Request, res: Response): Promise<void> =>
         const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 50));
         const skip = (pageNum - 1) * limitNum;
 
-        const comments = await Comment.find({ thread: threadId, isDeleted: false })
+        // Soft-deleted comments are returned as redacted tombstones instead of
+        // being filtered out — dropping them would orphan every reply nested
+        // beneath them (replies only render inside their parent's card). The
+        // client decides whether a tombstone is worth showing.
+        const comments = await Comment.find({ thread: threadId })
             .sort({ createdAt: 1 })
             .skip(skip)
             .limit(limitNum)
-            .populate('author', 'username avatar levelBadge');
+            .populate('author', 'username avatar levelBadge')
+            .lean();
 
-        res.json(successResponse(comments));
+        const redacted = comments.map((c) => (c.isDeleted ? { ...c, body: '' } : c));
+        res.json(successResponse(redacted));
     } catch {
         res.status(500).json(errorResponse('Server error'));
     }
@@ -111,7 +117,11 @@ export const updateComment = async (req: Request, res: Response): Promise<void> 
         }
         comment.body = body;
         await comment.save();
-        res.json(successResponse(comment, 'Comment updated'));
+        // Populate the author like createComment does — the client swaps the
+        // whole object into its store, so a raw ObjectId here would blank the
+        // username/badge and hide the author's own Edit/Delete buttons.
+        const populated = await comment.populate('author', 'username avatar levelBadge');
+        res.json(successResponse(populated, 'Comment updated'));
     } catch {
         res.status(500).json(errorResponse('Server error'));
     }

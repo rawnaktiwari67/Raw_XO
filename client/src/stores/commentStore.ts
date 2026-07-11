@@ -39,7 +39,14 @@ export const useCommentStore = create<CommentState>((set) => ({
 
     removeComment: async (id) => {
         await commentService.delete(id);
-        set((s) => ({ comments: s.comments.filter((c) => c._id !== id) }));
+        // Soft-delete in place to mirror the server: filtering the comment out
+        // entirely would unmount its card — and every reply nested under it —
+        // instead of showing the intended '[deleted]' tombstone.
+        set((s) => ({
+            comments: s.comments.map((c) =>
+                c._id === id ? { ...c, isDeleted: true, body: '' } : c
+            ),
+        }));
     },
 
     voteComment: async (id, userId) => {

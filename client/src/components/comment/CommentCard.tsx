@@ -27,6 +27,7 @@ export default function CommentCard({ comment, threadId, depth = 0, allComments 
     const [replyText, setReplyText] = useState('');
     const [isEditing, setIsEditing] = useState(false);
     const [editText, setEditText] = useState(comment.body);
+    const [actionError, setActionError] = useState('');
     const { user } = useAuthStore();
     const { addComment, editComment, removeComment, voteComment } = useCommentStore();
 
@@ -36,16 +37,30 @@ export default function CommentCard({ comment, threadId, depth = 0, allComments 
 
     const handleReply = async () => {
         if (!replyText.trim()) return;
-        await addComment({ threadId, parentId: comment._id, body: replyText });
-        setReplyText('');
-        setShowReply(false);
+        setActionError('');
+        try {
+            await addComment({ threadId, parentId: comment._id, body: replyText });
+            setReplyText('');
+            setShowReply(false);
+        } catch {
+            setActionError('Could not post your reply — try again.');
+        }
     };
 
     const handleEdit = async () => {
         if (!editText.trim()) return;
-        await editComment(comment._id, editText);
-        setIsEditing(false);
+        setActionError('');
+        try {
+            await editComment(comment._id, editText);
+            setIsEditing(false);
+        } catch {
+            setActionError('Could not save your edit — try again.');
+        }
     };
+
+    // A deleted comment with nothing under it is pure noise — only keep the
+    // '[deleted]' tombstone when it's holding a reply chain in place.
+    if (comment.isDeleted && replies.length === 0) return null;
 
     return (
         <div className={`${depth > 0 ? 'ml-6 border-l border-white/10 pl-4' : ''}`}>
@@ -109,6 +124,11 @@ export default function CommentCard({ comment, threadId, depth = 0, allComments 
                             </>
                         )}
                     </div>
+                )}
+
+                {/* Action feedback */}
+                {actionError && (
+                    <p className="mt-2 text-xs text-red-400">{actionError}</p>
                 )}
 
                 {/* Reply input */}
