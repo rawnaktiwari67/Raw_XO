@@ -60,10 +60,13 @@ export default function ChatWidget() {
         if (!trimmed || isLoading) return;
 
         setInput('');
+        // Snapshot the conversation BEFORE appending the new question — error
+        // bubbles are UI chrome, not conversation, so they stay out of history.
+        const history = turns.filter((turn) => !turn.error).slice(-6);
         setTurns((current) => [...current, { role: 'user', text: trimmed }]);
         setIsLoading(true);
         try {
-            const res = await aiService.askTrivia(trimmed);
+            const res = await aiService.askTrivia(trimmed, history);
             const payload = res.data?.data as TriviaAnswer | undefined;
             if (!payload?.answer) throw new Error('Invalid trivia payload');
             setTurns((current) => [...current, { role: 'assistant', text: payload.answer }]);

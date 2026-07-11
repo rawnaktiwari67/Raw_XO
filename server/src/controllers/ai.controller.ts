@@ -3,10 +3,36 @@ import { isDbConnected } from '../config/db';
 import { successResponse, errorResponse } from '../utils/apiResponse';
 import { decodeSongToken } from '../utils/songTokens';
 import { chatCompletion, hasGroqKey } from '../ai/groqClient';
-import { retrieveTopK, hasKnowledgeBase } from '../ai/vectorStore';
-import { buildTriviaMessages, buildHintMessages, redactHintLeaks, TRIVIA_FALLBACK } from '../ai/prompts';
+import { retrieveTopKMulti, hasKnowledgeBase } from '../ai/vectorStore';
+import {
+    buildTriviaMessages, buildHintMessages, redactHintLeaks,
+    TRIVIA_FALLBACK, TriviaHistoryTurn,
+} from '../ai/prompts';
 
 const MAX_QUESTION_LENGTH = 500;
+
+// Follow-up support: how much of the widget conversation is replayed to the
+// model, and how long any single replayed turn may be. Enough to resolve
+// "when did IT come out?", small enough that history can't balloon the prompt.
+const MAX_HISTORY_TURNS = 6;
+const MAX_HISTORY_TEXT_LENGTH = 500;
+
+// Anything malformed is silently dropped rather than rejected — history is a
+// nicety, and a stale client that doesn't send it must keep working.
+const parseHistory = (raw: unknown): TriviaHistoryTurn[] => {
+    if (!Array.isArray(raw)) return [];
+    return raw
+        .filter((turn): turn is { role: string; text: string } =>
+            typeof turn === 'object' && turn !== null
+            && ((turn as { role?: unknown }).role === 'user' || (turn as { role?: unknown }).role === 'assistant')
+            && typeof (turn as { text?: unknown }).text === 'string'
+            && Boolean((turn as { text: string }).text.trim()))
+        .slice(-MAX_HISTORY_TURNS)
+        .map((turn) => ({
+            role: turn.role as TriviaHistoryTurn['role'],
+            text: turn.text.trim().slice(0, MAX_HISTORY_TEXT_LENGTH),
+        }));
+};
 
 // Hint tiers cap at "5+ guesses" — anything above 8 changes nothing, so clamp
 // rather than reject.
@@ -41,7 +67,15 @@ export const askTrivia = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        const chunks = await retrieveTopK(question);
+        const history = parseHistory(req.body.history);
+
+        // A follow-up like "and what songs are on it?" embeds to nothing useful
+        // on its own — the entity it refers to lives in the previous user turn.
+        // Retrieve on both the raw question and a history-expanded phrasing and
+        // let the best-scoring chunks win (retrieveTopKMulti merges by score).
+        const lastUserTurn = [...history].reverse().find((turn) => turn.role === 'user');
+        const queries = lastUserTurn ? [question, `${lastUserTurn.text} ${question}`] : [question];
+        const chunks = await retrieveTopKMulti(queries);
 
         // Nothing cleared the relevance floor — skip the LLM call entirely.
         // Answering from zero context could only produce hallucination.
@@ -50,7 +84,7 @@ export const askTrivia = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        const answer = await chatCompletion(buildTriviaMessages(question, chunks), {
+        const answer = await chatCompletion(buildTriviaMessages(question, chunks, history), {
             maxTokens: 220,
             temperature: 0.2,
         });

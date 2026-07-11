@@ -83,6 +83,24 @@ export const retrieveTopK = async (query: string, k = 6): Promise<RetrievedChunk
         .slice(0, k);
 };
 
+/**
+ * Retrieve against several phrasings of the same information need (e.g. the
+ * raw question and a history-expanded version of it) and merge by best score.
+ * Embeddings are local, so extra queries cost milliseconds, not money.
+ */
+export const retrieveTopKMulti = async (queries: string[], k = 6): Promise<RetrievedChunk[]> => {
+    const results = await Promise.all(queries.map((query) => retrieveTopK(query, k)));
+
+    const best = new Map<string, RetrievedChunk>();
+    for (const chunk of results.flat()) {
+        const key = `${chunk.source}:${chunk.refId}:${chunk.text}`;
+        const existing = best.get(key);
+        if (!existing || chunk.score > existing.score) best.set(key, chunk);
+    }
+
+    return [...best.values()].sort((a, b) => b.score - a.score).slice(0, k);
+};
+
 export const hasKnowledgeBase = async (): Promise<boolean> => {
     const chunks = await loadChunks();
     return chunks.length > 0;
