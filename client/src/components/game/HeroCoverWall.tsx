@@ -51,15 +51,16 @@ const ROWS = [
 // Full-bleed ambient album-art mosaic behind the hero. A masked, slowly breathing
 // wall of covers — present enough to set the tone, feathered and scrimmed so the
 // headline always sits on darkness. Mounted post-paint (see Game.tsx) so it never
-// blocks LCP, and desktop-only so low-power screens skip the work entirely.
+// blocks LCP. Runs on all screen sizes: every animation here is compositor-only
+// CSS, so phones handle it fine.
 export default function HeroCoverWall() {
     const [covers, setCovers] = useState<string[]>([]);
     const reduced = useReducedMotion();
 
     // Cursor parallax: the whole mosaic leans a few pixels toward the pointer.
     // Springs on the raw pointer offset so it glides rather than snaps. Listener
-    // lives on window (the wall itself is pointer-events-none) and is desktop-only
-    // by virtue of where this component mounts (see Game.tsx).
+    // lives on window (the wall itself is pointer-events-none); touch devices
+    // simply never fire mousemove, so the wall stays still there.
     const px = useSpring(0, { stiffness: 60, damping: 20, mass: 0.6 });
     const py = useSpring(0, { stiffness: 60, damping: 20, mass: 0.6 });
 

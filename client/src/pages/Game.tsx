@@ -12,8 +12,8 @@ import ScrollReveal from '../components/motion/ScrollReveal';
 import Magnetic from '../components/motion/Magnetic';
 import PinnedShowcase, { type ShowcasePanel } from '../components/motion/PinnedShowcase';
 
-// three.js is the heaviest dependency in the bundle (~492KB). Lazy-load it so it
-// never blocks the initial paint, and only mount it once the page is idle.
+// Raw-WebGL beam (a few KB — three.js is gone). Still lazy so the shader code
+// never blocks the initial paint; it mounts a beat after the LCP headline.
 const LaserFlow = lazy(() => import('../components/effects/LaserFlow'));
 // Album-art wall for the hero — lazy + post-idle so its imagery never competes
 // with the LCP headline for bandwidth on first paint.
@@ -120,7 +120,8 @@ export default function Game() {
     const { stats, history, phase, isLoading, fetchStats, fetchHistory } = useGameStore();
     const isGameplayActive = phase !== 'idle' || isLoading;
     const [showLaser, setShowLaser] = useState(false);
-    // Album-art wall mounts shortly after first paint (desktop, motion allowed).
+    // Album-art wall mounts shortly after first paint (motion allowed; all
+    // screen sizes — it's compositor-only CSS animation, cheap even on phones).
     // setTimeout — not requestIdleCallback — so it fires reliably even in a
     // backgrounded tab, while still landing after the LCP headline has painted.
     const [showImagery, setShowImagery] = useState(false);
@@ -134,25 +135,20 @@ export default function Game() {
 
     useEffect(() => {
         const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        if (reduced || window.innerWidth < 768) return;
+        if (reduced) return;
         const t = window.setTimeout(() => setShowImagery(true), 350);
         return () => window.clearTimeout(t);
     }, []);
 
-    // Mount the WebGL backdrop only after the page is idle, and never for users
-    // who prefer reduced motion or are on a small/low-power screen.
+    // Mount the WebGL backdrop a beat after first paint — the raw-WebGL chunk is
+    // tiny, so the only reason to wait is to keep the LCP headline's paint clean.
+    // Still skipped for reduced motion and small/low-power screens.
     useEffect(() => {
         const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         if (reduced || window.innerWidth < 768) return;
 
-        const idle = window.requestIdleCallback
-            ? window.requestIdleCallback(() => setShowLaser(true), { timeout: 1500 })
-            : window.setTimeout(() => setShowLaser(true), 600);
-
-        return () => {
-            if (window.cancelIdleCallback && typeof idle === 'number') window.cancelIdleCallback(idle);
-            else window.clearTimeout(idle as number);
-        };
+        const t = window.setTimeout(() => setShowLaser(true), 400);
+        return () => window.clearTimeout(t);
     }, []);
 
     useEffect(() => {
@@ -171,7 +167,9 @@ export default function Game() {
 
     if (isGameplayActive) {
         return (
-            <div className="gameplay-page relative h-screen overflow-hidden">
+            // dvh tracks the visible viewport on mobile (URL bar collapse), so
+            // gameplay controls never sit under the browser chrome.
+            <div className="gameplay-page relative h-screen overflow-hidden supports-[height:100dvh]:h-[100dvh]">
                 <GamePlayer />
             </div>
         );

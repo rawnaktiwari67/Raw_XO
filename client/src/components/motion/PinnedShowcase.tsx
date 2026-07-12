@@ -88,7 +88,9 @@ export default function PinnedShowcase({ panels }: { panels: ShowcasePanel[] }) 
 
     return (
         <section ref={ref} style={{ height: `${panels.length * 100}vh` }} className="relative">
-            <div className="sticky top-0 flex h-screen items-center overflow-hidden">
+            {/* dvh so the pinned frame always fills the *visible* viewport on
+                mobile — with plain 100vh the collapsed URL bar crops the CTA. */}
+            <div className="sticky top-0 flex h-screen items-center overflow-hidden supports-[height:100dvh]:h-[100dvh]">
                 <div className="relative mx-auto h-full w-full max-w-[1280px]">
                     {panels.map((panel, index) => (
                         <Panel

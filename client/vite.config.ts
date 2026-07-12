@@ -29,7 +29,6 @@ export default defineConfig(({ command, mode }) => {
       output: {
         manualChunks(id) {
           if (id.includes('node_modules/@clerk')) return 'clerk';
-          if (id.includes('node_modules/three')) return 'three';
           if (id.includes('node_modules/framer-motion')) return 'motion';
           if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router-dom')) {
             return 'react-vendor';

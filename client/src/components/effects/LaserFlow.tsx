@@ -1,6 +1,11 @@
 import { useEffect, useRef } from 'react';
-import * as THREE from 'three';
 import './LaserFlow.css';
+
+// Raw WebGL implementation — this component used to pull in three.js (~492KB,
+// the largest chunk in the bundle) just to draw one fullscreen triangle with a
+// custom shader. Talking to WebGL directly keeps the exact same shader and
+// visuals while shrinking the lazy chunk to a few KB, so the beam appears
+// almost immediately on a cold deploy instead of seconds after first paint.
 
 const VERT = `
 precision highp float;
@@ -273,6 +278,132 @@ const hexToRGB = (hex: string): { r: number; g: number; b: number } => {
     };
 };
 
+// Every scalar uniform the props effect keeps live. Uploaded each frame — a
+// couple dozen uniform1f calls are negligible next to the fragment work, and
+// it makes context-restore trivial (no dirty tracking to rebuild).
+type UniformValues = {
+    wispDensity: number;
+    tiltScale: number;
+    beamXFrac: number;
+    beamYFrac: number;
+    flowSpeed: number;
+    vLenFactor: number;
+    hLenFactor: number;
+    fogIntensity: number;
+    fogScale: number;
+    wSpeed: number;
+    wIntensity: number;
+    flowStrength: number;
+    decay: number;
+    falloffStart: number;
+    fogFallSpeed: number;
+    color: { r: number; g: number; b: number };
+};
+
+type GLState = {
+    gl: WebGLRenderingContext;
+    program: WebGLProgram;
+    buffer: WebGLBuffer;
+    loc: Record<string, WebGLUniformLocation | null>;
+};
+
+const UNIFORM_NAMES = [
+    'iTime',
+    'iResolution',
+    'iMouse',
+    'uWispDensity',
+    'uTiltScale',
+    'uFlowTime',
+    'uFogTime',
+    'uBeamXFrac',
+    'uBeamYFrac',
+    'uFlowSpeed',
+    'uVLenFactor',
+    'uHLenFactor',
+    'uFogIntensity',
+    'uFogScale',
+    'uWSpeed',
+    'uWIntensity',
+    'uFlowStrength',
+    'uDecay',
+    'uFalloffStart',
+    'uFogFallSpeed',
+    'uColor',
+    'uFade',
+] as const;
+
+function compileShader(gl: WebGLRenderingContext, type: number, source: string): WebGLShader | null {
+    const shader = gl.createShader(type);
+    if (!shader) return null;
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        // A failed compile leaves the backdrop invisible but must never crash the page.
+        console.error('LaserFlow shader compile failed:', gl.getShaderInfoLog(shader));
+        gl.deleteShader(shader);
+        return null;
+    }
+    return shader;
+}
+
+function initGL(canvas: HTMLCanvasElement): GLState | null {
+    const gl = canvas.getContext('webgl', {
+        antialias: false,
+        alpha: false,
+        depth: false,
+        stencil: false,
+        powerPreference: 'high-performance',
+        premultipliedAlpha: false,
+        preserveDrawingBuffer: false,
+        failIfMajorPerformanceCaveat: false,
+    }) as WebGLRenderingContext | null;
+    if (!gl) return null;
+
+    // Defines GL_OES_standard_derivatives so the shader's fwidth() branch is taken.
+    gl.getExtension('OES_standard_derivatives');
+
+    const vert = compileShader(gl, gl.VERTEX_SHADER, VERT);
+    const frag = compileShader(gl, gl.FRAGMENT_SHADER, FRAG);
+    if (!vert || !frag) return null;
+
+    const program = gl.createProgram();
+    if (!program) return null;
+    gl.attachShader(program, vert);
+    gl.attachShader(program, frag);
+    gl.linkProgram(program);
+    gl.deleteShader(vert);
+    gl.deleteShader(frag);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        console.error('LaserFlow program link failed:', gl.getProgramInfoLog(program));
+        gl.deleteProgram(program);
+        return null;
+    }
+
+    // One fullscreen triangle (overshoots the viewport so no seam/diagonal).
+    const buffer = gl.createBuffer();
+    if (!buffer) return null;
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0]),
+        gl.STATIC_DRAW
+    );
+
+    gl.useProgram(program);
+    const positionLoc = gl.getAttribLocation(program, 'position');
+    gl.enableVertexAttribArray(positionLoc);
+    gl.vertexAttribPointer(positionLoc, 3, gl.FLOAT, false, 0, 0);
+
+    const loc: Record<string, WebGLUniformLocation | null> = {};
+    for (const name of UNIFORM_NAMES) loc[name] = gl.getUniformLocation(program, name);
+
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.BLEND);
+    gl.clearColor(0, 0, 0, 1);
+
+    return { gl, program, buffer, loc };
+}
+
 export default function LaserFlow({
     className,
     style,
@@ -296,8 +427,24 @@ export default function LaserFlow({
     color = '#F4A261',
 }: LaserFlowProps) {
     const mountRef = useRef<HTMLDivElement | null>(null);
-    const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-    const uniformsRef = useRef<Record<string, THREE.IUniform> | null>(null);
+    const valuesRef = useRef<UniformValues>({
+        wispDensity,
+        tiltScale: mouseTiltStrength,
+        beamXFrac: horizontalBeamOffset,
+        beamYFrac: verticalBeamOffset,
+        flowSpeed,
+        vLenFactor: verticalSizing,
+        hLenFactor: horizontalSizing,
+        fogIntensity,
+        fogScale,
+        wSpeed: wispSpeed,
+        wIntensity: wispIntensity,
+        flowStrength,
+        decay,
+        falloffStart,
+        fogFallSpeed,
+        color: hexToRGB(color),
+    });
     const hasFadedRef = useRef(false);
     const rectRef = useRef<DOMRect | null>(null);
     const baseDprRef = useRef(1);
@@ -313,88 +460,74 @@ export default function LaserFlow({
         const mount = mountRef.current;
         if (!mount) return;
 
-        const renderer = new THREE.WebGLRenderer({
-            antialias: false,
-            alpha: false,
-            depth: false,
-            stencil: false,
-            powerPreference: 'high-performance',
-            premultipliedAlpha: false,
-            preserveDrawingBuffer: false,
-            failIfMajorPerformanceCaveat: false,
-            logarithmicDepthBuffer: false,
-        });
-        rendererRef.current = renderer;
-
-        baseDprRef.current = Math.min(dpr ?? (window.devicePixelRatio || 1), 2);
-        currentDprRef.current = baseDprRef.current;
-
-        renderer.setPixelRatio(currentDprRef.current);
-        renderer.shadowMap.enabled = false;
-        renderer.outputColorSpace = THREE.SRGBColorSpace;
-        renderer.setClearColor(0x000000, 1);
-
-        const canvas = renderer.domElement;
+        const canvas = document.createElement('canvas');
         canvas.style.width = '100%';
         canvas.style.height = '100%';
         canvas.style.display = 'block';
         mount.appendChild(canvas);
 
-        const scene = new THREE.Scene();
-        const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        let state = initGL(canvas);
+        if (!state) {
+            // No WebGL (or compile failure): leave the container empty — the page's
+            // gradient scrims already carry the hero without the beam.
+            mount.removeChild(canvas);
+            return;
+        }
 
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute(
-            'position',
-            new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0]), 3)
-        );
+        baseDprRef.current = Math.min(dpr ?? (window.devicePixelRatio || 1), 2);
+        currentDprRef.current = baseDprRef.current;
 
-        const uniforms: Record<string, THREE.IUniform> = {
-            iTime: { value: 0 },
-            iResolution: { value: new THREE.Vector3(1, 1, 1) },
-            iMouse: { value: new THREE.Vector4(0, 0, 0, 0) },
-            uWispDensity: { value: wispDensity },
-            uTiltScale: { value: mouseTiltStrength },
-            uFlowTime: { value: 0 },
-            uFogTime: { value: 0 },
-            uBeamXFrac: { value: horizontalBeamOffset },
-            uBeamYFrac: { value: verticalBeamOffset },
-            uFlowSpeed: { value: flowSpeed },
-            uVLenFactor: { value: verticalSizing },
-            uHLenFactor: { value: horizontalSizing },
-            uFogIntensity: { value: fogIntensity },
-            uFogScale: { value: fogScale },
-            uWSpeed: { value: wispSpeed },
-            uWIntensity: { value: wispIntensity },
-            uFlowStrength: { value: flowStrength },
-            uDecay: { value: decay },
-            uFalloffStart: { value: falloffStart },
-            uFogFallSpeed: { value: fogFallSpeed },
-            uColor: { value: new THREE.Vector3(1, 1, 1) },
-            uFade: { value: hasFadedRef.current ? 1 : 0 },
-        };
-        uniformsRef.current = uniforms;
-
-        const material = new THREE.RawShaderMaterial({
-            vertexShader: VERT,
-            fragmentShader: FRAG,
-            uniforms,
-            transparent: false,
-            depthTest: false,
-            depthWrite: false,
-            blending: THREE.NormalBlending,
-        });
-
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.frustumCulled = false;
-        scene.add(mesh);
+        // The canvas is recreated on every effect run (StrictMode remounts,
+        // dpr prop changes), so the size cache must start invalid or the guard
+        // in setSizeNow would skip sizing the fresh canvas.
+        lastSizeRef.current = { width: 0, height: 0, dpr: 0 };
 
         const startTime = performance.now();
         let previousTime = startTime;
         let fade = hasFadedRef.current ? 1 : 0;
+        let flowTime = 0;
+        let fogTime = 0;
 
-        const mouseTarget = new THREE.Vector2(0, 0);
-        const mouseSmooth = new THREE.Vector2(0, 0);
+        const mouseTarget = { x: 0, y: 0 };
+        const mouseSmooth = { x: 0, y: 0 };
+
+        const draw = () => {
+            if (!state) return;
+            const { gl, loc } = state;
+            const values = valuesRef.current;
+            const now = performance.now();
+
+            gl.uniform1f(loc.iTime, (now - startTime) / 1000);
+            gl.uniform3f(
+                loc.iResolution,
+                canvas.width,
+                canvas.height,
+                currentDprRef.current
+            );
+            gl.uniform4f(loc.iMouse, mouseSmooth.x, mouseSmooth.y, 0, 0);
+            gl.uniform1f(loc.uWispDensity, values.wispDensity);
+            gl.uniform1f(loc.uTiltScale, values.tiltScale);
+            gl.uniform1f(loc.uFlowTime, flowTime);
+            gl.uniform1f(loc.uFogTime, fogTime);
+            gl.uniform1f(loc.uBeamXFrac, values.beamXFrac);
+            gl.uniform1f(loc.uBeamYFrac, values.beamYFrac);
+            gl.uniform1f(loc.uFlowSpeed, values.flowSpeed);
+            gl.uniform1f(loc.uVLenFactor, values.vLenFactor);
+            gl.uniform1f(loc.uHLenFactor, values.hLenFactor);
+            gl.uniform1f(loc.uFogIntensity, values.fogIntensity);
+            gl.uniform1f(loc.uFogScale, values.fogScale);
+            gl.uniform1f(loc.uWSpeed, values.wSpeed);
+            gl.uniform1f(loc.uWIntensity, values.wIntensity);
+            gl.uniform1f(loc.uFlowStrength, values.flowStrength);
+            gl.uniform1f(loc.uDecay, values.decay);
+            gl.uniform1f(loc.uFalloffStart, values.falloffStart);
+            gl.uniform1f(loc.uFogFallSpeed, values.fogFallSpeed);
+            gl.uniform3f(loc.uColor, values.color.r, values.color.g, values.color.b);
+            gl.uniform1f(loc.uFade, fade);
+
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.drawArrays(gl.TRIANGLES, 0, 3);
+        };
 
         const setSizeNow = () => {
             const width = mount.clientWidth || 1;
@@ -408,14 +541,12 @@ export default function LaserFlow({
             if (!sizeChanged && !dprChanged) return;
 
             lastSizeRef.current = { width, height, dpr: pixelRatio };
-            renderer.setPixelRatio(pixelRatio);
-            renderer.setSize(width, height, false);
-            (uniforms.iResolution.value as THREE.Vector3).set(width * pixelRatio, height * pixelRatio, pixelRatio);
+            canvas.width = Math.max(1, Math.round(width * pixelRatio));
+            canvas.height = Math.max(1, Math.round(height * pixelRatio));
+            state?.gl.viewport(0, 0, canvas.width, canvas.height);
             rectRef.current = canvas.getBoundingClientRect();
 
-            if (!pausedRef.current) {
-                renderer.render(scene, camera);
-            }
+            if (!pausedRef.current) draw();
         };
 
         let resizeRaf = 0;
@@ -449,11 +580,15 @@ export default function LaserFlow({
             const y = clientY - rect.top;
             const pixelRatio = currentDprRef.current;
             const height = rect.height * pixelRatio;
-            mouseTarget.set(x * pixelRatio, height - y * pixelRatio);
+            mouseTarget.x = x * pixelRatio;
+            mouseTarget.y = height - y * pixelRatio;
         };
 
         const onMove = (event: PointerEvent) => updateMouse(event.clientX, event.clientY);
-        const onLeave = () => mouseTarget.set(0, 0);
+        const onLeave = () => {
+            mouseTarget.x = 0;
+            mouseTarget.y = 0;
+        };
 
         canvas.addEventListener('pointermove', onMove, { passive: true });
         canvas.addEventListener('pointerdown', onMove, { passive: true });
@@ -465,6 +600,10 @@ export default function LaserFlow({
             pausedRef.current = true;
         };
         const onContextRestored = () => {
+            // All GL objects died with the context — rebuild the program/buffer
+            // against the same canvas, then force a resize to reset the viewport.
+            state = initGL(canvas);
+            lastSizeRef.current = { width: 0, height: 0, dpr: 0 };
             pausedRef.current = false;
             scheduleResize();
         };
@@ -513,12 +652,11 @@ export default function LaserFlow({
 
         const animate = () => {
             raf = requestAnimationFrame(animate);
-            if (pausedRef.current || !inViewRef.current) return;
+            if (pausedRef.current || !inViewRef.current || !state) return;
 
             const now = performance.now();
             if (now - lastRender < targetFrameMs) return;
             lastRender = now;
-            const time = (now - startTime) / 1000;
             const dt = Math.max(0, (now - previousTime) / 1000);
             previousTime = now;
 
@@ -527,25 +665,22 @@ export default function LaserFlow({
             const instFps = 1000 / Math.max(1, emaDtRef.current);
             fpsSamplesRef.current.push(instFps);
 
-            uniforms.iTime.value = time;
-
             const clampedDt = Math.min(0.033, Math.max(0.001, dt));
-            uniforms.uFlowTime.value += clampedDt;
-            uniforms.uFogTime.value += clampedDt;
+            flowTime += clampedDt;
+            fogTime += clampedDt;
 
             if (!hasFadedRef.current) {
                 const fadeDuration = 1.0;
                 fade = Math.min(1, fade + clampedDt / fadeDuration);
-                uniforms.uFade.value = fade;
                 if (fade >= 1) hasFadedRef.current = true;
             }
 
             const tau = Math.max(1e-3, mouseSmoothTime);
             const alpha = 1 - Math.exp(-clampedDt / tau);
-            mouseSmooth.lerp(mouseTarget, alpha);
-            (uniforms.iMouse.value as THREE.Vector4).set(mouseSmooth.x, mouseSmooth.y, 0, 0);
+            mouseSmooth.x += (mouseTarget.x - mouseSmooth.x) * alpha;
+            mouseSmooth.y += (mouseTarget.y - mouseSmooth.y) * alpha;
 
-            renderer.render(scene, camera);
+            draw();
             adjustDprIfNeeded(now);
         };
 
@@ -563,10 +698,12 @@ export default function LaserFlow({
             canvas.removeEventListener('pointerleave', onLeave);
             canvas.removeEventListener('webglcontextlost', onContextLost);
             canvas.removeEventListener('webglcontextrestored', onContextRestored);
-            geometry.dispose();
-            material.dispose();
-            renderer.dispose();
-            renderer.forceContextLoss();
+            if (state) {
+                const { gl, program, buffer } = state;
+                gl.deleteBuffer(buffer);
+                gl.deleteProgram(program);
+                gl.getExtension('WEBGL_lose_context')?.loseContext();
+            }
             if (mount.contains(canvas)) mount.removeChild(canvas);
         };
         // Scene setup runs once per dpr/mouseSmoothTime change; the other visual
@@ -576,27 +713,24 @@ export default function LaserFlow({
     }, [dpr, mouseSmoothTime]);
 
     useEffect(() => {
-        const uniforms = uniformsRef.current;
-        if (!uniforms) return;
-
-        uniforms.uWispDensity.value = wispDensity;
-        uniforms.uTiltScale.value = mouseTiltStrength;
-        uniforms.uBeamXFrac.value = horizontalBeamOffset;
-        uniforms.uBeamYFrac.value = verticalBeamOffset;
-        uniforms.uFlowSpeed.value = flowSpeed;
-        uniforms.uVLenFactor.value = verticalSizing;
-        uniforms.uHLenFactor.value = horizontalSizing;
-        uniforms.uFogIntensity.value = fogIntensity;
-        uniforms.uFogScale.value = fogScale;
-        uniforms.uWSpeed.value = wispSpeed;
-        uniforms.uWIntensity.value = wispIntensity;
-        uniforms.uFlowStrength.value = flowStrength;
-        uniforms.uDecay.value = decay;
-        uniforms.uFalloffStart.value = falloffStart;
-        uniforms.uFogFallSpeed.value = fogFallSpeed;
-
-        const { r, g, b } = hexToRGB(color);
-        (uniforms.uColor.value as THREE.Vector3).set(r, g, b);
+        valuesRef.current = {
+            wispDensity,
+            tiltScale: mouseTiltStrength,
+            beamXFrac: horizontalBeamOffset,
+            beamYFrac: verticalBeamOffset,
+            flowSpeed,
+            vLenFactor: verticalSizing,
+            hLenFactor: horizontalSizing,
+            fogIntensity,
+            fogScale,
+            wSpeed: wispSpeed,
+            wIntensity: wispIntensity,
+            flowStrength,
+            decay,
+            falloffStart,
+            fogFallSpeed,
+            color: hexToRGB(color),
+        };
     }, [
         wispDensity,
         mouseTiltStrength,
