@@ -49,16 +49,20 @@ describe('song reveal tokens', () => {
         expect(decodeSongToken(b)).toEqual(sampleSong);
     });
 
+    // Tampering flips the FIRST character of a segment: it always encodes the
+    // top six bits of the first byte, so the decoded bytes are guaranteed to
+    // change. (The last character can be pure base64url padding bits, which
+    // decoding ignores — flipping it made these tests pass or fail depending
+    // on the random IV/tag of the run.)
     it('rejects a token with tampered ciphertext', () => {
         const [iv, ciphertext, tag] = createSongToken(sampleSong).split('.');
-        // Flip the last character of the ciphertext segment.
-        const flipped = ciphertext.slice(0, -1) + (ciphertext.at(-1) === 'A' ? 'B' : 'A');
+        const flipped = (ciphertext[0] === 'A' ? 'B' : 'A') + ciphertext.slice(1);
         expect(decodeSongToken([iv, flipped, tag].join('.'))).toBeNull();
     });
 
     it('rejects a token with a tampered auth tag', () => {
         const [iv, ciphertext, tag] = createSongToken(sampleSong).split('.');
-        const flipped = tag.slice(0, -1) + (tag.at(-1) === 'A' ? 'B' : 'A');
+        const flipped = (tag[0] === 'A' ? 'B' : 'A') + tag.slice(1);
         expect(decodeSongToken([iv, ciphertext, flipped].join('.'))).toBeNull();
     });
 
