@@ -19,6 +19,48 @@ const ROUND_LIMIT = 5;
 // penalty is applied (mirrored client/server, see gameStore's HINT_POINT_PENALTY).
 const HINT_LADDER = [1, 3, 5];
 const MAX_HINTS = HINT_LADDER.length;
+// Player-facing names for the ladder rungs — the hint card frames each buy as
+// progressively hotter intel rather than three identical "hints".
+const HINT_LEVELS = ['Whisper', 'Lead', 'Giveaway'];
+
+// Glyph pool for the hint decode effect. Mostly block/box characters so the
+// scramble reads as "signal resolving", not random punctuation soup.
+const DECODE_GLYPHS = '▙▚▜▞█▓▒░◆◇/\\<>+=*#';
+
+// Scramble-reveal: unresolved characters churn through glyphs while the real
+// text locks in left-to-right, like intel decrypting. Perf-lite users (touch /
+// reduced motion) get the plain text immediately — the interval never starts.
+function DecodeText({ text, lite }: { text: string; lite: boolean }) {
+    const [display, setDisplay] = useState(() => (lite ? text : ''));
+
+    useEffect(() => {
+        if (lite) {
+            setDisplay(text);
+            return;
+        }
+        let frame = 0;
+        // ~30ms cadence, resolving a couple of characters per frame; short
+        // hints decode fast, long ones still land well under a second.
+        const totalFrames = Math.min(26, 8 + Math.ceil(text.length / 3));
+        const iv = window.setInterval(() => {
+            frame += 1;
+            if (frame >= totalFrames) {
+                setDisplay(text);
+                window.clearInterval(iv);
+                return;
+            }
+            const resolved = Math.floor((frame / totalFrames) * text.length);
+            let out = text.slice(0, resolved);
+            for (let i = resolved; i < text.length; i += 1) {
+                out += text[i] === ' ' ? ' ' : DECODE_GLYPHS[Math.floor(Math.random() * DECODE_GLYPHS.length)];
+            }
+            setDisplay(out);
+        }, 30);
+        return () => window.clearInterval(iv);
+    }, [text, lite]);
+
+    return <>{display}</>;
+}
 
 const GENRE_OPTIONS: Array<{ label: string; value: GameGenre }> = [
     { label: 'All', value: 'all' },
@@ -786,9 +828,14 @@ export default function GamePlayer() {
         }, 1000);
 
         // One-shot: flip isUrgent state exactly once at the 2-second mark.
+        // The heartbeat buzz makes the deadline physical before the eyes
+        // register the color shift.
         const urgentMs = Math.max(0, (roundSeconds - 2) * 1000);
         const urgentTimeout = urgentMs > 0
-            ? window.setTimeout(() => setIsUrgent(true), urgentMs)
+            ? window.setTimeout(() => {
+                setIsUrgent(true);
+                vibrate([24, 42, 24]);
+            }, urgentMs)
             : null;
 
         const timeout = window.setTimeout(() => {
@@ -903,6 +950,8 @@ export default function GamePlayer() {
 
     const handleReveal = () => {
         if (phase !== 'playing') return;
+        // "Fold" haptic — softer than the answer-lock buzz since it's a concession.
+        vibrate([10, 22, 10]);
         setTimerActive(false);
         if (audioRef.current) audioRef.current.pause();
         const responseTimeMs = roundStartedAtRef.current
@@ -914,6 +963,8 @@ export default function GamePlayer() {
     const handleHint = async () => {
         if (phase !== 'playing' || !question || hintLoading || hints.length >= MAX_HINTS) return;
 
+        // Light tap acknowledging the press, distinct from the arrival buzz below.
+        vibrate(10);
         setHintLoading(true);
         try {
             const res = await aiService.getHint(question.songId, HINT_LADDER[hints.length]);
@@ -922,6 +973,8 @@ export default function GamePlayer() {
             setHints((current) => [...current, hint]);
             // Only a delivered hint costs points — a failed request stays free.
             hintsUsedRef.current += 1;
+            // "Incoming intel" double-pulse as the decode animation kicks off.
+            vibrate([12, 30, 12]);
         } catch {
             showToast('Hints are offline right now.');
         } finally {
@@ -930,6 +983,8 @@ export default function GamePlayer() {
     };
 
     const handleRate = async (value: number) => {
+        // A 5-star gets a tiny celebratory triple; everything else a single tick.
+        vibrate(value === 5 ? [14, 26, 18] : 12);
         setRating(value);
         await rateTrack(value);
     };
@@ -947,6 +1002,7 @@ export default function GamePlayer() {
     };
 
     const handlePlayAgain = () => {
+        vibrate(12);
         resetPlaybackState();
         dismissSessionSummary();
         clearSession();
@@ -954,6 +1010,7 @@ export default function GamePlayer() {
     };
 
     const handleBackToSetup = () => {
+        vibrate(12);
         resetPlaybackState();
         dismissSessionSummary();
         clearSession();
@@ -1001,26 +1058,32 @@ export default function GamePlayer() {
         if (phase !== 'idle') resetRound();
     };
 
+    // Every filter change lands with the same light tick — enough to feel the
+    // selection register without competing with the gameplay haptics.
     const handleGenreChange = (genre: GameGenre) => {
         if (filters.genre === genre) return;
+        vibrate(8);
         setGenre(genre);
         resetFilterSession();
     };
 
     const handleLanguageChange = (language: GameLanguage) => {
         if (filters.language === language) return;
+        vibrate(8);
         setLanguage(language);
         resetFilterSession();
     };
 
     const handleDifficultyChange = (difficulty: GameDifficulty) => {
         if (filters.difficulty === difficulty) return;
+        vibrate(8);
         setDifficulty(difficulty);
         resetFilterSession();
     };
 
     const handleArtistChange = (artist: string) => {
         if (filters.artist === artist) return;
+        vibrate(8);
         setArtist(artist);
         resetFilterSession();
     };
@@ -1464,17 +1527,81 @@ export default function GamePlayer() {
                                             What track is this?
                                         </motion.h2>
 
-                                        {/* Subtitle — swaps to the latest AI hint once one is bought. */}
-                                        {hints.length > 0 ? (
-                                            <motion.p
-                                                key={`hint-${hints.length}`}
-                                                initial={{ opacity: 0, y: 6 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                                                className="mx-auto max-w-[560px] text-[12px] italic leading-relaxed text-amber/90 sm:text-[13px]"
+                                        {/* Subtitle — becomes the intel card once a hint is bought.
+                                            Each hint arrives as "decrypted intel": a glassy amber
+                                            panel with a level tag, budget pips, a scanline sweep,
+                                            and the text scramble-resolving into place. */}
+                                        {hints.length > 0 || hintLoading ? (
+                                            <motion.div
+                                                key="hint-card"
+                                                initial={lite ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.985 }}
+                                                animate={lite ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+                                                transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+                                                className="relative mx-auto w-full max-w-[560px] overflow-hidden rounded-[0.9rem] bg-[linear-gradient(180deg,rgba(244,162,97,0.10),rgba(244,162,97,0.03))] px-3.5 py-2.5 text-left ring-1 ring-amber/25 shadow-[inset_0_1px_0_rgba(244,162,97,0.16),0_10px_28px_rgba(244,162,97,0.07)]"
                                             >
-                                                “{hints[hints.length - 1]}”
-                                            </motion.p>
+                                                {/* Scanline sweep on every new hint — one pass, then gone. */}
+                                                {!lite && (
+                                                    <motion.span
+                                                        aria-hidden
+                                                        key={`sweep-${hints.length}`}
+                                                        className="pointer-events-none absolute inset-y-0 w-16 bg-[linear-gradient(90deg,transparent,rgba(244,162,97,0.22),transparent)]"
+                                                        initial={{ left: '-18%' }}
+                                                        animate={{ left: '112%' }}
+                                                        transition={{ duration: 0.9, ease: 'easeOut' }}
+                                                    />
+                                                )}
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <span className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.18em] text-amber/90">
+                                                        <motion.svg
+                                                            viewBox="0 0 24 24"
+                                                            fill="currentColor"
+                                                            className="h-3 w-3"
+                                                            aria-hidden
+                                                            animate={lite ? undefined : { rotate: [0, 12, -8, 0], scale: [1, 1.18, 1] }}
+                                                            transition={lite ? undefined : { duration: 0.7, ease: 'easeOut' }}
+                                                        >
+                                                            <path d="M12 2l1.9 5.6L20 9.5l-5 3.9 1.6 6L12 15.9 7.4 19.4 9 13.4 4 9.5l6.1-1.9z" />
+                                                        </motion.svg>
+                                                        {hintLoading
+                                                            ? 'Decrypting intel'
+                                                            : `Intel 0${hints.length} — ${HINT_LEVELS[hints.length - 1]}`}
+                                                    </span>
+                                                    {/* Budget pips: lit = spent, dim = still available. */}
+                                                    <span className="flex shrink-0 items-center gap-1" aria-label={`${hints.length} of ${MAX_HINTS} hints used`}>
+                                                        {HINT_LEVELS.map((level, i) => (
+                                                            <span
+                                                                key={level}
+                                                                className={`h-1 rounded-full transition-all duration-300 ${
+                                                                    i < hints.length ? 'w-3.5 bg-amber' : 'w-1.5 bg-amber/25'
+                                                                }`}
+                                                            />
+                                                        ))}
+                                                    </span>
+                                                </div>
+                                                {/* Earlier hints stay readable — stacked small above the latest. */}
+                                                {hints.length > 1 && (
+                                                    <div className="mt-1.5 space-y-0.5">
+                                                        {hints.slice(0, -1).map((hint, i) => (
+                                                            <p key={i} className="line-clamp-1 text-[10px] leading-snug text-amber/45 sm:text-[11px]">
+                                                                {hint}
+                                                            </p>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {hintLoading && hints.length === 0 ? (
+                                                    <div className="mt-1.5 h-2.5 w-3/4 overflow-hidden rounded-full bg-amber/10">
+                                                        <motion.span
+                                                            className="block h-full w-1/3 rounded-full bg-amber/40"
+                                                            animate={{ x: ['-100%', '320%'] }}
+                                                            transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
+                                                        />
+                                                    </div>
+                                                ) : hints.length > 0 ? (
+                                                    <p className="mt-1 text-[12px] leading-relaxed text-amber-50/95 sm:text-[13px]">
+                                                        <DecodeText key={hints.length} text={hints[hints.length - 1]} lite={lite} />
+                                                    </p>
+                                                ) : null}
+                                            </motion.div>
                                         ) : (
                                             <motion.p
                                                 initial={{ opacity: 0 }}
@@ -1596,7 +1723,10 @@ export default function GamePlayer() {
                                 ) : (
                                     <motion.button
                                         whileTap={{ scale: 0.985 }}
-                                        onClick={handleNext}
+                                        onClick={() => {
+                                            vibrate(12);
+                                            void handleNext();
+                                        }}
                                         disabled={isLoading}
                                         className="btn-primary relative min-h-11 w-full overflow-hidden rounded-[0.7rem] text-sm font-semibold disabled:opacity-60"
                                     >
@@ -1644,22 +1774,54 @@ export default function GamePlayer() {
                                         whileTap={{ scale: 0.97 }}
                                         onClick={() => void handleHint()}
                                         disabled={hintLoading || hints.length >= MAX_HINTS}
-                                        className={`min-h-8 rounded-[0.75rem] px-3 py-2 text-[10px] font-semibold transition-colors sm:min-h-11 sm:rounded-[0.85rem] sm:px-4 sm:py-3 sm:text-xs ${
+                                        // Soft breathing glow until the first hint is bought, so the
+                                        // button reads as "there's help here" without shouting.
+                                        animate={
+                                            !lite && phase === 'playing' && hints.length === 0 && !hintLoading
+                                                ? { boxShadow: ['0 0 0px rgba(244,162,97,0)', '0 0 18px rgba(244,162,97,0.28)', '0 0 0px rgba(244,162,97,0)'] }
+                                                : { boxShadow: '0 0 0px rgba(244,162,97,0)' }
+                                        }
+                                        transition={{ duration: 2.2, repeat: !lite && phase === 'playing' && hints.length === 0 && !hintLoading ? Infinity : 0, ease: 'easeInOut' }}
+                                        className={`flex min-h-8 items-center gap-1.5 rounded-[0.75rem] px-3 py-2 text-[10px] font-semibold transition-colors sm:min-h-11 sm:rounded-[0.85rem] sm:px-4 sm:py-3 sm:text-xs ${
                                             hints.length >= MAX_HINTS
                                                 ? 'bg-white/[0.04] text-text-4 ring-1 ring-white/[0.05]'
                                                 : 'bg-amber-dim text-amber ring-1 ring-amber/25 shadow-[inset_0_1px_0_rgba(244,162,97,0.15)] hover:bg-amber/[0.16]'
                                         } disabled:opacity-70`}
                                     >
+                                        <motion.svg
+                                            viewBox="0 0 24 24"
+                                            fill="currentColor"
+                                            className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5"
+                                            aria-hidden
+                                            animate={hintLoading && !lite ? { rotate: 360 } : { rotate: 0 }}
+                                            transition={hintLoading && !lite ? { duration: 1, repeat: Infinity, ease: 'linear' } : { duration: 0.2 }}
+                                        >
+                                            <path d="M12 2l1.9 5.6L20 9.5l-5 3.9 1.6 6L12 15.9 7.4 19.4 9 13.4 4 9.5l6.1-1.9z" />
+                                        </motion.svg>
                                         {hintLoading
-                                            ? 'Hint…'
+                                            ? 'Decrypting…'
                                             : hints.length >= MAX_HINTS
-                                                ? 'No hints left'
-                                                : `Hint −${HINT_POINT_PENALTY} (${MAX_HINTS - hints.length})`}
+                                                ? 'No intel left'
+                                                : `Hint −${HINT_POINT_PENALTY}`}
+                                        {/* Remaining-budget pips (hidden once exhausted — the label covers it). */}
+                                        {hints.length < MAX_HINTS && !hintLoading ? (
+                                            <span className="flex items-center gap-0.5" aria-hidden>
+                                                {HINT_LEVELS.map((level, i) => (
+                                                    <span
+                                                        key={level}
+                                                        className={`h-1 w-1 rounded-full ${i < MAX_HINTS - hints.length ? 'bg-amber/80' : 'bg-amber/22'}`}
+                                                    />
+                                                ))}
+                                            </span>
+                                        ) : null}
                                     </motion.button>
                                     <motion.button
                                         type="button"
                                         whileTap={{ scale: 0.97 }}
-                                        onClick={() => void playClip(true)}
+                                        onClick={() => {
+                                            vibrate(8);
+                                            void playClip(true);
+                                        }}
                                         className="btn-secondary min-h-8 rounded-[0.75rem] px-3 py-2 text-[10px] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:min-h-11 sm:rounded-[0.85rem] sm:px-4 sm:py-3 sm:text-xs"
                                     >
                                         {clipBlocked ? 'Play' : 'Replay'}
@@ -1953,6 +2115,8 @@ export default function GamePlayer() {
                                     whileHover={{ scale: 1.03, y: -2 }}
                                     whileTap={{ scale: 0.97 }}
                                     onClick={() => {
+                                        // Session kickoff gets a firmer double-tap than in-round taps.
+                                        vibrate([14, 28, 14]);
                                         void startFreshSession();
                                     }}
                                     disabled={isLoading}
