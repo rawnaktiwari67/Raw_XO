@@ -15,7 +15,7 @@ No "sign up to continue" wall. Guest mode is instant — you're one tap from a r
 - 🏆 **Leaderboards & profiles.** Daily and all-time boards, sliceable by artist and genre, each with your live rank. Earn XP, climb levels, collect a level badge. Guests rank too — under a stable, randomly-generated handle like "Midnight Vinyl."
 - 📼 **Culture reels.** A scrollable, TikTok-style feed of trending tracks pulled from a curated Spotify pool — sort by Hottest or Newest, vote on what a lyric actually means, react, and leave a rated take.
 - 🎫 **Tour calendar.** Live music listings for Indian cities, with quick links out to tickets.
-- 🔮 **XO Oracle (AI).** A floating trivia chat that answers questions about the game's songs, The Weeknd's album eras, and tour dates — grounded in a locally-embedded knowledge base (RAG), so it says "I don't have info on that" instead of making things up. Plus in-round AI hints that get more specific the more you buy (each costs points, and they never reveal the title or artist). Requires a free `GROQ_API_KEY` (with optional `GEMINI_API_KEY` fallback) — see [AI features](#ai-features-rag-trivia--hints).
+- 🔮 **AI hints.** In-round hints that get more specific the more you buy — each costs points, and they never reveal the title or artist (enforced in the prompt *and* by a deterministic redaction filter). Requires a free `GROQ_API_KEY` (with optional `GEMINI_API_KEY` fallback) — see [AI hints](#ai-hints).
 
 ## How a round feels
 
@@ -55,9 +55,9 @@ server/    Express + MongoDB backend
   src/middleware/   auth.middleware.ts, security.middleware.ts, rateLimiter.ts, error.middleware.ts
   src/config/       env.ts, db.ts, gameConstants.ts (difficulty timing, curated artists, genre/language maps)
   src/utils/        gameLogic.ts, xpUtils.ts, jwtUtils.ts, clerkSync.ts, devStore.ts, apiResponse.ts
-  src/ai/           embeddings.ts, vectorStore.ts, groqClient.ts, prompts.ts (RAG pipeline + hint guardrails)
+  src/ai/           llm.ts (provider seam), groqClient.ts, geminiClient.ts, prompts.ts (hint guardrails)
   src/seo/          crawlerMeta.ts (Open Graph tags for bot user-agents)
-  src/data/         seed.ts, embed.ts (builds the AI knowledge base)
+  src/data/         seed.ts
 
 api/index.ts   Serverless entry point that wraps the Express app for Vercel
 ```
@@ -94,8 +94,7 @@ All routes are served under the base path `/api/v1` (mounted in `server/src/app.
 | | `POST /culture/meaning`, `POST /culture/reaction`, `POST /culture/reviews` | optional¹ | Vote a lyric meaning, react, review |
 | Tours | `GET /tours` | — | Live music listings |
 | | `POST /tours`, `PUT /tours/:id` | admin | Create / update a tour record |
-| AI | `POST /ai/trivia` | — | Ask the trivia assistant (RAG over tracks/eras/tours, answers only from retrieved context) |
-| | `POST /ai/hint` | — | Generate a round hint from the encrypted song token; specificity scales with `guessesUsed` |
+| AI | `POST /ai/hint` | — | Generate a round hint from the encrypted song token; specificity scales with `guessesUsed` |
 | Eras | `GET /eras`, `GET /eras/:slug` | — | Music-era catalog |
 | Users | `GET /users/:username` | — | Public profile |
 | | `GET /users/me/threads`, `GET /users/me/comments`, `PUT /users/me` | auth | Your content / edit profile |
@@ -133,20 +132,11 @@ Run the test suite from the repo root:
 npm test
 ```
 
-## AI features (RAG trivia + hints)
+## AI hints
 
-The XO Oracle chat and the in-game hint button are powered by two pieces:
+**Groq** (`llama-3.3-70b-versatile`) generates the hint text. Grab a free API key at [console.groq.com](https://console.groq.com) — no card required — and set `GROQ_API_KEY` in `server/.env`. **Gemini** (`gemini-flash-lite-latest`) is the optional fallback: set `GEMINI_API_KEY` (free at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)) and it takes over whenever Groq is unconfigured or a call fails — free-tier rate limits stop being an outage. With neither key, the `/ai` routes return 503 and everything else keeps working.
 
-- **Groq** (`llama-3.3-70b-versatile`) generates the text. Grab a free API key at [console.groq.com](https://console.groq.com) — no card required — and set `GROQ_API_KEY` in `server/.env`. **Gemini** (`gemini-flash-lite-latest`) is the optional fallback: set `GEMINI_API_KEY` (free at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)) and it takes over whenever Groq is unconfigured or a call fails — free-tier rate limits stop being an outage. With neither key, the `/ai` routes return 503 and everything else keeps working.
-- **A local knowledge base** grounds the trivia answers. Build it once (and again whenever you reseed):
-
-```
-npm run embed --workspace xo-universe-server
-```
-
-The script snapshots the game's curated song pool into a `Track` collection, renders every Track/Era/Tour document into a sentence, embeds them locally with `@xenova/transformers` (all-MiniLM-L6-v2 — downloaded on first run, no API key), and stores the vectors in a `RagChunk` collection. At question time the server embeds your question with the same model, retrieves the top matches by cosine similarity, and instructs the model to answer **only** from those — anything outside the knowledge base gets "I don't have info on that."
-
-Hints skip retrieval entirely: the round's encrypted song token is decoded server-side, and a tiered prompt (vague → genre/era → near-giveaway, scaling with guesses used) writes the clue. The title and artist are never revealed — that's enforced in the prompt *and* by a deterministic redaction filter on the model's output (`server/src/ai/prompts.ts`). Each hint costs points (`HINT_POINT_PENALTY` in `server/src/utils/gameLogic.ts`, mirrored client-side).
+The round's encrypted song token is decoded server-side, and a tiered prompt (vague → genre/era → near-giveaway, scaling with guesses used) writes the clue. The title and artist are never revealed — that's enforced in the prompt *and* by a deterministic redaction filter on the model's output (`server/src/ai/prompts.ts`). Each hint costs points (`HINT_POINT_PENALTY` in `server/src/utils/gameLogic.ts`, mirrored client-side).
 
 ## Environment variables
 
@@ -183,7 +173,7 @@ Create `server/.env` from `server/.env.example`.
 | `GAME_ITUNES_TIMEOUT_MS` | iTunes fetch timeout (clamped 1500–10000ms, default 4500ms) |
 | `GAME_MAX_QUERY_TERMS` | Max artist queries batched per fetch (clamped 2–12, default 6) |
 | `GAME_TRACK_CACHE_MS` | Song-pool cache TTL (default 10 minutes) |
-| `GROQ_API_KEY` | Groq LLM key for the AI trivia chat and hints — free at [console.groq.com](https://console.groq.com), no card required. Optional: with neither this nor `GEMINI_API_KEY` set, the `/ai` routes return 503 and the rest of the app is unaffected |
+| `GROQ_API_KEY` | Groq LLM key for the AI hints — free at [console.groq.com](https://console.groq.com), no card required. Optional: with neither this nor `GEMINI_API_KEY` set, the `/ai` routes return 503 and the rest of the app is unaffected |
 | `GROQ_MODEL` | Groq model id (default `llama-3.3-70b-versatile`) |
 | `GEMINI_API_KEY` | Gemini LLM key, the fallback provider — free at [aistudio.google.com/apikey](https://aistudio.google.com/apikey). Used when Groq is unconfigured or a Groq call fails |
 | `GEMINI_MODEL` | Gemini model id (default `gemini-flash-lite-latest` — keep a rolling `-latest` alias; pinned models age out of the free tier) |

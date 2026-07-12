@@ -1,58 +1,8 @@
 import type { SongPreview } from '../utils/songTokens';
 import type { ChatMessage } from './groqClient';
-import type { RetrievedChunk } from './vectorStore';
 
-// Prompt templates for both AI routes, plus the hint-leak redaction filter.
+// Prompt templates for the AI hint route, plus the hint-leak redaction filter.
 // Everything that shapes what the model is ALLOWED to say lives in this file.
-
-// ─── Trivia (RAG) ─────────────────────────────────────────────────────────────
-
-export const TRIVIA_FALLBACK = "I don't have info on that.";
-
-// One prior bubble of the widget conversation, replayed so the model can
-// resolve follow-ups ("when did IT come out?"). Validated by the controller.
-export type TriviaHistoryTurn = {
-    role: 'user' | 'assistant';
-    text: string;
-};
-
-/**
- * Grounded-answer template: the model may only use the numbered context entries
- * retrieved from the vector store. Putting the context in the system message
- * (not the user turn) matters — instructions in the user turn are easier to
- * override with "ignore the above" style prompts. Prior turns are replayed as
- * real user/assistant messages so pronouns in the new question resolve, but the
- * grounding rule still binds the whole conversation.
- */
-export const buildTriviaMessages = (
-    question: string,
-    chunks: RetrievedChunk[],
-    history: TriviaHistoryTurn[] = []
-): ChatMessage[] => {
-    const context = chunks
-        .map((chunk, index) => `[${index + 1}] (${chunk.source}) ${chunk.text}`)
-        .join('\n');
-
-    return [
-        {
-            role: 'system',
-            content: [
-                'You are XO Oracle, the music trivia assistant for Raw XO, a music guessing-game and fan-culture app.',
-                'Answer the user\'s question using ONLY the context entries below. Treat the context as your entire knowledge.',
-                'Earlier turns of the conversation may be replayed before the question. Use them to work out what a follow-up refers to ("it", "that album", "his first era"), then answer from the context entries.',
-                `If the context does not contain the answer, reply exactly: "${TRIVIA_FALLBACK}" — no apologies, no guessing, no outside knowledge.`,
-                'Keep answers to 1-3 sentences, conversational, and cite nothing but facts present in the context.',
-                '',
-                'Context:',
-                context || '(no relevant context was found)',
-            ].join('\n'),
-        },
-        ...history.map((turn): ChatMessage => ({ role: turn.role, content: turn.text })),
-        { role: 'user', content: question },
-    ];
-};
-
-// ─── Hints ────────────────────────────────────────────────────────────────────
 
 /**
  * Specificity ladder: hints get more concrete as the player burns guesses.

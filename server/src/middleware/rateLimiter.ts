@@ -40,8 +40,7 @@ export const gameLimiter = rateLimit({
     legacyHeaders: false,
 });
 
-// Stricter than gameLimiter: every request costs a Groq completion (and the
-// trivia route an embedding pass on top).
+// Stricter than gameLimiter: every hint request costs an LLM completion.
 export const aiLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 10,
