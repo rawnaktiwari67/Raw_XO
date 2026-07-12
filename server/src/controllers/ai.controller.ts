@@ -36,7 +36,9 @@ export const generateHint = async (req: Request, res: Response): Promise<void> =
 
         const hint = await chatCompletion(buildHintMessages(song, guessesUsed), {
             maxTokens: 80,
-            temperature: 0.7,
+            // Low enough to keep the model on real facts, high enough that the
+            // same track doesn't produce the same sentence three rounds running.
+            temperature: 0.6,
         });
 
         if (!hint) {

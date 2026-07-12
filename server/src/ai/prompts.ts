@@ -5,19 +5,21 @@ import type { ChatMessage } from './groqClient';
 // Everything that shapes what the model is ALLOWED to say lives in this file.
 
 /**
- * Specificity ladder: hints get more concrete as the player burns guesses.
- *   guesses 1-2 → vague and atmospheric (mood, imagery — no identifying facts)
- *   guesses 3-4 → concrete but not unique (genre, era, career context)
- *   guesses 5+  → near-giveaway (album, year, chart facts, lyric themes)
+ * Specificity ladder: hints get more concrete as the player buys more.
+ *   guesses 1-2 → the song's subject: what it's about, its story or image
+ *   guesses 3-4 → context: sound, release window, place in the artist's run
+ *   guesses 5+  → near-giveaway (album, year, chart facts, famous moments)
+ * Every tier must still discriminate — a hint that fits all four options is
+ * a 15-point refund request waiting to happen.
  */
 const hintTierInstruction = (guessesUsed: number): string => {
     if (guessesUsed <= 2) {
-        return 'Give a VAGUE, atmospheric hint: the mood, energy, or imagery of the song. No genre, no era, no facts that narrow it down.';
+        return 'FIRST HINT — the subject: say what this song is about (its story, scenario, or central image) so a fan could match it to the right title. No album, year, or career facts yet.';
     }
     if (guessesUsed <= 4) {
-        return 'Give a MODERATELY specific hint: genre, release era, or where it sits in the artist\'s career. Still no album names or chart positions.';
+        return 'SECOND HINT — the context: place the song. Its sound or production signature, the release window, a collaboration detail, or where it sits in the artist\'s run. Still no album names or chart positions.';
     }
-    return 'Give a NEAR-GIVEAWAY hint: you may reference the album, release year, chart performance, or what the lyrics are about.';
+    return 'FINAL HINT — near-giveaway: be maximally helpful. Album, release year, a chart or cultural moment, the music video\'s imagery, or a close paraphrase of its most famous line.';
 };
 
 /**
@@ -32,8 +34,13 @@ export const buildHintMessages = (song: SongPreview, guessesUsed: number): ChatM
     {
         role: 'system',
         content: [
-            'You write one-sentence hints for a song guessing game. The player is listening to a short clip and must name the track.',
+            'You write one-sentence hints for a song guessing game. The player hears a short clip and must pick the correct track title from FOUR title options — several may be by the same artist. Your hint is only worth its cost if it helps eliminate the wrong titles, so it must point at what makes THIS song different from the artist\'s other songs.',
             hintTierInstruction(guessesUsed),
+            '',
+            'Quality rules:',
+            '- The best hint gestures at the title\'s meaning without its words: for a song titled after rainfall, talk about storms and what falls from the sky.',
+            '- NEVER write generic mood filler ("dark and atmospheric", "a haunting soundscape", "melancholic reflection") — that describes a thousand songs and helps no one. Every hint needs at least one concrete detail specific to this song.',
+            '- Be honest about what you know: if you recognize this exact song, use one real, specific fact (its subject, a lyric\'s theme, a video moment, a sample). If you do NOT recognize it, build the hint only from the metadata provided — never invent lyrics, chart positions, or trivia.',
             '',
             'Hard rules, no exceptions at any specificity level:',
             '- NEVER say the song title or any word from it.',
@@ -50,9 +57,10 @@ export const buildHintMessages = (song: SongPreview, guessesUsed: number): ChatM
             `Artist: ${song.artist}`,
             `Album: ${song.album || 'unknown'}`,
             `Release year: ${song.releaseYear || 'unknown'}`,
+            `Length: ${song.durationMs > 0 ? `${Math.floor(song.durationMs / 60000)}:${String(Math.floor((song.durationMs % 60000) / 1000)).padStart(2, '0')}` : 'unknown'}`,
             `Popularity (0-100): ${song.popularity >= 0 ? song.popularity : 'unknown'}`,
             '',
-            `The player has used ${guessesUsed} guess${guessesUsed === 1 ? '' : 'es'}. Write the hint.`,
+            `This is hint number ${Math.min(3, Math.ceil(guessesUsed / 2))} for this round. Write it.`,
         ].join('\n'),
     },
 ];
@@ -64,24 +72,42 @@ const coreTitle = (title: string): string =>
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// Words that show up in half of all song titles and artist billings — redacting
+// them from a hint would cripple normal prose without protecting anything.
+const REDACTION_STOPWORDS = new Set([
+    'the', 'and', 'with', 'from', 'that', 'this', 'your', 'feat', 'featuring',
+    'remix', 'version', 'edit', 'deluxe', 'live', 'remastered', 'interlude',
+]);
+
 /**
  * Deterministic backstop for the prompt guardrail: even if the model ignores
- * its instructions, the title and artist strings never reach the client. Each
- * leaked occurrence is replaced with a redaction marker rather than silently
- * deleted, so a slipped hint reads as obviously censored instead of subtly
- * wrong. Prompt rules are probabilistic; this filter is not.
+ * its instructions, the title and artist strings never reach the client. Full
+ * phrases AND individual distinctive words are redacted — "Lights" gives away
+ * "Blinding Lights" just as surely as the full title does. Each leak is
+ * replaced with a redaction marker rather than silently deleted, so a slipped
+ * hint reads as obviously censored instead of subtly wrong. Prompt rules are
+ * probabilistic; this filter is not.
  */
 export const redactHintLeaks = (hint: string, song: SongPreview): string => {
-    const secrets = [
-        coreTitle(song.title),
-        song.title,
-        // Multi-artist strings arrive joined ("The Weeknd, Daft Punk") — redact
-        // each artist individually too.
-        ...song.artist.split(',').map((name) => name.trim()),
-    ].filter((secret) => secret.length >= 3);
+    // Multi-artist strings arrive joined ("The Weeknd, Daft Punk",
+    // "Tyla & Travis Scott") — split so each artist is redacted individually.
+    const artists = song.artist.split(/[,&]/).map((name) => name.trim());
+    const phrases = [coreTitle(song.title), song.title, ...artists]
+        .filter((phrase) => phrase.length >= 3);
 
-    return secrets.reduce(
-        (result, secret) => result.replace(new RegExp(escapeRegExp(secret), 'gi'), '████'),
+    const words = [...new Set(
+        phrases
+            .flatMap((phrase) => phrase.split(/[^\p{L}\p{N}]+/u))
+            .filter((word) => word.length >= 4 && !REDACTION_STOPWORDS.has(word.toLowerCase()))
+    )];
+
+    const phrasePass = phrases.reduce(
+        (result, phrase) => result.replace(new RegExp(escapeRegExp(phrase), 'gi'), '████'),
         hint
+    );
+    // Words get \b anchors so "Scott" doesn't censor the middle of "Scottish".
+    return words.reduce(
+        (result, word) => result.replace(new RegExp(`\\b${escapeRegExp(word)}\\b`, 'gi'), '████'),
+        phrasePass
     );
 };
