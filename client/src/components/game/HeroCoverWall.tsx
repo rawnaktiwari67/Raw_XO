@@ -35,17 +35,20 @@ function Row({ covers, dir, dur, size }: { covers: string[]; dir: number; dur: n
     );
 }
 
-// Per-row cadence and tile size. Varied sizes read as a depth-layered mosaic
-// rather than a single sliding strip; alternating directions and mismatched
-// durations keep the loop from ever lining up into an obvious repeat.
+// Per-row cadence, tile size, and depth grade. Varied sizes read as a
+// depth-layered mosaic rather than a single sliding strip; alternating
+// directions and mismatched durations keep the loop from ever lining up into
+// an obvious repeat. `dim` + `blur` fake a depth of field: the big center row
+// sits sharp and forward, the small rows recede dim and soft behind it, so
+// the wall reads as a lit set piece instead of a flat sheet of thumbnails.
 // Durations are deliberately long — the wall should read as a near-still tableau
 // that only reveals its drift if you watch it, not a scrolling ticker.
 const ROWS = [
-    { dir: -1, dur: 128, size: 'h-40 w-40 lg:h-44 lg:w-44' },
-    { dir: 1, dur: 162, size: 'h-32 w-32 lg:h-36 lg:w-36' },
-    { dir: -1, dur: 106, size: 'h-48 w-48 lg:h-56 lg:w-56' },
-    { dir: 1, dur: 174, size: 'h-36 w-36 lg:h-40 lg:w-40' },
-    { dir: -1, dur: 142, size: 'h-44 w-44 lg:h-48 lg:w-48' },
+    { dir: -1, dur: 128, size: 'h-40 w-40 lg:h-44 lg:w-44', dim: 0.72, blur: 0.8 },
+    { dir: 1, dur: 162, size: 'h-32 w-32 lg:h-36 lg:w-36', dim: 0.55, blur: 1.8 },
+    { dir: -1, dur: 106, size: 'h-48 w-48 lg:h-56 lg:w-56', dim: 1, blur: 0 },
+    { dir: 1, dur: 174, size: 'h-36 w-36 lg:h-40 lg:w-40', dim: 0.6, blur: 1.4 },
+    { dir: -1, dur: 142, size: 'h-44 w-44 lg:h-48 lg:w-48', dim: 0.85, blur: 0.4 },
 ];
 
 // Full-bleed ambient album-art mosaic behind the hero. A masked, slowly breathing
@@ -126,17 +129,34 @@ export default function HeroCoverWall() {
                     Rotate stays a plain CSS transform — composing it with the animated
                     scale on one element makes framer drop the scale keyframes. */}
                 <div className="absolute inset-0 [transform:rotate(-8deg)]">
-                    {/* Breathing scale is a CSS animation too (compositor, not JS). */}
+                    {/* Breathing scale is a CSS animation too (compositor, not JS).
+                        The static saturate/contrast grade unifies two dozen clashing
+                        album sleeves into one graded backdrop — cheap (one filter on
+                        one layer) and the main thing separating "film still" from
+                        "wall of thumbnails". */}
                     <div
-                        className="absolute inset-0 flex flex-col justify-between gap-6 py-4 opacity-[0.5]"
+                        className="absolute inset-0 flex flex-col justify-between gap-6 py-4 opacity-[0.55] [filter:saturate(0.84)_contrast(1.06)]"
                         style={
                             reduced
                                 ? { transform: 'scale(1.34)' }
                                 : { animation: 'heroBreathe 46s ease-in-out infinite', willChange: 'transform' }
                         }
                     >
+                        {/* Each row settles in on its own beat — a staggered
+                            blur-to-sharp focus pull rather than one flat fade — then
+                            holds its depth grade (dim + residual blur). One-shot cost;
+                            after the entrance nothing here animates on the CPU. */}
                         {rows.map((row, r) => (
-                            <Row key={r} covers={row} dir={reduced ? 0 : ROWS[r].dir} dur={ROWS[r].dur} size={ROWS[r].size} />
+                            <motion.div
+                                key={r}
+                                initial={
+                                    reduced ? false : { opacity: 0, y: 26, scale: 0.97, filter: 'blur(10px)' }
+                                }
+                                animate={{ opacity: ROWS[r].dim, y: 0, scale: 1, filter: `blur(${ROWS[r].blur}px)` }}
+                                transition={{ duration: 1.1, delay: 0.1 + r * 0.11, ease: [0.22, 1, 0.36, 1] }}
+                            >
+                                <Row covers={row} dir={reduced ? 0 : ROWS[r].dir} dur={ROWS[r].dur} size={ROWS[r].size} />
+                            </motion.div>
                         ))}
                     </div>
                 </div>
