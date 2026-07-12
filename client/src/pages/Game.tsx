@@ -136,7 +136,7 @@ export default function Game() {
     useEffect(() => {
         const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         if (reduced) return;
-        const t = window.setTimeout(() => setShowImagery(true), 350);
+        const t = window.setTimeout(() => setShowImagery(true), 120);
         return () => window.clearTimeout(t);
     }, []);
 

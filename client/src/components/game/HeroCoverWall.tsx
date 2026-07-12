@@ -76,7 +76,7 @@ export default function HeroCoverWall() {
 
     useEffect(() => {
         let alive = true;
-        musicService.getTrendingTracks().then((tracks) => {
+        musicService.getHeroArtwork().then((tracks) => {
             if (!alive) return;
             const art = tracks
                 .filter(
@@ -106,7 +106,7 @@ export default function HeroCoverWall() {
             aria-hidden
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 0.7, ease: 'easeOut' }}
+            transition={{ duration: 0.4, ease: 'easeOut' }}
             className="pointer-events-none absolute inset-x-0 top-0 h-[30rem] overflow-hidden lg:h-[36rem]"
             // Soft radial mask so the mosaic dissolves into the dark on every edge
             // instead of hard-cutting mid-tile — the main lever that turns a strip
@@ -128,7 +128,7 @@ export default function HeroCoverWall() {
                 <div className="absolute inset-0 [transform:rotate(-8deg)]">
                     {/* Breathing scale is a CSS animation too (compositor, not JS). */}
                     <div
-                        className="absolute inset-0 flex flex-col justify-between gap-6 py-4 opacity-[0.34]"
+                        className="absolute inset-0 flex flex-col justify-between gap-6 py-4 opacity-[0.5]"
                         style={
                             reduced
                                 ? { transform: 'scale(1.34)' }

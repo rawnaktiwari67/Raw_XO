@@ -301,4 +301,17 @@ export const musicService = {
 
         return catalogPromise;
     },
+
+    // Album-art only, tuned for the hero wall: pulls straight from the fast,
+    // memoized iTunes catalog batch (all queries in parallel) and deliberately
+    // skips the Spotify `/culture/catalog` server round-trip that
+    // getTrendingTracks() awaits. That server call — a cold Vercel serverless
+    // function — is what made the wall paint 2-3s after everything else. The
+    // game grid still uses getTrendingTracks for real popularity/genres; the
+    // ambient wall only needs artwork, so it takes the quick route.
+    async getHeroArtwork(): Promise<NormalizedMusicItem[]> {
+        const batches = await Promise.all(CATALOG_QUERIES.map((query) => fetchCatalog(query)));
+        const tracks = batches.flat();
+        return tracks.length > 0 ? tracks : fallbackTracks();
+    },
 };
