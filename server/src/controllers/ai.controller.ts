@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { isDbConnected } from '../config/db';
 import { successResponse, errorResponse } from '../utils/apiResponse';
 import { decodeSongToken } from '../utils/songTokens';
-import { chatCompletion, hasGroqKey } from '../ai/groqClient';
+import { chatCompletion, hasLlmProvider } from '../ai/llm';
 import { retrieveTopKMulti, hasKnowledgeBase } from '../ai/vectorStore';
 import {
     buildTriviaMessages, buildHintMessages, redactHintLeaks,
@@ -43,8 +43,8 @@ const MAX_GUESSES_USED = 8;
 // base → ask Groq to answer from those chunks only.
 export const askTrivia = async (req: Request, res: Response): Promise<void> => {
     try {
-        if (!hasGroqKey) {
-            res.status(503).json(errorResponse('AI features are not configured (GROQ_API_KEY missing).'));
+        if (!hasLlmProvider) {
+            res.status(503).json(errorResponse('AI features are not configured (set GROQ_API_KEY or GEMINI_API_KEY).'));
             return;
         }
         if (!isDbConnected()) {
@@ -105,8 +105,8 @@ export const askTrivia = async (req: Request, res: Response): Promise<void> => {
 // plus redactHintLeaks guarantee the title/artist are never revealed.
 export const generateHint = async (req: Request, res: Response): Promise<void> => {
     try {
-        if (!hasGroqKey) {
-            res.status(503).json(errorResponse('AI features are not configured (GROQ_API_KEY missing).'));
+        if (!hasLlmProvider) {
+            res.status(503).json(errorResponse('AI features are not configured (set GROQ_API_KEY or GEMINI_API_KEY).'));
             return;
         }
 

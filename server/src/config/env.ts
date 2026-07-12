@@ -25,6 +25,10 @@ const getEnv = () => ({
     GAME_TRACK_CACHE_MS: process.env.GAME_TRACK_CACHE_MS || '600000',
     GROQ_API_KEY: (process.env.GROQ_API_KEY || '').trim(),
     GROQ_MODEL: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+    GEMINI_API_KEY: (process.env.GEMINI_API_KEY || '').trim(),
+    // Rolling alias on purpose: pinned Gemini models age out of the free tier
+    // (2.0-flash now returns quota limit 0), the alias tracks the current one.
+    GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-flash-lite-latest',
     SPOTIFY_CLIENT_ID: process.env.SPOTIFY_CLIENT_ID || '',
     SPOTIFY_CLIENT_SECRET: process.env.SPOTIFY_CLIENT_SECRET || '',
     GAME_SPOTIFY_MARKET: process.env.GAME_SPOTIFY_MARKET || 'US',

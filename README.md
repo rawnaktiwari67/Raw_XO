@@ -15,7 +15,7 @@ No "sign up to continue" wall. Guest mode is instant — you're one tap from a r
 - 🏆 **Leaderboards & profiles.** Daily and all-time boards, sliceable by artist and genre, each with your live rank. Earn XP, climb levels, collect a level badge. Guests rank too — under a stable, randomly-generated handle like "Midnight Vinyl."
 - 📼 **Culture reels.** A scrollable, TikTok-style feed of trending tracks pulled from a curated Spotify pool — sort by Hottest or Newest, vote on what a lyric actually means, react, and leave a rated take.
 - 🎫 **Tour calendar.** Live music listings for Indian cities, with quick links out to tickets.
-- 🔮 **XO Oracle (AI).** A floating trivia chat that answers questions about the game's songs, The Weeknd's album eras, and tour dates — grounded in a locally-embedded knowledge base (RAG), so it says "I don't have info on that" instead of making things up. Plus in-round AI hints that get more specific the more you buy (each costs points, and they never reveal the title or artist). Requires a free `GROQ_API_KEY` — see [AI features](#ai-features-rag-trivia--hints).
+- 🔮 **XO Oracle (AI).** A floating trivia chat that answers questions about the game's songs, The Weeknd's album eras, and tour dates — grounded in a locally-embedded knowledge base (RAG), so it says "I don't have info on that" instead of making things up. Plus in-round AI hints that get more specific the more you buy (each costs points, and they never reveal the title or artist). Requires a free `GROQ_API_KEY` (with optional `GEMINI_API_KEY` fallback) — see [AI features](#ai-features-rag-trivia--hints).
 
 ## How a round feels
 
@@ -137,7 +137,7 @@ npm test
 
 The XO Oracle chat and the in-game hint button are powered by two pieces:
 
-- **Groq** (`llama-3.3-70b-versatile`) generates the text. Grab a free API key at [console.groq.com](https://console.groq.com) — no card required — and set `GROQ_API_KEY` in `server/.env`. Without it, the `/ai` routes return 503 and everything else keeps working.
+- **Groq** (`llama-3.3-70b-versatile`) generates the text. Grab a free API key at [console.groq.com](https://console.groq.com) — no card required — and set `GROQ_API_KEY` in `server/.env`. **Gemini** (`gemini-flash-lite-latest`) is the optional fallback: set `GEMINI_API_KEY` (free at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)) and it takes over whenever Groq is unconfigured or a call fails — free-tier rate limits stop being an outage. With neither key, the `/ai` routes return 503 and everything else keeps working.
 - **A local knowledge base** grounds the trivia answers. Build it once (and again whenever you reseed):
 
 ```
@@ -183,8 +183,10 @@ Create `server/.env` from `server/.env.example`.
 | `GAME_ITUNES_TIMEOUT_MS` | iTunes fetch timeout (clamped 1500–10000ms, default 4500ms) |
 | `GAME_MAX_QUERY_TERMS` | Max artist queries batched per fetch (clamped 2–12, default 6) |
 | `GAME_TRACK_CACHE_MS` | Song-pool cache TTL (default 10 minutes) |
-| `GROQ_API_KEY` | Groq LLM key for the AI trivia chat and hints — free at [console.groq.com](https://console.groq.com), no card required. Optional: without it the `/ai` routes return 503 and the rest of the app is unaffected |
+| `GROQ_API_KEY` | Groq LLM key for the AI trivia chat and hints — free at [console.groq.com](https://console.groq.com), no card required. Optional: with neither this nor `GEMINI_API_KEY` set, the `/ai` routes return 503 and the rest of the app is unaffected |
 | `GROQ_MODEL` | Groq model id (default `llama-3.3-70b-versatile`) |
+| `GEMINI_API_KEY` | Gemini LLM key, the fallback provider — free at [aistudio.google.com/apikey](https://aistudio.google.com/apikey). Used when Groq is unconfigured or a Groq call fails |
+| `GEMINI_MODEL` | Gemini model id (default `gemini-flash-lite-latest` — keep a rolling `-latest` alias; pinned models age out of the free tier) |
 | `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` | Client Credentials for Spotify public catalog search and the culture-reel catalog |
 | `GAME_SPOTIFY_MARKET` | Spotify market code for popularity/metadata (default `US`) |
 | `GAME_SPOTIFY_TRACK_SEARCH` | Set `true` to use Spotify (instead of iTunes) for game track search |
