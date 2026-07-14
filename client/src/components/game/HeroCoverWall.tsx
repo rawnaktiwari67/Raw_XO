@@ -44,11 +44,11 @@ function Row({ covers, dir, dur, size }: { covers: string[]; dir: number; dur: n
 // Durations are deliberately long — the wall should read as a near-still tableau
 // that only reveals its drift if you watch it, not a scrolling ticker.
 const ROWS = [
-    { dir: -1, dur: 128, size: 'h-40 w-40 lg:h-44 lg:w-44', dim: 0.72, blur: 0.8 },
-    { dir: 1, dur: 162, size: 'h-32 w-32 lg:h-36 lg:w-36', dim: 0.55, blur: 1.8 },
+    { dir: -1, dur: 128, size: 'h-40 w-40 lg:h-44 lg:w-44', dim: 0.84, blur: 0.8 },
+    { dir: 1, dur: 162, size: 'h-32 w-32 lg:h-36 lg:w-36', dim: 0.7, blur: 1.8 },
     { dir: -1, dur: 106, size: 'h-48 w-48 lg:h-56 lg:w-56', dim: 1, blur: 0 },
-    { dir: 1, dur: 174, size: 'h-36 w-36 lg:h-40 lg:w-40', dim: 0.6, blur: 1.4 },
-    { dir: -1, dur: 142, size: 'h-44 w-44 lg:h-48 lg:w-48', dim: 0.85, blur: 0.4 },
+    { dir: 1, dur: 174, size: 'h-36 w-36 lg:h-40 lg:w-40', dim: 0.74, blur: 1.4 },
+    { dir: -1, dur: 142, size: 'h-44 w-44 lg:h-48 lg:w-48', dim: 0.92, blur: 0.4 },
 ];
 
 // Full-bleed ambient album-art mosaic behind the hero. A masked, slowly breathing
@@ -135,7 +135,7 @@ export default function HeroCoverWall() {
                         one layer) and the main thing separating "film still" from
                         "wall of thumbnails". */}
                     <div
-                        className="absolute inset-0 flex flex-col justify-between gap-6 py-4 opacity-[0.55] [filter:saturate(0.84)_contrast(1.06)]"
+                        className="absolute inset-0 flex flex-col justify-between gap-6 py-4 opacity-[0.7] [filter:saturate(0.92)_contrast(1.06)_brightness(1.05)]"
                         style={
                             reduced
                                 ? { transform: 'scale(1.34)' }
@@ -165,7 +165,7 @@ export default function HeroCoverWall() {
             {/* Scrims layered over the mask: a left bias keeps the headline on
                 darkness, a bottom fade dissolves the wall into the content below,
                 and a warm amber wash lifts the top. */}
-            <div className="absolute inset-0 bg-[linear-gradient(90deg,#0B0B0F_0%,rgba(11,11,15,0.28)_38%,transparent_72%)]" />
+            <div className="absolute inset-0 bg-[linear-gradient(90deg,#0B0B0F_0%,rgba(11,11,15,0.16)_34%,transparent_60%)]" />
             {/* Strong lower fade to solid #0B0B0F (= --bg-0), so the wall is fully
                 gone before the game setup below and never bleeds through its cards. */}
             <div className="absolute inset-x-0 bottom-0 h-1/2 bg-[linear-gradient(180deg,transparent_0%,#0B0B0F_78%)]" />
