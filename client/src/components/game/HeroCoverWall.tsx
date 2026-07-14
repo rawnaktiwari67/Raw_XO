@@ -153,7 +153,7 @@ export default function HeroCoverWall() {
                                     reduced ? false : { opacity: 0, y: 26, scale: 0.97, filter: 'blur(10px)' }
                                 }
                                 animate={{ opacity: ROWS[r].dim, y: 0, scale: 1, filter: `blur(${ROWS[r].blur}px)` }}
-                                transition={{ duration: 1.1, delay: 0.1 + r * 0.11, ease: [0.22, 1, 0.36, 1] }}
+                                transition={{ duration: 0.65, delay: 0.05 + r * 0.06, ease: [0.22, 1, 0.36, 1] }}
                             >
                                 <Row covers={row} dir={reduced ? 0 : ROWS[r].dir} dur={ROWS[r].dur} size={ROWS[r].size} />
                             </motion.div>
