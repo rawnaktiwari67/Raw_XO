@@ -261,7 +261,7 @@ export default function Game() {
                             </motion.h1>
                         </div>
                         <motion.p variants={heroItem} className="mt-4 max-w-xl text-sm leading-relaxed text-text-3 md:text-base">
-                            Fast rounds, instant reveals, and real history. Nothing above the game that does not help you play.
+                            Guess the track in five seconds. Build your streak. Climb the rankings.
                         </motion.p>
                     </motion.div>
                     {isAuthenticated && user ? (

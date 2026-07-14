@@ -239,6 +239,8 @@ function FilterRail<T extends string>({
                     <p className="label-xs">{label}</p>
                     <p className="mt-2 truncate text-sm font-semibold text-text-1">{selectedOption?.label ?? label}</p>
                 </div>
+                {/* Only the locked state earns a badge — a "Select" hint on every
+                    card carried no information once each card had one. */}
                 {locked ? (
                     <span className="flex items-center gap-1 rounded-full bg-white/[0.035] px-3 py-1.5 text-[9px] uppercase tracking-[0.14em] text-text-4">
                         <svg viewBox="0 0 24 24" fill="none" className="h-2.5 w-2.5" aria-hidden>
@@ -247,11 +249,7 @@ function FilterRail<T extends string>({
                         </svg>
                         Locked
                     </span>
-                ) : (
-                    <span className="rounded-full bg-white/[0.035] px-3 py-1.5 text-[9px] uppercase tracking-[0.14em] text-text-4">
-                        Select
-                    </span>
-                )}
+                ) : null}
             </div>
             <div className="flex flex-wrap gap-2">
                 {options.map((option) => {
@@ -287,7 +285,7 @@ function FilterRail<T extends string>({
                                 <motion.span
                                     layoutId={`rail-active-${label}`}
                                     aria-hidden
-                                    className="absolute -inset-0.5 rounded-[0.95rem] bg-[linear-gradient(180deg,rgba(244,162,97,0.28),rgba(244,162,97,0.11))] ring-1 ring-amber/30 shadow-[0_0_20px_rgba(244,162,97,0.22)]"
+                                    className="absolute -inset-0.5 rounded-[0.95rem] bg-[linear-gradient(180deg,rgba(244,162,97,0.28),rgba(244,162,97,0.11))] ring-1 ring-amber/30 shadow-[0_0_10px_rgba(244,162,97,0.25)]"
                                     transition={{ type: 'spring', stiffness: 380, damping: 32 }}
                                 />
                             ) : null}
@@ -422,7 +420,7 @@ function ArtistPicker({
                     }}
                     placeholder="Search any artist — Don Toliver, Ed Sheeran…"
                     disabled={disabled}
-                    className="peer h-11 w-full rounded-[0.85rem] bg-black/20 pl-9 pr-9 text-sm text-text-1 outline-none ring-1 ring-white/[0.10] transition-all duration-300 placeholder:text-text-4 focus:bg-black/25 focus:ring-amber/45 focus:shadow-[inset_0_0_0_1px_rgba(244,162,97,0.35),0_0_22px_rgba(244,162,97,0.14)]"
+                    className="peer h-11 w-full rounded-[0.85rem] bg-black/20 pl-9 pr-9 text-sm text-text-1 outline-none ring-1 ring-white/[0.10] transition-all duration-300 placeholder:text-text-3 focus:bg-black/25 focus:ring-amber/45 focus:shadow-[inset_0_0_0_1px_rgba(244,162,97,0.35),0_0_22px_rgba(244,162,97,0.14)]"
                 />
                 {isSearching ? (
                     <span
@@ -461,7 +459,7 @@ function ArtistPicker({
                         className={`min-h-9 rounded-[0.8rem] px-3 py-2 text-left text-[10px] uppercase tracking-[0.11em] transition-all duration-300 ${
                             value === 'all'
                                 ? 'bg-[linear-gradient(180deg,rgba(244,162,97,0.22),rgba(244,162,97,0.08))] text-text-1 ring-1 ring-amber/20'
-                                : 'bg-white/[0.03] text-text-3 hover:text-text-1'
+                                : 'bg-white/[0.03] text-text-3 opacity-60 hover:opacity-100 hover:text-text-1'
                         } disabled:opacity-60`}
                     >
                         Any Artist
@@ -481,7 +479,7 @@ function ArtistPicker({
                                 className={`min-h-9 max-w-[150px] rounded-[0.8rem] px-3 py-2 text-left text-[10px] uppercase tracking-[0.11em] transition-all duration-300 ${
                                     active
                                         ? 'bg-[linear-gradient(180deg,rgba(244,162,97,0.22),rgba(244,162,97,0.08))] text-text-1 ring-1 ring-amber/20'
-                                        : 'bg-white/[0.03] text-text-3 hover:text-text-1'
+                                        : 'bg-white/[0.03] text-text-3 opacity-60 hover:opacity-100 hover:text-text-1'
                                 } disabled:opacity-60`}
                             >
                                 <span className="block truncate">{artist.label}</span>
@@ -2352,7 +2350,7 @@ export default function GamePlayer() {
                                                     className={`h-12 w-12 rounded-[1rem] text-sm font-semibold transition-all ${
                                                         rating && value <= rating
                                                             ? 'bg-amber text-ch-0'
-                                                            : 'bg-white/[0.03] text-text-3 hover:text-text-1'
+                                                            : 'bg-white/[0.03] text-text-3 opacity-60 hover:opacity-100 hover:text-text-1'
                                                     }`}
                                                 >
                                                     {value}
