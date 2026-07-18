@@ -47,6 +47,17 @@ function tone(freq: number, start: number, duration: number, peak: number, type:
     osc.stop(start + duration + 0.02);
 }
 
+// Barely-there UI whisper for hovering primary controls — texture, not
+// feedback, so it sits far quieter than playTick. Only sounds once the
+// context is running (a prior user gesture has unlocked it); before that it
+// no-ops rather than queueing, per browser autoplay policy.
+export function playHover() {
+    if (muted) return;
+    const c = getContext();
+    if (!c || c.state !== 'running') return;
+    tone(1174.66, c.currentTime, 0.05, 0.035, 'sine'); // D6, near-subliminal
+}
+
 export function playTick() {
     if (muted) return;
     const c = getContext();

@@ -116,11 +116,20 @@ export default function Navbar() {
                             <>
                                 <Link
                                     to="/login"
-                                    className="hidden text-[11px] uppercase tracking-[0.14em] text-text-3 transition-colors hover:text-text-1 sm:block"
+                                    className="hidden text-[11px] font-semibold uppercase tracking-[0.14em] text-text-2 transition-colors hover:text-text-1 sm:block"
                                 >
                                     Sign In
                                 </Link>
-                                <Link to="/register" className="btn-secondary rounded-[1.1rem] px-4 py-2 text-[11px] opacity-75 transition-opacity hover:opacity-100 md:px-5 md:text-xs">
+                                {/* The primary account action gets the accent — a solid
+                                    pill instead of a ghost outline, so it reads over the
+                                    bright cover wall behind the navbar. Deliberately a
+                                    desaturated amber (not the full accent): the hero's
+                                    "5 seconds." must stay the brightest orange on screen,
+                                    and the nav shouldn't compete with it. */}
+                                <Link
+                                    to="/register"
+                                    className="rounded-[1.1rem] bg-[#D69E71] px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.04em] text-ch-0 shadow-[0_8px_22px_rgba(214,158,113,0.24)] transition-all duration-300 hover:-translate-y-px hover:bg-amber md:px-5 md:text-xs"
+                                >
                                     Join
                                 </Link>
                             </>

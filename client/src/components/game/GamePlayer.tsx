@@ -233,25 +233,31 @@ function FilterRail<T extends string>({
     const interactive = !disabled && !locked;
 
     return (
-        <div className={`min-h-0 rounded-[1.1rem] bg-white/[0.025] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] lg:min-h-[200px] transition-opacity duration-300 ${locked ? 'opacity-55' : ''}`}>
+        <div className={`flex min-h-0 flex-col rounded-[1.1rem] bg-white/[0.025] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] lg:min-h-[200px] transition-opacity duration-300 ${locked ? 'opacity-70' : ''}`}>
             <div className="mb-3 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <p className="label-xs">{label}</p>
                     <p className="mt-2 truncate text-sm font-semibold text-text-1">{selectedOption?.label ?? label}</p>
                 </div>
                 {/* Only the locked state earns a badge — a "Select" hint on every
-                    card carried no information once each card had one. */}
+                    card carried no information once each card had one. The badge
+                    names the cause (artist pick overrides this rail) in the accent
+                    color, so it reads as an intentional state, not a dead control;
+                    tapping any chip still fires the explanatory toast. */}
                 {locked ? (
-                    <span className="flex items-center gap-1 rounded-full bg-white/[0.035] px-3 py-1.5 text-[9px] uppercase tracking-[0.14em] text-text-4">
+                    <span className="flex items-center gap-1 rounded-full bg-amber/10 px-3 py-1.5 text-[9px] uppercase tracking-[0.14em] text-amber/90 ring-1 ring-amber/20">
                         <svg viewBox="0 0 24 24" fill="none" className="h-2.5 w-2.5" aria-hidden>
                             <rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" strokeWidth="2.2" />
                             <path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
                         </svg>
-                        Locked
+                        Set by artist
                     </span>
                 ) : null}
             </div>
-            <div className="flex flex-wrap gap-2">
+            {/* flex-1 + content-center keeps short rails (Difficulty's three
+                chips) vertically balanced inside the fixed lg card height
+                instead of hugging the header with dead space below. */}
+            <div className="flex flex-1 flex-wrap content-center gap-2">
                 {options.map((option) => {
                     const active = option.value === value;
 
@@ -260,7 +266,7 @@ function FilterRail<T extends string>({
                             key={option.value}
                             type="button"
                             whileHover={interactive ? { y: -3, scale: 1.03 } : undefined}
-                            whileTap={interactive ? { scale: 0.98 } : undefined}
+                            whileTap={interactive ? { scale: 0.95 } : undefined}
                             transition={{ type: 'spring', stiffness: 420, damping: 26 }}
                             onClick={() => {
                                 if (locked) {
@@ -285,11 +291,22 @@ function FilterRail<T extends string>({
                                 <motion.span
                                     layoutId={`rail-active-${label}`}
                                     aria-hidden
-                                    className="absolute -inset-0.5 rounded-[0.95rem] bg-[linear-gradient(180deg,rgba(244,162,97,0.28),rgba(244,162,97,0.11))] ring-1 ring-amber/30 shadow-[0_0_10px_rgba(244,162,97,0.25)]"
+                                    // The CSS glow pulse animates box-shadow only, so it
+                                    // can't fight the transform-based layout glide.
+                                    className="absolute -inset-0.5 rounded-[0.95rem] bg-[linear-gradient(180deg,rgba(244,162,97,0.28),rgba(244,162,97,0.11))] ring-1 ring-amber/30 shadow-[0_0_10px_rgba(244,162,97,0.25)] [animation:railPulse_0.5s_ease-out]"
                                     transition={{ type: 'spring', stiffness: 380, damping: 32 }}
                                 />
                             ) : null}
-                            <span className="relative z-[1]">{option.label}</span>
+                            {/* Selection pop rides the inner span, not the button —
+                                hover/tap gestures own the button's transform, so a
+                                keyframe there would be swallowed mid-hover. */}
+                            <motion.span
+                                className="relative z-[1] inline-block"
+                                animate={active ? { scale: [1, 0.92, 1.07, 1] } : { scale: 1 }}
+                                transition={{ duration: 0.4, times: [0, 0.3, 0.65, 1], ease: 'easeOut' }}
+                            >
+                                {option.label}
+                            </motion.span>
                         </motion.button>
                     );
                 })}
@@ -377,7 +394,11 @@ function ArtistPicker({
     }, [language, normalizedQuery]);
 
     return (
-        <div className="min-h-0 rounded-[1.1rem] bg-white/[0.025] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] lg:min-h-[200px]">
+        // The artist card leads the setup row: a gradient fill, brighter ring, and
+        // amber top edge give it a visible step up from the three flat rails —
+        // picking an artist is the highest-stakes choice, so it should read first.
+        <div className="relative min-h-0 overflow-hidden rounded-[1.1rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.014))] p-5 ring-1 ring-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] lg:min-h-[200px]">
+            <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber/35 to-transparent" />
             <div className="mb-3 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <p className="label-xs">Artist Pool</p>
@@ -420,7 +441,7 @@ function ArtistPicker({
                     }}
                     placeholder="Search any artist — Don Toliver, Ed Sheeran…"
                     disabled={disabled}
-                    className="peer h-11 w-full rounded-[0.85rem] bg-black/20 pl-9 pr-9 text-sm text-text-1 outline-none ring-1 ring-white/[0.10] transition-all duration-300 placeholder:text-text-3 focus:bg-black/25 focus:ring-amber/45 focus:shadow-[inset_0_0_0_1px_rgba(244,162,97,0.35),0_0_22px_rgba(244,162,97,0.14)]"
+                    className="peer h-11 w-full rounded-[0.85rem] bg-black/20 pl-9 pr-9 text-sm text-text-1 outline-none ring-1 ring-white/[0.10] transition-all duration-300 placeholder:text-white/60 focus:bg-black/25 focus:ring-amber/45 focus:shadow-[inset_0_0_0_1px_rgba(244,162,97,0.35),0_0_22px_rgba(244,162,97,0.14)]"
                 />
                 {isSearching ? (
                     <span
@@ -1996,7 +2017,7 @@ export default function GamePlayer() {
                     picker spans full width, the three rails sit 2-up. xl: 4 across. */}
                 {/* Artist gets the widest column — picking an artist is the highest-
                     stakes choice, so it carries more visual weight than the three rails. */}
-                <div className={`grid-cols-1 gap-3 sm:grid-cols-2 lg:grid xl:grid-cols-[1.6fr_1fr_1fr_1fr] ${filtersOpen ? 'mt-4 grid' : 'hidden'}`}>
+                <div className={`grid-cols-1 gap-3 sm:grid-cols-2 lg:grid xl:grid-cols-[1.7fr_1fr_1fr_1fr] ${filtersOpen ? 'mt-4 grid' : 'hidden'}`}>
                     <div className="sm:col-span-2 xl:col-span-1">
                         <ArtistPicker
                             artists={artistOptions}

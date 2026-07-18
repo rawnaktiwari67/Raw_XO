@@ -15,7 +15,7 @@ function Row({ covers, dir, dur, size }: { covers: string[]; dir: number; dur: n
     const doubled = [...covers, ...covers];
     return (
         <div
-            className="flex w-max gap-4 md:gap-6"
+            className="flex w-max gap-3 md:gap-6"
             style={
                 dir === 0
                     ? undefined
@@ -43,12 +43,15 @@ function Row({ covers, dir, dur, size }: { covers: string[]; dir: number; dur: n
 // the wall reads as a lit set piece instead of a flat sheet of thumbnails.
 // Durations are deliberately long — the wall should read as a near-still tableau
 // that only reveals its drift if you watch it, not a scrolling ticker.
+// Sizes are mobile-first: phone tiles are roughly half the md: sizes so the
+// breathe scale (~1.34–1.44x) still leaves 2–3 covers visible per row on a
+// 375px screen — without this the wall reads as one giant sliding square.
 const ROWS = [
-    { dir: -1, dur: 128, size: 'h-40 w-40 lg:h-44 lg:w-44', dim: 0.84, blur: 0.8 },
-    { dir: 1, dur: 162, size: 'h-32 w-32 lg:h-36 lg:w-36', dim: 0.7, blur: 1.8 },
-    { dir: -1, dur: 106, size: 'h-48 w-48 lg:h-56 lg:w-56', dim: 1, blur: 0 },
-    { dir: 1, dur: 174, size: 'h-36 w-36 lg:h-40 lg:w-40', dim: 0.74, blur: 1.4 },
-    { dir: -1, dur: 142, size: 'h-44 w-44 lg:h-48 lg:w-48', dim: 0.92, blur: 0.4 },
+    { dir: -1, dur: 128, size: 'h-28 w-28 md:h-40 md:w-40 lg:h-44 lg:w-44', dim: 0.94, blur: 0.5 },
+    { dir: 1, dur: 162, size: 'h-20 w-20 md:h-32 md:w-32 lg:h-36 lg:w-36', dim: 0.82, blur: 1.2 },
+    { dir: -1, dur: 106, size: 'h-32 w-32 md:h-48 md:w-48 lg:h-56 lg:w-56', dim: 1, blur: 0 },
+    { dir: 1, dur: 174, size: 'h-24 w-24 md:h-36 md:w-36 lg:h-40 lg:w-40', dim: 0.85, blur: 1 },
+    { dir: -1, dur: 142, size: 'h-28 w-28 md:h-44 md:w-44 lg:h-48 lg:w-48', dim: 0.97, blur: 0.3 },
 ];
 
 // Full-bleed ambient album-art mosaic behind the hero. A masked, slowly breathing
@@ -135,7 +138,7 @@ export default function HeroCoverWall() {
                         one layer) and the main thing separating "film still" from
                         "wall of thumbnails". */}
                     <div
-                        className="absolute inset-0 flex flex-col justify-between gap-6 py-4 opacity-[0.7] [filter:saturate(0.92)_contrast(1.06)_brightness(1.05)]"
+                        className="absolute inset-0 flex flex-col justify-between gap-4 py-4 opacity-[0.9] [filter:saturate(1.18)_contrast(1.1)_brightness(1.1)] md:gap-6"
                         style={
                             reduced
                                 ? { transform: 'scale(1.34)' }

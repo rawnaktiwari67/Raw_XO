@@ -785,6 +785,15 @@ html.lenis {
   50%      { transform: scale(1.44); }
 }
 
+/* One-shot glow flash for the filter-rail selection pill. Box-shadow only —
+   transforms stay owned by framer's layoutId glide. Ends on the pill's static
+   resting shadow so there's no visible snap when the animation finishes. */
+@keyframes railPulse {
+  0%   { box-shadow: 0 0 0 rgba(244, 162, 97, 0); }
+  40%  { box-shadow: 0 0 26px rgba(244, 162, 97, 0.55); }
+  100% { box-shadow: 0 0 10px rgba(244, 162, 97, 0.25); }
+}
+
 /* ─────────────────────────────
    Marquee
    ───────────────────────────── */

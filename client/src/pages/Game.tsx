@@ -1,9 +1,10 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion, useSpring } from 'framer-motion';
 import { useAuthStore } from '../stores/authStore';
 import { useGameStore } from '../stores/gameStore';
 import { getLenis } from '../hooks/useSmoothScroll';
+import { playHover, unlock } from '../services/sound';
 import GamePlayer from '../components/game/GamePlayer';
 import Leaderboard from '../components/game/Leaderboard';
 import { useDocumentMeta } from '../hooks/useDocumentMeta';
@@ -12,9 +13,6 @@ import ScrollReveal from '../components/motion/ScrollReveal';
 import Magnetic from '../components/motion/Magnetic';
 import PinnedShowcase, { type ShowcasePanel } from '../components/motion/PinnedShowcase';
 
-// Raw-WebGL beam (a few KB — three.js is gone). Still lazy so the shader code
-// never blocks the initial paint; it mounts a beat after the LCP headline.
-const LaserFlow = lazy(() => import('../components/effects/LaserFlow'));
 // Album-art wall for the hero — lazy + post-idle so its imagery never competes
 // with the LCP headline for bandwidth on first paint.
 const HeroCoverWall = lazy(() => import('../components/game/HeroCoverWall'));
@@ -119,7 +117,6 @@ export default function Game() {
     const { isAuthenticated, user } = useAuthStore();
     const { stats, history, phase, isLoading, fetchStats, fetchHistory } = useGameStore();
     const isGameplayActive = phase !== 'idle' || isLoading;
-    const [showLaser, setShowLaser] = useState(false);
     // Album-art wall mounts shortly after first paint (motion allowed; all
     // screen sizes — it's compositor-only CSS animation, cheap even on phones).
     // setTimeout — not requestIdleCallback — so it fires reliably even in a
@@ -133,21 +130,42 @@ export default function Game() {
         }
     }, [fetchHistory, fetchStats, isAuthenticated]);
 
+    // Hero CTA: glide down to the game panel. Goes through Lenis (which owns the
+    // wheel) so the easing matches every other scroll; falls back to native
+    // smooth scrolling for reduced-motion/touch users where Lenis is skipped.
+    // The click doubles as the gesture that unlocks the AudioContext, so hover
+    // whispers can sound from here on.
+    const scrollToPlay = () => {
+        unlock();
+        const target = document.getElementById('play');
+        if (!target) return;
+        const lenis = getLenis();
+        if (lenis) lenis.scrollTo(target, { offset: -88, duration: 1.05 });
+        else target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    // Counter-parallax on the hero copy: the cover wall leans toward the cursor
+    // (HeroCoverWall, ±13px), the text drifts a few pixels the other way — two
+    // layers moving apart is what sells the depth. Amplitudes are tiny (±3/±2px)
+    // so the LCP headline never visibly detaches from its layout position.
+    const reducedMotion = useReducedMotion();
+    const heroX = useSpring(0, { stiffness: 60, damping: 20, mass: 0.6 });
+    const heroY = useSpring(0, { stiffness: 60, damping: 20, mass: 0.6 });
+
+    useEffect(() => {
+        if (reducedMotion) return;
+        const onMove = (e: MouseEvent) => {
+            heroX.set((e.clientX / window.innerWidth - 0.5) * -6);
+            heroY.set((e.clientY / window.innerHeight - 0.5) * -4);
+        };
+        window.addEventListener('mousemove', onMove, { passive: true });
+        return () => window.removeEventListener('mousemove', onMove);
+    }, [reducedMotion, heroX, heroY]);
+
     useEffect(() => {
         const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         if (reduced) return;
         const t = window.setTimeout(() => setShowImagery(true), 120);
-        return () => window.clearTimeout(t);
-    }, []);
-
-    // Mount the WebGL backdrop a beat after first paint — the raw-WebGL chunk is
-    // tiny, so the only reason to wait is to keep the LCP headline's paint clean.
-    // Still skipped for reduced motion and small/low-power screens.
-    useEffect(() => {
-        const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        if (reduced || window.innerWidth < 768) return;
-
-        const t = window.setTimeout(() => setShowLaser(true), 400);
         return () => window.clearTimeout(t);
     }, []);
 
@@ -181,36 +199,7 @@ export default function Game() {
         // live outside the backdrop-clipping container.
         <div className="relative">
         <div className="relative overflow-hidden">
-            {/* Laser beam is the deepest layer so its warm glow reads *behind* the
-                album-art wall, diffusing up through the gaps between covers. */}
-            <div aria-hidden className="absolute inset-x-0 top-0 h-[34rem] opacity-[0.16]">
-                {showLaser ? (
-                    <Suspense fallback={null}>
-                        <LaserFlow
-                            color="#F4A261"
-                            dpr={0.7}
-                            horizontalBeamOffset={0.08}
-                            verticalBeamOffset={-0.02}
-                            horizontalSizing={0.92}
-                            verticalSizing={2.3}
-                            wispDensity={1}
-                            wispSpeed={10}
-                            wispIntensity={2.2}
-                            flowSpeed={0.18}
-                            flowStrength={0.14}
-                            fogIntensity={0.18}
-                            fogScale={0.24}
-                            fogFallSpeed={0.34}
-                            decay={1.02}
-                            falloffStart={1.04}
-                            mouseTiltStrength={0}
-                        />
-                    </Suspense>
-                ) : null}
-            </div>
-
-            {/* Ambient album-art wall — sits above the laser so the covers catch
-                the glow from behind; gradient scrims below still paint over it. */}
+            {/* Ambient album-art wall — gradient scrims below paint over it. */}
             {showImagery ? (
                 <Suspense fallback={null}>
                     <HeroCoverWall />
@@ -245,7 +234,12 @@ export default function Game() {
                     animate="visible"
                     className="relative mb-10 flex min-h-[20rem] flex-col justify-end gap-6 md:min-h-[24rem] lg:flex-row lg:items-end lg:justify-between"
                 >
-                    <motion.div variants={heroItem} className="relative z-[1] max-w-2xl">
+                    {/* Outer div carries only the cursor counter-parallax so its
+                        x/y never fight the entrance variants on the inner div.
+                        max-w trimmed from 2xl so "disappears." wraps closer to
+                        the width of the first line. */}
+                    <motion.div style={{ x: heroX, y: heroY }} className="relative z-[1] max-w-[38rem]">
+                    <motion.div variants={heroItem}>
                         <motion.p variants={heroItem} className="label-xs mb-2 flex items-center gap-2">
                             <span aria-hidden className="accent-pulse inline-block h-1.5 w-1.5 rounded-full bg-amber" />
                             Raw XO
@@ -263,6 +257,22 @@ export default function Game() {
                         <motion.p variants={heroItem} className="mt-4 max-w-xl text-sm leading-relaxed text-text-3 md:text-base">
                             Guess the track in five seconds. Build your streak. Climb the rankings.
                         </motion.p>
+                        <motion.div variants={heroItem} className="mt-7">
+                            <Magnetic>
+                                <button
+                                    type="button"
+                                    onClick={scrollToPlay}
+                                    onMouseEnter={() => playHover()}
+                                    className="inline-flex items-center gap-2.5 rounded-[1rem] bg-amber px-7 py-4 text-[13px] font-extrabold uppercase tracking-[0.02em] text-ch-0 shadow-[0_14px_36px_rgba(244,162,97,0.32)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(244,162,97,0.42)] active:scale-[0.99]"
+                                >
+                                    <svg viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5" aria-hidden>
+                                        <path d="M8 5v14l11-7z" />
+                                    </svg>
+                                    Start Playing
+                                </button>
+                            </Magnetic>
+                        </motion.div>
+                    </motion.div>
                     </motion.div>
                     {isAuthenticated && user ? (
                         <motion.div variants={heroItem} className="relative z-[1] rounded-full bg-white/[0.03] px-4 py-2 text-sm text-text-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
@@ -271,7 +281,7 @@ export default function Game() {
                     ) : null}
                 </motion.section>
 
-                <section className="min-w-0">
+                <section id="play" className="min-w-0 scroll-mt-24">
                     <GamePlayer />
                 </section>
 
