@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 
 // Site-wide defaults, kept in sync with the static tags in index.html so a page
 // without its own metadata (or one that just unmounted) reads correctly.
@@ -37,6 +38,26 @@ function apply(title: string, description: string) {
  * site defaults when the page unmounts. Pass `undefined`/empty while data is
  * still loading to leave the previous values in place.
  */
+/**
+ * Keeps a single <link rel="canonical"> in sync with the current route. Mounted
+ * once in AppRouter so every page gets one, whether or not it sets its own
+ * meta. Built from location.origin at runtime because the repo never hardcodes
+ * a deploy domain; crawlers that skip JS get their canonical from the
+ * server-rendered bot shell instead.
+ */
+export function useCanonical() {
+    const { pathname } = useLocation();
+    useEffect(() => {
+        let el = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+        if (!el) {
+            el = document.createElement('link');
+            el.rel = 'canonical';
+            document.head.appendChild(el);
+        }
+        el.href = window.location.origin + pathname;
+    }, [pathname]);
+}
+
 export function useDocumentMeta({ title, description }: DocumentMeta) {
     useEffect(() => {
         if (!title && !description) return;

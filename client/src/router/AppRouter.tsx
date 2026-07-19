@@ -2,6 +2,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useSmoothScroll } from '../hooks/useSmoothScroll';
+import { useCanonical } from '../hooks/useDocumentMeta';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
 import ScrollToTop from '../components/layout/ScrollToTop';
@@ -71,6 +72,7 @@ export default function AppRouter() {
     const location = useLocation();
     const reducedMotion = useReducedMotion();
     useSmoothScroll();
+    useCanonical();
 
     return (
         <div className="min-h-screen flex flex-col">

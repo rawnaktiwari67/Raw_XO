@@ -44,6 +44,36 @@
       "destination": "/api/index.ts"
     },
     {
+      "source": "/sitemap.xml",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/robots.txt",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|Twitterbot|Slackbot|Discordbot|WhatsApp|LinkedInBot|TelegramBot|Pinterest|redditbot|Googlebot|bingbot|Applebot|SkypeUriPreview|vkShare|Embedly|Iframely|Bluesky|Mastodon).*"
+        }
+      ],
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/(archive|tours|leaderboard)",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|Twitterbot|Slackbot|Discordbot|WhatsApp|LinkedInBot|TelegramBot|Pinterest|redditbot|Googlebot|bingbot|Applebot|SkypeUriPreview|vkShare|Embedly|Iframely|Bluesky|Mastodon).*"
+        }
+      ],
+      "destination": "/api/index.ts"
+    },
+    {
       "source": "/(profile|thread|era)/:path*",
       "has": [
         {

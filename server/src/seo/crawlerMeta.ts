@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { isValidObjectId } from 'mongoose';
 import User from '../models/User';
 import Thread from '../models/Thread';
 import Era from '../models/Era';
@@ -28,9 +29,26 @@ function truncate(value: string, max = 160): string {
     return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
 }
 
+// Static pages, mirroring the titles the client sets via useDocumentMeta so a
+// shared link and the opened page read the same.
+const STATIC_META: Record<string, Meta> = {
+    '/archive': {
+        title: 'Your Diary — Raw XO',
+        description: 'Log every track you hear, rate it, and watch your taste take shape.',
+    },
+    '/tours': {
+        title: 'Tours — Raw XO',
+        description: 'Live music listings for Indian cities, with quick links out to tickets.',
+    },
+    '/leaderboard': {
+        title: 'Leaderboard — Raw XO',
+        description: 'Daily and all-time leaderboards, sliceable by artist and genre. See how good your ear really is.',
+    },
+};
+
 // Build an absolute origin from the proxied request headers so we never hardcode
 // a domain — the function serves whatever host it was reached on.
-function originFrom(req: Request): string {
+export function originFrom(req: Request): string {
     const proto = (req.headers['x-forwarded-proto'] as string) || 'https';
     const host = (req.headers['x-forwarded-host'] as string) || req.headers.host || '';
     return `${proto.split(',')[0]}://${host}`;
@@ -39,9 +57,11 @@ function originFrom(req: Request): string {
 interface Meta {
     title: string;
     description: string;
+    // Extra page-specific structured data, appended after the site-wide blocks.
+    jsonLd?: Record<string, unknown>[];
 }
 
-async function resolveMeta(path: string): Promise<Meta> {
+async function resolveMeta(path: string, origin: string): Promise<Meta> {
     const profile = path.match(/^\/profile\/([^/?#]+)/);
     if (profile) {
         const username = decodeURIComponent(profile[1]);
@@ -57,12 +77,23 @@ async function resolveMeta(path: string): Promise<Meta> {
     }
 
     const thread = path.match(/^\/thread\/([^/?#]+)/);
-    if (thread) {
-        const doc = await Thread.findById(thread[1]).select('title body isDeleted').lean();
+    if (thread && isValidObjectId(thread[1])) {
+        const doc = await Thread.findById(thread[1])
+            .select('title body isDeleted createdAt updatedAt')
+            .lean();
         if (doc && !doc.isDeleted) {
             return {
                 title: `${doc.title} — ${SITE_NAME}`,
                 description: truncate(doc.body || DEFAULT_DESCRIPTION),
+                jsonLd: [{
+                    '@context': 'https://schema.org',
+                    '@type': 'DiscussionForumPosting',
+                    headline: doc.title,
+                    text: truncate(doc.body || '', 500),
+                    url: `${origin}${path}`,
+                    datePublished: doc.createdAt?.toISOString(),
+                    dateModified: doc.updatedAt?.toISOString(),
+                }],
             };
         }
     }
@@ -79,7 +110,37 @@ async function resolveMeta(path: string): Promise<Meta> {
         }
     }
 
+    const staticMeta = STATIC_META[path.replace(/\/$/, '') || '/'];
+    if (staticMeta) return staticMeta;
+
     return { title: DEFAULT_TITLE, description: DEFAULT_DESCRIPTION };
+}
+
+// Serialized with `<` escaped so user-authored thread text can never break out
+// of the script tag.
+function jsonLdScript(data: Record<string, unknown>): string {
+    return `<script type="application/ld+json">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`;
+}
+
+function siteJsonLd(origin: string): Record<string, unknown>[] {
+    return [
+        {
+            '@context': 'https://schema.org',
+            '@type': 'WebSite',
+            name: SITE_NAME,
+            url: `${origin}/`,
+        },
+        {
+            '@context': 'https://schema.org',
+            '@type': 'WebApplication',
+            name: SITE_NAME,
+            url: `${origin}/`,
+            applicationCategory: 'GameApplication',
+            operatingSystem: 'Any',
+            description: DEFAULT_DESCRIPTION,
+            offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+        },
+    ];
 }
 
 function renderShell(meta: Meta, origin: string, url: string): string {
@@ -107,6 +168,7 @@ function renderShell(meta: Meta, origin: string, url: string): string {
 <meta name="twitter:title" content="${title}" />
 <meta name="twitter:description" content="${description}" />
 <meta name="twitter:image" content="${image}" />
+${[...siteJsonLd(origin), ...(meta.jsonLd ?? [])].map(jsonLdScript).join('\n')}
 </head>
 <body>
 <h1>${title}</h1>
@@ -120,7 +182,7 @@ export async function crawlerMeta(req: Request, res: Response, next: NextFunctio
     try {
         const origin = originFrom(req);
         const url = `${origin}${req.originalUrl}`;
-        const meta = await resolveMeta(req.path);
+        const meta = await resolveMeta(req.path, origin);
         res.status(200).type('html').send(renderShell(meta, origin, url));
     } catch (err) {
         next(err);
