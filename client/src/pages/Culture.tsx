@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDocumentMeta } from '../hooks/useDocumentMeta';
+import { trackEvent } from '../services/analytics';
 import { musicService } from '../services/musicService';
 import type { NormalizedMusicItem } from '../types/culture';
 import DiaryCarousel, { type DiaryCard } from '../components/culture/DiaryCarousel';
@@ -33,6 +34,7 @@ const entryToCard = (entry: DiaryEntry): DiaryCard => ({
 });
 
 export default function Culture() {
+    useEffect(() => trackEvent('culture_viewed'), []);
     useDocumentMeta({
         title: 'Your Diary — Raw XO',
         description: 'Log every track you hear, rate it, and watch your taste take shape.',

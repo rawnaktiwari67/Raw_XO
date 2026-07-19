@@ -20,6 +20,7 @@ const Tours = lazy(() => import('../pages/Tours'));
 const LeaderboardPage = lazy(() => import('../pages/Leaderboard'));
 const Login = lazy(() => import('../pages/Login'));
 const Register = lazy(() => import('../pages/Register'));
+const NotFound = lazy(() => import('../pages/NotFound'));
 
 function PageTransition({ children }: { children: ReactNode }) {
     const reducedMotion = useReducedMotion();
@@ -76,10 +77,18 @@ export default function AppRouter() {
 
     return (
         <div className="min-h-screen flex flex-col">
+            {/* Keyboard/screen-reader escape hatch past the navbar. Visually
+                hidden until focused, then styled like the app's pill buttons. */}
+            <a
+                href="#main-content"
+                className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[200] focus:rounded-full focus:bg-bg focus:px-5 focus:py-2.5 focus:text-sm focus:font-semibold focus:text-amber focus:ring-2 focus:ring-amber focus:outline-none"
+            >
+                Skip to content
+            </a>
             <IntroReveal />
             <ScrollToTop />
             <Navbar />
-            <main className="flex-1">
+            <main id="main-content" tabIndex={-1} className="flex-1 outline-none">
                 <Suspense fallback={<PageLoader />}>
                     {/* Exit is a quick pure fade: ScrollToTop jumps to the top the
                         moment the path changes, so any transform-based exit would
@@ -100,7 +109,7 @@ export default function AppRouter() {
                         <Route path="/game" element={<Navigate to="/" replace />} />
                         <Route path="/tours" element={<PageTransition><Tours /></PageTransition>} />
                         <Route path="/leaderboard" element={<PageTransition><LeaderboardPage /></PageTransition>} />
-                        <Route path="*" element={<Navigate to="/" replace />} />
+                        <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
                     </Routes>
                         </motion.div>
                     </AnimatePresence>

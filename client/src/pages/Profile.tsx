@@ -6,12 +6,14 @@ import XPBar from '../components/user/XPBar';
 import { avatarInitial, avatarHue } from '../utils/avatar';
 import api from '../services/api';
 import { useDocumentMeta } from '../hooks/useDocumentMeta';
+import { trackEvent } from '../services/analytics';
 import type { User } from '../types/user';
 import type { Thread } from '../types/thread';
 import type { Comment } from '../types/comment';
 
 export default function Profile() {
     const { username } = useParams<{ username: string }>();
+    useEffect(() => trackEvent('profile_viewed'), []);
     useDocumentMeta({
         title: username ? `${username} — Raw XO` : undefined,
         description: username ? `${username}'s profile on Raw XO — streaks, ratings, levels, and recent rounds.` : undefined,

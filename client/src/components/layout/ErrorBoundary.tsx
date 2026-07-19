@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { reportError } from '../../services/errorReporting';
 
 interface Props {
     children: ReactNode;
@@ -18,8 +19,9 @@ export default class ErrorBoundary extends Component<Props, State> {
     }
 
     componentDidCatch(error: Error, info: ErrorInfo): void {
-        // Surface in the console for debugging; swap for a logging service later.
+        // Surface in the console for debugging, and ship to Sentry when configured.
         console.error('Render error caught by ErrorBoundary:', error, info.componentStack);
+        reportError(error, { componentStack: info.componentStack });
     }
 
     private handleReload = (): void => {

@@ -1,8 +1,11 @@
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Leaderboard from '../components/game/Leaderboard';
 import { useDocumentMeta } from '../hooks/useDocumentMeta';
+import { trackEvent } from '../services/analytics';
 
 export default function LeaderboardPage() {
+    useEffect(() => trackEvent('leaderboard_opened'), []);
     useDocumentMeta({
         title: 'Leaderboard — Raw XO',
         description: 'Daily and all-time leaderboards, sliceable by artist and genre. See how good your ear really is.',

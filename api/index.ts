@@ -2,8 +2,10 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import app from '../server/src/app';
 import { connectDB } from '../server/src/config/db';
 import { validateEnv } from '../server/src/config/env';
+import { initErrorReporting } from '../server/src/utils/errorReporting';
 
 validateEnv();
+initErrorReporting();
 
 let dbConnectionPromise: Promise<void> | null = null;
 

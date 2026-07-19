@@ -18,6 +18,39 @@ const isPlaceholderWebsiteId = (websiteId: string) =>
  * Load the Umami analytics script. No-op in dev builds (so local activity never
  * pollutes real stats) and when no website id is configured.
  */
+// Product events, named snake_case for clean Umami dashboards. Keep the union
+// tight so call sites can't invent ad-hoc event names.
+export type AnalyticsEvent =
+    | 'game_started'
+    | 'game_finished'
+    | 'guess_correct'
+    | 'guess_wrong'
+    | 'artist_selected'
+    | 'genre_selected'
+    | 'language_selected'
+    | 'difficulty_selected'
+    | 'leaderboard_opened'
+    | 'culture_viewed'
+    | 'profile_viewed';
+
+interface UmamiTracker {
+    track?: (event: string, data?: Record<string, string | number | boolean>) => void;
+}
+
+/**
+ * Record a product event. Safe to call unconditionally: no-ops when the
+ * tracker isn't loaded (dev builds, missing website id, script blocked), and
+ * never throws — analytics must never take the app down with it.
+ */
+export function trackEvent(event: AnalyticsEvent, data?: Record<string, string | number | boolean>): void {
+    const umami = (window as Window & { umami?: UmamiTracker }).umami;
+    try {
+        umami?.track?.(event, data);
+    } catch {
+        /* swallow — see docstring */
+    }
+}
+
 export function initAnalytics(): void {
     // Only track in production and only once a website id is provided.
     if (!import.meta.env.PROD || !UMAMI_WEBSITE_ID || isPlaceholderWebsiteId(UMAMI_WEBSITE_ID)) return;

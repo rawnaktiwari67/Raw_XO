@@ -25,6 +25,7 @@ import {
     CLIP_SECONDS_FOR_DIFFICULTY,
     difficultyForClipSeconds,
 } from '../config/gameConfig';
+import { trackEvent } from '../services/analytics';
 
 type Phase = 'idle' | 'playing' | 'answered' | 'result';
 const ROUND_LIMIT = 5;
@@ -167,16 +168,25 @@ export const useGameStore = create<GameState>((set, get) => ({
     isRating: false,
 
     // Changing filters invalidates any rounds we prefetched for the old filters.
-    setGenre: (genre) => set((state) => ({ filters: { ...state.filters, genre }, prefetchedQuestion: null, sessionQueue: [] })),
-    setLanguage: (language) => set((state) => ({ filters: { ...state.filters, language }, prefetchedQuestion: null, sessionQueue: [] })),
+    setGenre: (genre) => {
+        trackEvent('genre_selected', { genre });
+        set((state) => ({ filters: { ...state.filters, genre }, prefetchedQuestion: null, sessionQueue: [] }));
+    },
+    setLanguage: (language) => {
+        trackEvent('language_selected', { language });
+        set((state) => ({ filters: { ...state.filters, language }, prefetchedQuestion: null, sessionQueue: [] }));
+    },
     // Tapping a pill also snaps the clip bar to that tier's length — the pills
     // and the bar are two views of the same control.
-    setDifficulty: (difficulty) => set((state) => ({
-        filters: { ...state.filters, difficulty },
-        clipSeconds: CLIP_SECONDS_FOR_DIFFICULTY[difficulty] ?? state.clipSeconds,
-        prefetchedQuestion: null,
-        sessionQueue: [],
-    })),
+    setDifficulty: (difficulty) => {
+        trackEvent('difficulty_selected', { difficulty });
+        set((state) => ({
+            filters: { ...state.filters, difficulty },
+            clipSeconds: CLIP_SECONDS_FOR_DIFFICULTY[difficulty] ?? state.clipSeconds,
+            prefetchedQuestion: null,
+            sessionQueue: [],
+        }));
+    },
     // Dragging the bar drives difficulty: the tier is derived from the clip
     // length (0.1s = pro … 10s = easy). Tier changes re-pick the song pool, so
     // they invalidate the prefetched batch — but only on the setup screen.
@@ -195,7 +205,10 @@ export const useGameStore = create<GameState>((set, get) => ({
             sessionQueue: [],
         };
     }),
-    setArtist: (artist) => set((state) => ({ filters: { ...state.filters, artist }, prefetchedQuestion: null, sessionQueue: [] })),
+    setArtist: (artist) => {
+        trackEvent('artist_selected', { artist });
+        set((state) => ({ filters: { ...state.filters, artist }, prefetchedQuestion: null, sessionQueue: [] }));
+    },
 
     startFreshSession: async () => {
         // Keep any question warmed on the setup screen — startRound will play it
@@ -226,6 +239,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         // Rounds 2-5 of a game never touch the network.
         if (sessionQueue.length > 0) {
             const [next, ...rest] = sessionQueue;
+            if (get().roundsPlayedInSession === 0) {
+                trackEvent('game_started', { difficulty: filters.difficulty, clipSeconds: get().clipSeconds });
+            }
             set({
                 question: next,
                 sessionQueue: rest,
@@ -251,6 +267,9 @@ export const useGameStore = create<GameState>((set, get) => ({
             if (questions.length === 0) throw new Error('Invalid session payload');
 
             const [first, ...rest] = questions;
+            if (get().roundsPlayedInSession === 0) {
+                trackEvent('game_started', { difficulty: filters.difficulty, clipSeconds: get().clipSeconds });
+            }
             set({
                 question: first,
                 sessionQueue: rest,
@@ -368,6 +387,16 @@ export const useGameStore = create<GameState>((set, get) => ({
                 });
             }
 
+            trackEvent(correct ? 'guess_correct' : 'guess_wrong', { difficulty: roundFilters.difficulty, streak: newStreak });
+            if (shouldShowSummary) {
+                const summary = get().sessionSummary;
+                trackEvent('game_finished', {
+                    difficulty: roundFilters.difficulty,
+                    score: summary?.totalScore ?? 0,
+                    accuracy: summary?.accuracy ?? 0,
+                });
+            }
+
             // Persist in the background — the reveal already showed instantly.
             void gameService.submitAnswer(question.songId, answer, streak, responseTimeMs, roundFilters, hintsUsed).catch(() => {});
 
@@ -421,6 +450,15 @@ export const useGameStore = create<GameState>((set, get) => ({
                         : s.recentSongIds,
                 };
             });
+            trackEvent(result.correct ? 'guess_correct' : 'guess_wrong', { difficulty: roundFilters.difficulty, streak: newStreak });
+            if (shouldShowSummary) {
+                const summary = get().sessionSummary;
+                trackEvent('game_finished', {
+                    difficulty: roundFilters.difficulty,
+                    score: summary?.totalScore ?? 0,
+                    accuracy: summary?.accuracy ?? 0,
+                });
+            }
             // Only hit the network at the end of a session. Firing stats/history/
             // leaderboard on every single answer made each round feel sluggish
             // (3+ serverless round-trips per guess). The live score/streak shown
