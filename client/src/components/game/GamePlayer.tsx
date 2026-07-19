@@ -4,7 +4,7 @@ import { animate, AnimatePresence, motion, useMotionValue, useSpring, useTransfo
 import { useGameStore, HINT_POINT_PENALTY } from '../../stores/gameStore';
 import { gameService } from '../../services/gameService';
 import { aiService } from '../../services/aiService';
-import { roundSecondsFor } from '../../config/gameConfig';
+import { roundSecondsFor, difficultyForClipSeconds, CLIP_MIN_SECONDS, CLIP_MAX_SECONDS } from '../../config/gameConfig';
 import ShareButton from './ShareButton';
 import SoundToggle from './SoundToggle';
 import { unlock, playTick, playCorrect, playWrong, playComplete, vibrate } from '../../services/sound';
@@ -83,7 +83,86 @@ const DIFFICULTY_OPTIONS: Array<{ label: string; value: GameDifficulty }> = [
     { label: 'Easy', value: 'easy' },
     { label: 'Medium', value: 'medium' },
     { label: 'Hard', value: 'hard' },
+    { label: 'Pro', value: 'pro' },
 ];
+
+// ── Clip length bar ──────────────────────────────────────────────────────────
+// THE difficulty control: one slider from 0.1s to 10s deciding how much song
+// you get, with the tier (Pro → Easy) derived from wherever it lands. The copy
+// (plus the heat of the fill) talks back — dragging lower eggs you on, parking
+// it high calls you out.
+const clipTaunt = (seconds: number): { text: string; color: string } => {
+    if (seconds <= 0.11) return { text: "0.1s?! it's about to POP OFF 💀", color: '#fb7185' };
+    if (seconds <= 0.3) return { text: 'certified menace behavior 🥶', color: '#fb7185' };
+    if (seconds <= 0.7) return { text: "blink and it's gone. pro territory.", color: '#fb923c' };
+    if (seconds <= 1.5) return { text: 'respectable. still spicy. 🌶️', color: '#f4a261' };
+    if (seconds <= 3) return { text: 'warming up, huh? still pro.', color: '#f4a261' };
+    if (seconds <= 5) return { text: 'hard mode — one hook, no mercy.', color: '#fbbf24' };
+    if (seconds <= 7) return { text: "medium. the people's difficulty.", color: '#34d399' };
+    return { text: 'a whole picnic of a clip 🧺', color: '#38bdf8' };
+};
+
+const TIER_LABEL: Record<GameDifficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', pro: 'Pro' };
+
+function ClipLengthBar({ seconds, onChange, compact = false }: { seconds: number; onChange: (value: number) => void; compact?: boolean }) {
+    const taunt = clipTaunt(seconds);
+    const tier = TIER_LABEL[difficultyForClipSeconds(seconds)];
+    const pct = ((seconds - CLIP_MIN_SECONDS) / (CLIP_MAX_SECONDS - CLIP_MIN_SECONDS)) * 100;
+
+    return (
+        <div
+            className={`w-full rounded-[0.9rem] bg-white/[0.035] ring-1 ring-white/[0.07] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] ${
+                compact ? 'px-3 py-2 sm:px-4 sm:py-2.5' : 'px-4 py-3'
+            }`}
+        >
+            <div className="flex items-baseline justify-between gap-3">
+                <span className="label-xs flex items-center gap-1.5">
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="h-3 w-3 text-amber" aria-hidden>
+                        <path d="M13 2 4.7 13.2c-.3.4 0 .8.4.8H11l-1.8 7.2c-.1.5.5.8.8.4L18.9 10c.3-.4 0-.8-.4-.8H13l1.8-6.8c.1-.5-.5-.8-.8-.4z" />
+                    </svg>
+                    Clip Length
+                </span>
+                <span className="flex items-baseline gap-1.5">
+                    <span className="font-heading text-[1.05rem] leading-none tabular-nums sm:text-[1.25rem]" style={{ color: taunt.color }}>
+                        {seconds.toFixed(1)}s
+                    </span>
+                    <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-text-4">
+                        {tier}
+                    </span>
+                </span>
+            </div>
+            <input
+                type="range"
+                min={CLIP_MIN_SECONDS}
+                max={CLIP_MAX_SECONDS}
+                step={0.1}
+                value={seconds}
+                aria-label="Clip length in seconds"
+                onChange={(e) => onChange(Number(e.target.value))}
+                className={`pro-clip-range w-full ${compact ? 'mt-1.5' : 'mt-2.5'}`}
+                style={{
+                    background: `linear-gradient(90deg, ${taunt.color} 0%, ${taunt.color} ${pct}%, rgba(255,255,255,0.09) ${pct}%)`,
+                }}
+            />
+            {/* Reactive trash-talk — keyed on the text so each tier change re-pops. */}
+            <div className={`${compact ? 'mt-1 min-h-[14px]' : 'mt-1.5 min-h-[16px]'}`}>
+                <AnimatePresence mode="popLayout" initial={false}>
+                    <motion.p
+                        key={taunt.text}
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -5 }}
+                        transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                        className="text-[10px] font-semibold tracking-[0.03em] sm:text-[11px]"
+                        style={{ color: taunt.color }}
+                    >
+                        {taunt.text}
+                    </motion.p>
+                </AnimatePresence>
+            </div>
+        </div>
+    );
+}
 
 // True on phones/tablets (coarse pointer) or when the user asks for reduced
 // motion. We use it to strip the expensive always-on blur + infinite-animation
@@ -634,6 +713,8 @@ export default function GamePlayer() {
         filters,
         roundFilters,
         artistOptions,
+        clipSeconds,
+        setClipSeconds,
         setGenre,
         setLanguage,
         setDifficulty,
@@ -652,6 +733,12 @@ export default function GamePlayer() {
     // round is live we honour the difficulty the question was actually built for
     // (roundFilters), so changing the picker mid-round can't shorten the timer.
     const roundSeconds = roundSecondsFor((phase === 'idle' ? filters : roundFilters).difficulty);
+
+    // Micro-clip round: the audio hard-stops before the clock does (the clip
+    // bar sits under the round length). At snapped pill values (10/7/5s) the
+    // clip fills the whole round and this is false — identical to the classic
+    // modes. Same idle-vs-live filter source as roundSeconds above.
+    const isClipLimited = clipSeconds < roundSeconds - 0.01;
 
     // On phones we run a lighter render: no mouse spotlight, frozen ambient
     // glows, no backdrop blur, and a snappier reveal. Desktop keeps everything.
@@ -681,6 +768,17 @@ export default function GamePlayer() {
     const toastTimer = useRef<number | null>(null);
     const [clipBlocked, setClipBlocked] = useState(false);
     const [timerActive, setTimerActive] = useState(false);
+    // Pro mode: true once the micro-clip has hard-stopped — the visualizer
+    // freezes and the room-listens pulse dies with it ("wait, that was IT?").
+    // Always false outside pro. Replay resets it.
+    const [clipDone, setClipDone] = useState(false);
+    // Cancels the in-flight pro clip-stop watcher (rAF loop + safety timeout).
+    const clipStopCancel = useRef<(() => void) | null>(null);
+    // playClip is re-created every render, but the round-start effect captures a
+    // stale copy; reading clipSeconds through a ref keeps mid-round slider drags
+    // honest for the next replay.
+    const clipSecondsRef = useRef(clipSeconds);
+    clipSecondsRef.current = clipSeconds;
     const [isUrgent, setIsUrgent] = useState(false);
     const [selectedOption, setSelectedOption] = useState<string | null>(null);
     // AI hints for the current round. hintsUsedRef mirrors hints.length for the
@@ -718,7 +816,9 @@ export default function GamePlayer() {
     const beatGlowOpacity = useTransform(beat, [0, 1], [0.34, 0.95]);
 
     useEffect(() => {
-        if (lite || phase !== 'playing' || !timerActive) {
+        // clipDone: in pro mode the micro-clip has already stopped — the room
+        // pulse dies with the audio, so the silence actually reads as silence.
+        if (lite || phase !== 'playing' || !timerActive || clipDone) {
             beat.set(0);
             return;
         }
@@ -737,7 +837,7 @@ export default function GamePlayer() {
             cancelAnimationFrame(raf);
             beat.set(0);
         };
-    }, [lite, phase, timerActive, beat]);
+    }, [lite, phase, timerActive, clipDone, beat]);
 
     const handleHeroMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
         const rect = heroCardRef.current?.getBoundingClientRect();
@@ -751,7 +851,13 @@ export default function GamePlayer() {
         rawMY.set(0.5);
     };
 
+    const clearClipStopTimer = () => {
+        clipStopCancel.current?.();
+        clipStopCancel.current = null;
+    };
+
     const resetPlaybackState = () => {
+        clearClipStopTimer();
         if (audioRef.current) {
             audioRef.current.pause();
             audioRef.current.currentTime = 0;
@@ -760,6 +866,7 @@ export default function GamePlayer() {
         setIsUrgent(false);
         setClipBlocked(false);
         setTimerActive(false);
+        setClipDone(false);
         setSelectedOption(null);
         setRating(null);
         roundStartedAtRef.current = null;
@@ -787,11 +894,46 @@ export default function GamePlayer() {
             if (sidebarTimerRef.current) sidebarTimerRef.current.textContent = String(roundSeconds);
         }
 
+        clearClipStopTimer();
+        setClipDone(false);
+
         try {
             await audio.play();
             setClipBlocked(false);
             setTimerActive(true);
             roundStartedAtRef.current = performance.now();
+            if (clipSecondsRef.current < roundSeconds - 0.01) {
+                // Micro-clip: the song only exists for a blink, so watch
+                // currentTime rather than trusting a wall-clock timeout —
+                // play() resolves before sound actually comes out, so a 100ms
+                // setTimeout can cut the clip after ~0.04s of real audio.
+                // clipSeconds is read through the ref so mid-round slider
+                // drags apply to the next replay.
+                const stop = () => {
+                    clearClipStopTimer();
+                    audio.pause();
+                    setClipDone(true);
+                };
+                const check = () => { if (audio.currentTime >= clipSecondsRef.current) stop(); };
+                let raf = 0;
+                const watch = () => { check(); if (clipStopCancel.current) raf = requestAnimationFrame(watch); };
+                raf = requestAnimationFrame(watch);
+                // rAF stretches whenever the main thread is busy (WebGL bg,
+                // route animations) and throttles hard in background tabs. A
+                // 10ms interval keeps a 0.1s clip honest, timeupdate (~250ms)
+                // and a hard timeout back both up so the clip can never run
+                // meaningfully long.
+                const interval = window.setInterval(check, 10);
+                audio.addEventListener('timeupdate', check);
+                const safety = window.setTimeout(stop, clipSecondsRef.current * 1000 + 400);
+                clipStopCancel.current = () => {
+                    cancelAnimationFrame(raf);
+                    window.clearInterval(interval);
+                    audio.removeEventListener('timeupdate', check);
+                    window.clearTimeout(safety);
+                    clipStopCancel.current = null;
+                };
+            }
         } catch {
             setClipBlocked(true);
             setTimerActive(false);
@@ -825,6 +967,7 @@ export default function GamePlayer() {
 
         const audio = audioRef.current;
         return () => {
+            clearClipStopTimer();
             if (audio) audio.pause();
             setTimerActive(false);
         };
@@ -1172,8 +1315,12 @@ export default function GamePlayer() {
         : phase === 'answered'
           ? 'Hold for a second while the answer resolves.'
           : phase === 'playing'
-            ? 'Five seconds, four options, one instinct.'
-            : 'Pick an artist or leave it open, then play a five-clip round.';
+            ? isClipLimited
+                ? `${clipSeconds.toFixed(1)} seconds of song, four options, pure instinct.`
+                : `${roundSeconds} seconds, four options, one instinct.`
+            : isClipLimited
+                ? `You get ${clipSeconds.toFixed(1)}s of the song. That's it. That's the round.`
+                : 'Pick an artist or leave it open, then play a five-clip round.';
 
     if (phase !== 'idle' || isLoading) {
         return (
@@ -1489,7 +1636,7 @@ export default function GamePlayer() {
                                                         : 'radial-gradient(ellipse, rgba(244,162,97,0.65), transparent 68%)',
                                                 }}
                                             />
-                                            <AudioVisualizer active={timerActive && phase === 'playing'} urgent={isUrgent} hero />
+                                            <AudioVisualizer active={timerActive && phase === 'playing' && !clipDone} urgent={isUrgent} hero />
                                         </div>
 
                                         {/* Live status indicator */}
@@ -1532,7 +1679,7 @@ export default function GamePlayer() {
                                                 : isUrgent ? 'text-orange-200/80'
                                                 : 'text-text-3'
                                             }`}>
-                                                {phase === 'answered' ? 'Checking' : 'Listen'}
+                                                {phase === 'answered' ? 'Checking' : clipDone ? 'From memory now' : 'Listen'}
                                             </p>
                                         </motion.div>
 
@@ -1628,13 +1775,29 @@ export default function GamePlayer() {
                                                 transition={{ duration: 0.55, delay: 0.2 }}
                                                 className="text-[11px] tracking-[0.04em] text-text-4 sm:text-[12px]"
                                             >
-                                                Five seconds. Four options. One instinct.
+                                                {isClipLimited
+                                                    ? `${clipSeconds.toFixed(1)}s of song. Four options. One instinct.`
+                                                    : `${roundSeconds} seconds. Four options. One instinct.`}
                                             </motion.p>
                                         )}
                                     </motion.div>
                                 )}
                             </AnimatePresence>
                         </motion.div>
+
+                        {/* The live clip-length bar sits right above the options in
+                            every mode — drag it mid-round and the next replay obeys
+                            (the live round keeps its difficulty either way). */}
+                        {!isResult && question ? (
+                            <motion.div
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                                className="mx-auto w-full max-w-[560px]"
+                            >
+                                <ClipLengthBar seconds={clipSeconds} onChange={setClipSeconds} compact />
+                            </motion.div>
+                        ) : null}
 
                         <div className="grid min-h-0 grid-cols-2 gap-1.5 sm:gap-2">
                             {question?.options.map((option, index) => {
@@ -2030,6 +2193,12 @@ export default function GamePlayer() {
                     <FilterRail label="Genre" options={GENRE_OPTIONS} value={filters.genre} onChange={handleGenreChange} disabled={isLoading} locked={artistLocksFilters} onLockedTap={handleLockedFilterTap} />
                     <FilterRail label="Language" options={LANGUAGE_OPTIONS} value={filters.language} onChange={handleLanguageChange} disabled={isLoading} locked={artistLocksFilters} onLockedTap={handleLockedFilterTap} />
                     <FilterRail label="Difficulty" options={DIFFICULTY_OPTIONS} value={filters.difficulty} onChange={handleDifficultyChange} disabled={isLoading} />
+                </div>
+
+                {/* The clip-length bar lives under the rails in every mode — it and
+                    the difficulty pills are two views of the same control. */}
+                <div className={`mt-3 ${filtersOpen ? '' : 'hidden lg:block'}`}>
+                    <ClipLengthBar seconds={clipSeconds} onChange={setClipSeconds} />
                 </div>
             </div>
 

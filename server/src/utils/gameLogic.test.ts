@@ -20,6 +20,15 @@ describe('calculateScorePayload', () => {
         });
     });
 
+    it('awards base 150 for a pro-mode answer — the clip is a fraction of a second', () => {
+        const windowMs = roundWindowMs('pro');
+        expect(calculateScorePayload(true, 0, windowMs, 'pro')).toEqual({
+            pointsAwarded: 150,
+            speedBonus: 0,
+            multiplier: 1,
+        });
+    });
+
     it('awards the full 60 speed bonus only for a (theoretical) instant answer', () => {
         // responseTimeMs must be > 0 to count as measured; 1ms is as fast as it gets.
         const { speedBonus } = calculateScorePayload(true, 0, 1, 'easy');

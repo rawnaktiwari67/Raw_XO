@@ -1,6 +1,6 @@
 import { DIFFICULTY_ROUND_SECONDS } from '../config/gameConstants';
 
-type GameDifficulty = 'easy' | 'medium' | 'hard';
+type GameDifficulty = 'easy' | 'medium' | 'hard' | 'pro';
 
 // Fisher–Yates: a uniform shuffle where every element is equally likely to land
 // in any position. The old `sort(() => Math.random() - 0.5)` was biased — for a
@@ -49,7 +49,10 @@ export const calculateScorePayload = (
     const speedBonus = Math.max(0, Math.round(((speedWindowMs - safeResponseTime) / speedWindowMs) * 60));
     const multiplier = Math.min(1 + Math.floor(streak / 3) * 0.25, 2);
     const hintPenalty = Math.min(MAX_HINTS_PER_ROUND, Math.max(0, hintsUsed)) * HINT_POINT_PENALTY;
-    const pointsAwarded = Math.round(Math.max(0, 100 + speedBonus - hintPenalty) * multiplier);
+    // Pro rounds are guessed off a fraction-of-a-second clip, so a correct call
+    // pays a bigger base. Mirrored by the client's scoreAnswerLocally.
+    const base = difficulty === 'pro' ? 150 : 100;
+    const pointsAwarded = Math.round(Math.max(0, base + speedBonus - hintPenalty) * multiplier);
 
     return { pointsAwarded, speedBonus, multiplier };
 };

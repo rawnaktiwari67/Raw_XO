@@ -1,15 +1,18 @@
 type GameLanguage = 'all' | 'english' | 'hindi' | 'punjabi' | 'korean' | 'spanish';
 type GameGenre = 'all' | 'hip-hop' | 'pop' | 'rnb' | 'dance';
-type GameDifficulty = 'easy' | 'medium' | 'hard';
+type GameDifficulty = 'easy' | 'medium' | 'hard' | 'pro';
 
 // Seconds on the clock per difficulty. Easier = more breathing room; harder =
 // you have to trust your gut. The client uses this for the countdown and the
 // server uses the same numbers as its speed-bonus window, so the two never
 // drift out of sync (a longer clock must mean a longer window to earn bonus on).
+// Pro keeps a 7s clock — its challenge is the clip length (a 0.1s blink,
+// enforced client-side), not the countdown.
 export const DIFFICULTY_ROUND_SECONDS: Record<GameDifficulty, number> = {
     easy: 10,
     medium: 7,
     hard: 5,
+    pro: 7,
 };
 
 export type ArtistProfile = {

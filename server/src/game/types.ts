@@ -3,7 +3,7 @@
 
 export type GameGenre = 'all' | 'hip-hop' | 'pop' | 'rnb' | 'dance';
 export type GameLanguage = 'all' | 'english' | 'hindi' | 'punjabi' | 'korean' | 'spanish';
-export type GameDifficulty = 'easy' | 'medium' | 'hard';
+export type GameDifficulty = 'easy' | 'medium' | 'hard' | 'pro';
 export type LeaderboardPeriod = 'daily' | 'all-time';
 
 export type GameFilters = {

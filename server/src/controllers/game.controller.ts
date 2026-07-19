@@ -89,7 +89,7 @@ const parseFilters = (source: Partial<Record<'genre' | 'language' | 'difficulty'
 
     const genre = genreValue in GENRE_QUERY_MAP ? genreValue as GameGenre : 'all';
     const language = languageValue in LANGUAGE_QUERY_MAP ? languageValue as GameLanguage : 'all';
-    const difficulty = difficultyValue === 'easy' || difficultyValue === 'medium' || difficultyValue === 'hard'
+    const difficulty = difficultyValue === 'easy' || difficultyValue === 'medium' || difficultyValue === 'hard' || difficultyValue === 'pro'
         ? difficultyValue as GameDifficulty
         : 'medium';
 

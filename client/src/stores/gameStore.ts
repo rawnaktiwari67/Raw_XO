@@ -19,6 +19,12 @@ import type {
 } from '../types/game';
 import { gameService } from '../services/gameService';
 import { useDiaryStore } from './diaryStore';
+import {
+    CLIP_MAX_SECONDS,
+    CLIP_MIN_SECONDS,
+    CLIP_SECONDS_FOR_DIFFICULTY,
+    difficultyForClipSeconds,
+} from '../config/gameConfig';
 
 type Phase = 'idle' | 'playing' | 'answered' | 'result';
 const ROUND_LIMIT = 5;
@@ -26,7 +32,7 @@ const ROUND_LIMIT = 5;
 // Round clock per difficulty, in ms — must mirror the server's
 // DIFFICULTY_ROUND_SECONDS so client-computed scores match what the server
 // re-derives when it persists the answer.
-const ROUND_WINDOW_MS: Record<GameDifficulty, number> = { easy: 10_000, medium: 7_000, hard: 5_000 };
+const ROUND_WINDOW_MS: Record<GameDifficulty, number> = { easy: 10_000, medium: 7_000, hard: 5_000, pro: 7_000 };
 
 // Each AI hint shaves points off the round's base score before the multiplier.
 // Must mirror HINT_POINT_PENALTY / MAX_HINTS_PER_ROUND in the server's
@@ -48,7 +54,10 @@ const scoreAnswerLocally = (correct: boolean, streak: number, responseTimeMs: nu
     const speedBonus = Math.max(0, Math.round(((windowMs - safeResponseTime) / windowMs) * 60));
     const multiplier = Math.min(1 + Math.floor(streak / 3) * 0.25, 2);
     const hintPenalty = Math.min(MAX_HINTS_PER_ROUND, Math.max(0, hintsUsed)) * HINT_POINT_PENALTY;
-    const pointsAwarded = Math.round(Math.max(0, 100 + speedBonus - hintPenalty) * multiplier);
+    // Pro rounds pay a bigger base for calling a track off a fraction of a
+    // second — mirrors the server's calculateScorePayload.
+    const base = difficulty === 'pro' ? 150 : 100;
+    const pointsAwarded = Math.round(Math.max(0, base + speedBonus - hintPenalty) * multiplier);
     const xpEarned = 50 + Math.min(streak * 10, 50) + Math.round(speedBonus * 0.5);
 
     return { pointsAwarded, speedBonus, multiplier, xpEarned };
@@ -77,6 +86,9 @@ interface GameState {
     result: GameResult | null;
     filters: GameFilters;
     roundFilters: GameFilters;
+    // Pro mode only: how many seconds of the clip actually play (0.1–3.0).
+    // Live-adjustable mid-round — the next play/replay uses the new value.
+    clipSeconds: number;
     artistOptions: GameArtistOption[];
     recentSongIds: string[];
     streak: number;
@@ -103,6 +115,7 @@ interface GameState {
     setGenre: (genre: GameGenre) => void;
     setLanguage: (language: GameLanguage) => void;
     setDifficulty: (difficulty: GameDifficulty) => void;
+    setClipSeconds: (clipSeconds: number) => void;
     setArtist: (artist: string) => void;
     startRound: () => Promise<void>;
     prefetchNextQuestion: () => Promise<void>;
@@ -129,6 +142,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     result: null,
     filters: { genre: 'all', language: 'english', difficulty: 'medium', artist: 'all' },
     roundFilters: { genre: 'all', language: 'english', difficulty: 'medium', artist: 'all' },
+    clipSeconds: CLIP_SECONDS_FOR_DIFFICULTY.medium,
     artistOptions: [],
     recentSongIds: [],
     streak: 0,
@@ -155,7 +169,32 @@ export const useGameStore = create<GameState>((set, get) => ({
     // Changing filters invalidates any rounds we prefetched for the old filters.
     setGenre: (genre) => set((state) => ({ filters: { ...state.filters, genre }, prefetchedQuestion: null, sessionQueue: [] })),
     setLanguage: (language) => set((state) => ({ filters: { ...state.filters, language }, prefetchedQuestion: null, sessionQueue: [] })),
-    setDifficulty: (difficulty) => set((state) => ({ filters: { ...state.filters, difficulty }, prefetchedQuestion: null, sessionQueue: [] })),
+    // Tapping a pill also snaps the clip bar to that tier's length — the pills
+    // and the bar are two views of the same control.
+    setDifficulty: (difficulty) => set((state) => ({
+        filters: { ...state.filters, difficulty },
+        clipSeconds: CLIP_SECONDS_FOR_DIFFICULTY[difficulty] ?? state.clipSeconds,
+        prefetchedQuestion: null,
+        sessionQueue: [],
+    })),
+    // Dragging the bar drives difficulty: the tier is derived from the clip
+    // length (0.1s = pro … 10s = easy). Tier changes re-pick the song pool, so
+    // they invalidate the prefetched batch — but only on the setup screen.
+    // Mid-round the bar just retunes how much of the clip the next replay
+    // plays; the live round keeps its difficulty and its queued songs.
+    setClipSeconds: (clipSeconds) => set((state) => {
+        const clamped = Math.min(CLIP_MAX_SECONDS, Math.max(CLIP_MIN_SECONDS, Math.round(clipSeconds * 10) / 10));
+        if (state.phase !== 'idle') return { clipSeconds: clamped };
+
+        const difficulty = difficultyForClipSeconds(clamped);
+        if (difficulty === state.filters.difficulty) return { clipSeconds: clamped };
+        return {
+            clipSeconds: clamped,
+            filters: { ...state.filters, difficulty },
+            prefetchedQuestion: null,
+            sessionQueue: [],
+        };
+    }),
     setArtist: (artist) => set((state) => ({ filters: { ...state.filters, artist }, prefetchedQuestion: null, sessionQueue: [] })),
 
     startFreshSession: async () => {
