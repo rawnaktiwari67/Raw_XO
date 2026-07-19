@@ -1390,7 +1390,10 @@ export default function GamePlayer() {
                                     key={`header-timer-${question?.songId}`}
                                     className={`h-full rounded-full ${isUrgent ? 'bg-orange-300' : isResult && isCorrect ? 'bg-emerald-300' : isResult ? 'bg-rose-300' : 'bg-amber'}`}
                                     style={{
-                                        animation: `barDrain ${roundSeconds}s linear both`,
+                                        animationName: 'barDrain',
+                                        animationDuration: `${roundSeconds}s`,
+                                        animationTimingFunction: 'linear',
+                                        animationFillMode: 'both',
                                         animationPlayState: timerActive ? 'running' : 'paused',
                                     }}
                                 />
@@ -1413,7 +1416,10 @@ export default function GamePlayer() {
                                                     aria-hidden
                                                     className={`absolute inset-0 ${isUrgent ? 'text-orange-200' : 'text-amber'}`}
                                                     style={{
-                                                        animation: `numberDrain ${roundSeconds}s linear both`,
+                                                        animationName: 'numberDrain',
+                                                        animationDuration: `${roundSeconds}s`,
+                                                        animationTimingFunction: 'linear',
+                                                        animationFillMode: 'both',
                                                         animationPlayState: timerActive ? 'running' : 'paused',
                                                     }}
                                                 >{roundSeconds}</span>
@@ -2269,7 +2275,10 @@ export default function GamePlayer() {
                                     : 'bg-[linear-gradient(90deg,#F6C56B,#F4A261)] shadow-[0_0_14px_rgba(244,162,97,0.5)]'
                             }`}
                             style={{
-                                animation: `barDrain ${roundSeconds}s linear both`,
+                                animationName: 'barDrain',
+                                animationDuration: `${roundSeconds}s`,
+                                animationTimingFunction: 'linear',
+                                animationFillMode: 'both',
                                 animationPlayState: timerActive ? 'running' : 'paused',
                             }}
                         />
