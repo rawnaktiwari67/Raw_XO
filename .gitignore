@@ -72,3 +72,9 @@ coverage/
 .parcel-cache/
 .eslintcache
 .stylelintcache
+
+# ========================
+# Local-only assets (not part of the app)
+# ========================
+marketing/
+Raw-XO-Architecture-Reference.pdf
