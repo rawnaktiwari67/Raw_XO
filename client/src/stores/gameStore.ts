@@ -42,12 +42,19 @@ const ROUND_WINDOW_MS: Record<GameDifficulty, number> = { easy: 10_000, medium: 
 export const HINT_POINT_PENALTY = 15;
 const MAX_HINTS_PER_ROUND = 3;
 
+// Replays: up to MAX_REPLAYS re-listens per round, each shaving points off the
+// base (first auto-play is free). Must mirror REPLAY_POINT_PENALTY /
+// MAX_REPLAYS_PER_ROUND in the server's utils/gameLogic.ts. Exported so the
+// Replay button can show the cost and remaining count.
+export const REPLAY_POINT_PENALTY = 10;
+export const MAX_REPLAYS = 3;
+
 // Ported from the server's calculateScorePayload + calculateGameXP so a batched
 // round can be scored instantly on the client (no network round-trip). The
 // server re-scores authoritatively when the answer is POSTed in the background,
 // so this only drives the immediate reveal — any drift would be corrected on the
 // server, but the formulas are identical, so they won't drift.
-const scoreAnswerLocally = (correct: boolean, streak: number, responseTimeMs: number, difficulty: GameDifficulty, hintsUsed: number) => {
+const scoreAnswerLocally = (correct: boolean, streak: number, responseTimeMs: number, difficulty: GameDifficulty, hintsUsed: number, replaysUsed: number) => {
     if (!correct) return { pointsAwarded: 0, speedBonus: 0, multiplier: 1, xpEarned: 5 };
 
     const windowMs = ROUND_WINDOW_MS[difficulty] ?? ROUND_WINDOW_MS.medium;
@@ -55,10 +62,11 @@ const scoreAnswerLocally = (correct: boolean, streak: number, responseTimeMs: nu
     const speedBonus = Math.max(0, Math.round(((windowMs - safeResponseTime) / windowMs) * 60));
     const multiplier = Math.min(1 + Math.floor(streak / 3) * 0.25, 2);
     const hintPenalty = Math.min(MAX_HINTS_PER_ROUND, Math.max(0, hintsUsed)) * HINT_POINT_PENALTY;
+    const replayPenalty = Math.min(MAX_REPLAYS, Math.max(0, replaysUsed)) * REPLAY_POINT_PENALTY;
     // Pro rounds pay a bigger base for calling a track off a fraction of a
     // second — mirrors the server's calculateScorePayload.
     const base = difficulty === 'pro' ? 150 : 100;
-    const pointsAwarded = Math.round(Math.max(0, base + speedBonus - hintPenalty) * multiplier);
+    const pointsAwarded = Math.round(Math.max(0, base + speedBonus - hintPenalty - replayPenalty) * multiplier);
     const xpEarned = 50 + Math.min(streak * 10, 50) + Math.round(speedBonus * 0.5);
 
     return { pointsAwarded, speedBonus, multiplier, xpEarned };
@@ -122,7 +130,7 @@ interface GameState {
     prefetchNextQuestion: () => Promise<void>;
     clearSession: () => void;
     startFreshSession: () => Promise<void>;
-    submitAnswer: (answer: string, responseTimeMs?: number, hintsUsed?: number) => Promise<void>;
+    submitAnswer: (answer: string, responseTimeMs?: number, hintsUsed?: number, replaysUsed?: number) => Promise<void>;
     rateTrack: (rating: number) => Promise<void>;
     resetRound: () => void;
     revealSessionSummary: () => void;
@@ -308,7 +316,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     // "New Game" and "Back to setup").
     clearSession: () => set({ sessionQueue: [], prefetchedQuestion: null }),
 
-    submitAnswer: async (answer, responseTimeMs = 0, hintsUsed = 0) => {
+    submitAnswer: async (answer, responseTimeMs = 0, hintsUsed = 0, replaysUsed = 0) => {
         const { question, streak, roundFilters } = get();
         if (!question) return;
 
@@ -319,7 +327,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         const reveal = question.reveal;
         if (reveal) {
             const correct = answer === reveal.correctAnswer;
-            const { pointsAwarded, speedBonus, multiplier, xpEarned } = scoreAnswerLocally(correct, streak, responseTimeMs, roundFilters.difficulty, hintsUsed);
+            const { pointsAwarded, speedBonus, multiplier, xpEarned } = scoreAnswerLocally(correct, streak, responseTimeMs, roundFilters.difficulty, hintsUsed, replaysUsed);
             const result: GameResult = {
                 correct,
                 correctAnswer: reveal.correctAnswer,
@@ -398,7 +406,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             }
 
             // Persist in the background — the reveal already showed instantly.
-            void gameService.submitAnswer(question.songId, answer, streak, responseTimeMs, roundFilters, hintsUsed).catch(() => {});
+            void gameService.submitAnswer(question.songId, answer, streak, responseTimeMs, roundFilters, hintsUsed, replaysUsed).catch(() => {});
 
             if (shouldShowSummary) {
                 void get().fetchStats();
@@ -413,7 +421,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         // resolve over the network as before.
         set({ selectedAnswer: answer, phase: 'answered' });
         try {
-            const res = await gameService.submitAnswer(question.songId, answer, streak, responseTimeMs, roundFilters, hintsUsed);
+            const res = await gameService.submitAnswer(question.songId, answer, streak, responseTimeMs, roundFilters, hintsUsed, replaysUsed);
             const result = getApiData<GameResult>(res);
             if (!result) throw new Error('Invalid answer payload');
 

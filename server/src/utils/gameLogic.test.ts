@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateScorePayload, guestNameFromId, roundWindowMs, shuffle, GUEST_ADJECTIVES, GUEST_NOUNS, HINT_POINT_PENALTY, MAX_HINTS_PER_ROUND } from './gameLogic';
+import { calculateScorePayload, guestNameFromId, roundWindowMs, shuffle, GUEST_ADJECTIVES, GUEST_NOUNS, HINT_POINT_PENALTY, MAX_HINTS_PER_ROUND, REPLAY_POINT_PENALTY, MAX_REPLAYS_PER_ROUND } from './gameLogic';
 import { DIFFICULTY_ROUND_SECONDS } from '../config/gameConstants';
 
 describe('calculateScorePayload', () => {
@@ -80,6 +80,24 @@ describe('calculateScorePayload', () => {
         expect(atMax.pointsAwarded).toBeGreaterThanOrEqual(0);
         // Negative/missing counts behave like zero hints.
         expect(calculateScorePayload(true, 0, windowMs, 'medium', -2).pointsAwarded).toBe(100);
+    });
+
+    it('deducts the replay penalty from the base, alongside any hint penalty', () => {
+        const windowMs = roundWindowMs('medium');
+        // Full window, no bonus, no hints: base 100 − 10/replay.
+        expect(calculateScorePayload(true, 0, windowMs, 'medium', 0, 1).pointsAwarded).toBe(100 - REPLAY_POINT_PENALTY);
+        expect(calculateScorePayload(true, 0, windowMs, 'medium', 0, 2).pointsAwarded).toBe(100 - 2 * REPLAY_POINT_PENALTY);
+        // Hints and replays stack, then the multiplier applies to what's left.
+        const both = calculateScorePayload(true, 3, windowMs, 'medium', 1, 2).pointsAwarded;
+        expect(both).toBe(Math.round((100 - HINT_POINT_PENALTY - 2 * REPLAY_POINT_PENALTY) * 1.25));
+    });
+
+    it('clamps replay counts to the per-round maximum and never goes negative', () => {
+        const windowMs = roundWindowMs('medium');
+        const atMax = calculateScorePayload(true, 0, windowMs, 'medium', 0, MAX_REPLAYS_PER_ROUND);
+        expect(calculateScorePayload(true, 0, windowMs, 'medium', 0, 99).pointsAwarded).toBe(atMax.pointsAwarded);
+        expect(atMax.pointsAwarded).toBeGreaterThanOrEqual(0);
+        expect(calculateScorePayload(true, 0, windowMs, 'medium', 0, -3).pointsAwarded).toBe(100);
     });
 
     it('steps the streak multiplier by 0.25 every 3 streak, capped at 2x', () => {

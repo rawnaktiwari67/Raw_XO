@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { animate, AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
-import { useGameStore, HINT_POINT_PENALTY } from '../../stores/gameStore';
+import { useGameStore, HINT_POINT_PENALTY, REPLAY_POINT_PENALTY, MAX_REPLAYS } from '../../stores/gameStore';
 import { gameService } from '../../services/gameService';
 import { aiService } from '../../services/aiService';
-import { roundSecondsFor, difficultyForClipSeconds, CLIP_MIN_SECONDS, CLIP_MAX_SECONDS } from '../../config/gameConfig';
+import { roundSecondsFor, difficultyForClipSeconds, CLIP_MIN_SECONDS, CLIP_MAX_SECONDS, PRO_CLIP_MAX_SECONDS } from '../../config/gameConfig';
 import ShareButton from './ShareButton';
 import SoundToggle from './SoundToggle';
 import { unlock, playTick, playCorrect, playWrong, playComplete, vibrate } from '../../services/sound';
@@ -787,6 +787,16 @@ export default function GamePlayer() {
     const [hints, setHints] = useState<string[]>([]);
     const [hintLoading, setHintLoading] = useState(false);
     const hintsUsedRef = useRef(0);
+    // Replays spent this round (0–MAX_REPLAYS). State drives the button label/
+    // disable; the ref feeds the submit paths (including the timeout effect,
+    // which must not re-run when this changes). Kept in sync each render.
+    const [replaysUsed, setReplaysUsed] = useState(0);
+    const replaysUsedRef = useRef(0);
+    replaysUsedRef.current = replaysUsed;
+    // Pro "get ready" gate: for micro-clip rounds the clip is a blink, so we
+    // hold before playing and let the player brace (turn the volume up) — the
+    // tap that dismisses this IS the gesture that plays the clip.
+    const [awaitingReady, setAwaitingReady] = useState(false);
     // Auto-advance countdown shown on the result screen: 3 → 2 → 1, then the
     // next clip loads on its own so the session keeps its rhythm. null = off.
     const [autoNextIn, setAutoNextIn] = useState<number | null>(null);
@@ -867,6 +877,7 @@ export default function GamePlayer() {
         setClipBlocked(false);
         setTimerActive(false);
         setClipDone(false);
+        setAwaitingReady(false);
         setSelectedOption(null);
         setRating(null);
         roundStartedAtRef.current = null;
@@ -957,13 +968,21 @@ export default function GamePlayer() {
     useEffect(() => {
         if (phase !== 'playing' || !question) return;
 
-        // Fresh round, fresh hint budget.
+        // Fresh round, fresh hint + replay budget.
         setHints([]);
         setHintLoading(false);
         hintsUsedRef.current = 0;
+        setReplaysUsed(0);
 
         resetPlaybackState();
-        void playClip(true);
+        // Pro (micro-clip) rounds get a "listen carefully" brace screen before
+        // the blink plays; the Ready tap starts the audio (and satisfies the
+        // autoplay gesture requirement). Every other mode auto-plays as before.
+        if (clipSecondsRef.current <= PRO_CLIP_MAX_SECONDS) {
+            setAwaitingReady(true);
+        } else {
+            void playClip(true);
+        }
 
         const audio = audioRef.current;
         return () => {
@@ -1003,7 +1022,7 @@ export default function GamePlayer() {
         const timeout = window.setTimeout(() => {
             if (audioRef.current) audioRef.current.pause();
             setTimerActive(false);
-            void submitAnswer('__timeout__', roundSeconds * 1000, hintsUsedRef.current);
+            void submitAnswer('__timeout__', roundSeconds * 1000, hintsUsedRef.current, replaysUsedRef.current);
         }, roundSeconds * 1000);
 
         return () => {
@@ -1094,8 +1113,28 @@ export default function GamePlayer() {
         };
     }, [phase, prefetchedQuestion?.snippetUrl]);
 
+    // Kick off a Pro round from the brace screen — this tap is the user gesture
+    // that plays the (autoplay-restricted) micro-clip.
+    const handleReady = () => {
+        if (!awaitingReady) return;
+        setAwaitingReady(false);
+        void playClip(true);
+    };
+
+    // Re-listen. The first (auto/blocked-initial) play is free; each deliberate
+    // replay after that costs REPLAY_POINT_PENALTY, capped at MAX_REPLAYS.
+    const handleReplay = () => {
+        if (phase !== 'playing' || awaitingReady) return;
+        vibrate(8);
+        // Recovering from a blocked autoplay is the initial play, not a replay.
+        if (clipBlocked) { void playClip(true); return; }
+        if (replaysUsed >= MAX_REPLAYS) return;
+        setReplaysUsed((n) => n + 1);
+        void playClip(true);
+    };
+
     const handleSelectOption = (option: string) => {
-        if (phase !== 'playing' || selectedOption) return;
+        if (phase !== 'playing' || selectedOption || awaitingReady) return;
 
         unlock();
         // Punchy double-tap buzz so the choice feels physical (Android only —
@@ -1107,11 +1146,11 @@ export default function GamePlayer() {
         const responseTimeMs = roundStartedAtRef.current
             ? Math.max(0, Math.round(performance.now() - roundStartedAtRef.current))
             : 0;
-        void submitAnswer(option, responseTimeMs, hintsUsedRef.current);
+        void submitAnswer(option, responseTimeMs, hintsUsedRef.current, replaysUsedRef.current);
     };
 
     const handleReveal = () => {
-        if (phase !== 'playing') return;
+        if (phase !== 'playing' || awaitingReady) return;
         // "Fold" haptic — softer than the answer-lock buzz since it's a concession.
         vibrate([10, 22, 10]);
         setTimerActive(false);
@@ -1119,11 +1158,11 @@ export default function GamePlayer() {
         const responseTimeMs = roundStartedAtRef.current
             ? Math.max(0, Math.round(performance.now() - roundStartedAtRef.current))
             : 0;
-        void submitAnswer('__skip__', responseTimeMs, hintsUsedRef.current);
+        void submitAnswer('__skip__', responseTimeMs, hintsUsedRef.current, replaysUsedRef.current);
     };
 
     const handleHint = async () => {
-        if (phase !== 'playing' || !question || hintLoading || hints.length >= MAX_HINTS) return;
+        if (phase !== 'playing' || !question || awaitingReady || hintLoading || hints.length >= MAX_HINTS) return;
 
         // Light tap acknowledging the press, distinct from the arrival buzz below.
         vibrate(10);
@@ -1326,6 +1365,55 @@ export default function GamePlayer() {
         return (
             <div className="guess-immersive relative flex h-[100svh] min-h-[100svh] items-center justify-center overflow-hidden px-1.5 py-1.5 sm:px-4 sm:py-4">
                 {question ? <audio key={question.songId} ref={audioRef} src={question.snippetUrl} preload="auto" /> : null}
+
+                {/* Pro brace screen — held before the micro-clip so the player can
+                    turn the volume up and lock in. The tap plays the clip. */}
+                <AnimatePresence>
+                    {awaitingReady ? (
+                        <motion.div
+                            key="pro-ready"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.25 }}
+                            className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_50%_38%,rgba(244,162,97,0.12),transparent_55%),rgba(6,6,10,0.9)] px-6 text-center backdrop-blur-sm"
+                            role="dialog"
+                            aria-label="Get ready"
+                        >
+                            <motion.div
+                                initial={{ opacity: 0, y: 18, scale: 0.96 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                                className="flex flex-col items-center"
+                            >
+                                <span className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-amber">
+                                    <svg viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5" aria-hidden>
+                                        <path d="M3 10v4h4l5 5V5L7 10H3zm13.5 2a4.5 4.5 0 00-2.5-4v8a4.5 4.5 0 002.5-4zM14 3.2v2.1a7 7 0 010 13.4v2.1a9 9 0 000-17.6z" />
+                                    </svg>
+                                    Pro Round
+                                </span>
+                                <h2 className="font-heading text-[clamp(2rem,7vw,3.4rem)] leading-[0.95] text-text-1">
+                                    Listen carefully.
+                                </h2>
+                                <p className="mt-3 max-w-xs text-sm leading-relaxed text-text-3">
+                                    Turn your volume up — you get{' '}
+                                    <span className="font-semibold text-amber">{clipSeconds.toFixed(1)}s</span>{' '}
+                                    of the song. One shot to catch it.
+                                </p>
+                                <motion.button
+                                    type="button"
+                                    autoFocus
+                                    onClick={handleReady}
+                                    whileHover={{ scale: 1.03, y: -2 }}
+                                    whileTap={{ scale: 0.97 }}
+                                    className="btn-primary mt-8 rounded-[1rem] px-8 py-4 text-sm font-semibold"
+                                >
+                                    I'm ready — play
+                                </motion.button>
+                            </motion.div>
+                        </motion.div>
+                    ) : null}
+                </AnimatePresence>
 
                 <div
                     aria-hidden
@@ -1824,10 +1912,10 @@ export default function GamePlayer() {
                                         initial={lite ? { opacity: 0 } : { opacity: 0, y: 10 }}
                                         animate={lite ? { opacity: 1 } : { opacity: 1, y: 0 }}
                                         transition={{ duration: 0.3, delay: index * 0.03, ease: [0.22, 1, 0.36, 1] }}
-                                        whileHover={!lite && phase === 'playing' && !selectedOption ? { y: -2, scale: 1.005 } : undefined}
-                                        whileTap={phase === 'playing' && !selectedOption ? { scale: 0.99 } : undefined}
+                                        whileHover={!lite && phase === 'playing' && !selectedOption && !awaitingReady ? { y: -2, scale: 1.005 } : undefined}
+                                        whileTap={phase === 'playing' && !selectedOption && !awaitingReady ? { scale: 0.99 } : undefined}
                                         onClick={() => handleSelectOption(option)}
-                                        disabled={!!selectedOption || phase !== 'playing'}
+                                        disabled={!!selectedOption || phase !== 'playing' || awaitingReady}
                                         className={`flex min-h-[60px] items-center rounded-[1.25rem] px-4 py-3 text-left text-text-1 transition-all duration-200 sm:min-h-[84px] sm:rounded-[1.6rem] sm:px-5 ${
                                             isCorrectOption
                                                 ? 'bg-[linear-gradient(180deg,rgba(16,185,129,0.22),rgba(16,185,129,0.08))] ring-1 ring-emerald-300/55 shadow-[0_18px_45px_rgba(16,185,129,0.16),inset_0_1px_0_rgba(52,211,153,0.18)]'
@@ -2013,13 +2101,16 @@ export default function GamePlayer() {
                                     <motion.button
                                         type="button"
                                         whileTap={{ scale: 0.97 }}
-                                        onClick={() => {
-                                            vibrate(8);
-                                            void playClip(true);
-                                        }}
-                                        className="btn-secondary min-h-8 rounded-[0.75rem] px-3 py-2 text-[10px] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:min-h-11 sm:rounded-[0.85rem] sm:px-4 sm:py-3 sm:text-xs"
+                                        onClick={handleReplay}
+                                        disabled={!clipBlocked && replaysUsed >= MAX_REPLAYS}
+                                        title={clipBlocked ? undefined : `Each replay costs ${REPLAY_POINT_PENALTY} pts`}
+                                        className="btn-secondary min-h-8 rounded-[0.75rem] px-3 py-2 text-[10px] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] disabled:opacity-45 sm:min-h-11 sm:rounded-[0.85rem] sm:px-4 sm:py-3 sm:text-xs"
                                     >
-                                        {clipBlocked ? 'Play' : 'Replay'}
+                                        {clipBlocked
+                                            ? 'Play'
+                                            : replaysUsed >= MAX_REPLAYS
+                                                ? 'No replays'
+                                                : `Replay −${REPLAY_POINT_PENALTY} · ${MAX_REPLAYS - replaysUsed} left`}
                                     </motion.button>
                                     <motion.button
                                         type="button"

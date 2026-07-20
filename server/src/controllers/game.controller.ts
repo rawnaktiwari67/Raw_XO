@@ -7,7 +7,7 @@ import { isDbConnected } from '../config/db';
 import { devStore } from '../utils/devStore';
 import { successResponse, errorResponse } from '../utils/apiResponse';
 import { calculateLevel, calculateGameXP } from '../utils/xpUtils';
-import { shuffle, roundWindowMs, calculateScorePayload, guestNameFromId, MAX_HINTS_PER_ROUND } from '../utils/gameLogic';
+import { shuffle, roundWindowMs, calculateScorePayload, guestNameFromId, MAX_HINTS_PER_ROUND, MAX_REPLAYS_PER_ROUND } from '../utils/gameLogic';
 import { createSongToken, decodeSongToken, type SongPreview } from '../utils/songTokens';
 import type {
     GameGenre,
@@ -495,11 +495,16 @@ export const submitAnswer = async (req: Request, res: Response): Promise<void> =
         // streak and responseTimeMs above); re-applying the same clamp and penalty
         // here keeps this persisted score in step with the client's instant reveal.
         const hintsUsed = Math.min(MAX_HINTS_PER_ROUND, Math.max(0, Number(req.body.hintsUsed) || 0));
+        // Replays cost points too. Same client-reported-then-clamped pattern as
+        // hints and streak — the client sends how many times it re-listened, and
+        // re-applying the clamp + penalty here keeps this persisted score in step
+        // with the instant reveal the player already saw.
+        const replaysUsed = Math.min(MAX_REPLAYS_PER_ROUND, Math.max(0, Number(req.body.replaysUsed) || 0));
         // Clamp the reported time to this difficulty's clock, not a fixed 5s — an
         // 8s answer on a 10s easy round is legitimate and must not be capped to 5s.
         const answerWindowMs = roundWindowMs(filters.difficulty);
         const responseTimeMs = Math.max(0, Math.min(answerWindowMs, Number(req.body.responseTimeMs) || 0));
-        const { pointsAwarded, speedBonus, multiplier } = calculateScorePayload(correct, streak, responseTimeMs, filters.difficulty, hintsUsed);
+        const { pointsAwarded, speedBonus, multiplier } = calculateScorePayload(correct, streak, responseTimeMs, filters.difficulty, hintsUsed, replaysUsed);
         const xpEarned = calculateGameXP(correct, streak) + Math.round(speedBonus * 0.5);
         if (correct) {
             rememberCorrectSong(filtersCacheKey(filters), song);
