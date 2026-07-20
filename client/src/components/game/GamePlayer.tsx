@@ -1791,6 +1791,12 @@ export default function GamePlayer() {
                             </AnimatePresence>
                         </motion.div>
 
+                        {/* Second grid row: clip bar + answers TOGETHER. The bar must
+                            live inside this row, not as a sibling — main's template
+                            only defines two rows, and a third child would shove the
+                            answers into a cramped implicit row while the bar's row
+                            stretched to fill the screen (the mobile dead-space bug). */}
+                        <div className="flex min-h-0 flex-col gap-1.5 sm:gap-2">
                         {/* The live clip-length bar sits right above the options in
                             every mode — drag it mid-round and the next replay obeys
                             (the live round keeps its difficulty either way). */}
@@ -1805,7 +1811,7 @@ export default function GamePlayer() {
                             </motion.div>
                         ) : null}
 
-                        <div className="grid min-h-0 grid-cols-2 gap-1.5 sm:gap-2">
+                        <div className="grid min-h-0 flex-1 grid-cols-2 gap-1.5 sm:gap-2">
                             {question?.options.map((option, index) => {
                                 const isSelected = selectedOption === option;
                                 const isCorrectOption = isResult && result?.correctAnswer === option;
@@ -1838,6 +1844,7 @@ export default function GamePlayer() {
                                     </motion.button>
                                 );
                             })}
+                        </div>
                         </div>
                     </main>
 
