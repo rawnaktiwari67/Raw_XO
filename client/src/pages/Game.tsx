@@ -206,14 +206,12 @@ export default function Game() {
                 </Suspense>
             ) : null}
 
-            <div
-                aria-hidden
-                className="absolute inset-x-0 top-0 h-[24rem]"
-                style={{
-                    background:
-                        'linear-gradient(180deg, rgba(11,11,15,0.02) 0%, rgba(11,11,15,0.12) 38%, rgba(11,11,15,0.92) 100%)',
-                }}
-            />
+            {/* NOTE: no extra full-width darkening layer here. A legacy 24rem
+                scrim used to sit on top of the wall, but its gradient ended at
+                92% black and then hard-stopped — a visible horizontal seam
+                cutting through the collage. The wall carries its own continuous
+                scrims (left bias, bottom fade, edge mask); anything layered on
+                top must fade to a value the wall already has at that edge. */}
             <div
                 aria-hidden
                 className="absolute inset-0"
