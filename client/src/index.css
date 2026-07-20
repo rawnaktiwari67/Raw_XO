@@ -812,14 +812,16 @@ html.lenis {
    the compositor, so they don't share the main thread with Lenis's scroll rAF —
    which is what made the hero region stutter while the rest of the page was smooth.
    translate3d keeps the marquee on its own GPU layer. */
-/* Hero cover collage. heroFloat is the per-tile idle bob — it shares one
-   transform with the tile's static tilt via --tile-rot, so rotation and drift
-   never fight. heroBreathe is a whisper of scale on the whole canvas; the
-   collage is a fixed composition now, so anything bigger would push the
-   hand-placed tiles out of frame. */
+/* Hero cover collage. heroFloat is the per-tile idle bob — a slow vertical
+   drift plus a ±0.6° rotation sway around the tile's static tilt (via
+   --tile-rot), so each cover feels like it's hanging in space rather than
+   pinned. One shared transform keeps rotation and drift from fighting.
+   heroBreathe is a whisper of scale on the whole canvas; the collage is a fixed
+   composition now, so anything bigger would push the hand-placed tiles out of
+   frame. */
 @keyframes heroFloat {
-  from { transform: rotate(var(--tile-rot, 0deg)) translateY(-4px); }
-  to   { transform: rotate(var(--tile-rot, 0deg)) translateY(4px); }
+  from { transform: rotate(calc(var(--tile-rot, 0deg) - 0.6deg)) translateY(-5px); }
+  to   { transform: rotate(calc(var(--tile-rot, 0deg) + 0.6deg)) translateY(5px); }
 }
 
 @keyframes heroBreathe {

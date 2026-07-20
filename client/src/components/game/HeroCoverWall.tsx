@@ -17,65 +17,83 @@ const DESI_ARTIST = /(arijit|diljit|ap dhillon|dhillon|karan aujla|shubh|badshah
 // tiles reach into the feathered edges, where dissolving into the dark is the
 // intended look.
 
-// Size/depth tiers. Front tiers sit sharp and bright and carry the cursor
-// parallax fully; back tiers recede dim, soft, and half-speed — the same faked
-// depth of field the old wall had, now stable.
-// Depth comes from SIZE first, opacity second, blur barely at all: heavy dim +
-// blur turned the back tiers into murky black smudges against the charcoal
-// background. Every cover must still read as a cover.
+// Five size/depth tiers with a deliberate visual hierarchy — ONE primary that
+// owns the eye, two secondaries at ~70%, and everything else receding into the
+// background. Depth reads through three levers at once: SIZE (a 6× span from
+// primary to tiny), OPACITY (100 → 24%), and a light BLUR that grows as tiles
+// shrink. `depth` sorts each tier into one of three parallax planes so the
+// collage moves like layered glass, not a flat sheet. Blur stays modest —
+// heavy blur turned the back tiers into murky smudges against the charcoal.
 const TIERS = [
-    { w: 'clamp(8.5rem, 13vw, 13rem)', dim: 1, blur: 0, front: true },     // XL focal
-    { w: 'clamp(7rem, 10.5vw, 11rem)', dim: 0.96, blur: 0, front: true },   // L
-    { w: 'clamp(5.5rem, 8vw, 9rem)', dim: 0.9, blur: 0.7, front: false },   // M
-    { w: 'clamp(4.25rem, 6vw, 7rem)', dim: 0.8, blur: 1.1, front: false },  // S filler
+    // 0 · PRIMARY — the single anchor. Largest, brightest, sharpest, oversized.
+    { w: 'clamp(11rem, 16.5vw, 16.5rem)', dim: 1, blur: 0, depth: 'near' },
+    // 1 · SECONDARY — two supporting stars at ~70%, still sharp.
+    { w: 'clamp(8rem, 11.5vw, 12rem)', dim: 0.72, blur: 0.3, depth: 'near' },
+    // 2 · SUPPORTING — mid plane, half weight, a touch soft.
+    { w: 'clamp(5.25rem, 7.5vw, 8rem)', dim: 0.5, blur: 0.9, depth: 'mid' },
+    // 3 · SMALL — far plane, dim and soft, recedes.
+    { w: 'clamp(3.75rem, 5vw, 5.5rem)', dim: 0.34, blur: 1.6, depth: 'far' },
+    // 4 · TINY — the blurred-tiny background floor; pure atmosphere.
+    { w: 'clamp(2.75rem, 3.6vw, 4rem)', dim: 0.26, blur: 2.1, depth: 'far' },
 ] as const;
+
+type Depth = (typeof TIERS)[number]['depth'];
 
 interface Tile {
     x: number;    // left edge, % of hero width
     y: number;    // top edge, % of hero height
-    tier: 0 | 1 | 2 | 3;
-    rot: number;  // static tilt, deg — replaces the old global -8° wrapper so
-                  // percent positions map 1:1 onto the visible rectangle
-    float: number; // idle bob duration, s (negative delay staggers phase)
-    mdUp?: boolean; // filler hidden on phones so the small band doesn't clog
+    tier: 0 | 1 | 2 | 3 | 4;
+    rot: number;  // static tilt, deg — snapped to {-12,-8,-4,0} so the angles
+                  // read as one intentional family, never random scatter
+    float: number; // idle bob duration, s (7–12s, negative-delay staggered)
+    mdUp?: boolean; // hidden on phones so the arrangement doesn't clog small screens
 }
 
-// Laid out against the page: the headline owns the left-center block, so the
-// visual weight leans right and up, with dimmed texture continuing behind the
-// scrim on the left. Bottom-row tiles sit in the lower fade on purpose — they
-// dissolve into the content below rather than hard-stopping.
+// Hand-placed composition. The headline owns a PROTECTED ZONE in the left-
+// center (roughly x 12–56%, y 38–80%): nothing bright or large intrudes there,
+// so the eye never fights the text — only dim far-left texture sits behind the
+// scrim beside it. Visual weight leans up and right, the primary anchoring the
+// top-center where the radial mask is brightest, secondaries framing it from
+// the top-left and right, and the rest arranged to frame the text rather than
+// compete with it. Lower tiles dissolve into the bottom fade on purpose.
 const TILES: Tile[] = [
-    // top band — full-width texture strip
-    { x: 1, y: 6, tier: 2, rot: -7, float: 17, mdUp: true },
-    { x: 14, y: 2, tier: 3, rot: -9, float: 21, mdUp: true },
-    { x: 24, y: 8, tier: 1, rot: -6, float: 19 },
-    { x: 41, y: 3, tier: 2, rot: -10, float: 16 },
-    { x: 55, y: 9, tier: 0, rot: -7, float: 22 },
-    { x: 74, y: 2, tier: 2, rot: -5, float: 18 },
-    { x: 88, y: 7, tier: 3, rot: -9, float: 20, mdUp: true },
-    // upper-mid seam — fillers packing the gap between the top and mid bands
-    { x: 8, y: 20, tier: 3, rot: -8, float: 19, mdUp: true },
-    { x: 21, y: 23, tier: 2, rot: -6, float: 22 },
-    { x: 35, y: 22, tier: 3, rot: -9, float: 17, mdUp: true },
-    { x: 70, y: 22, tier: 2, rot: -8, float: 20 },
-    { x: 95, y: 20, tier: 2, rot: -7, float: 18, mdUp: true },
-    // mid band — right-weighted, framing the headline
-    { x: 6, y: 34, tier: 3, rot: -6, float: 18, mdUp: true },
-    { x: 30, y: 36, tier: 2, rot: -8, float: 23, mdUp: true },
-    { x: 48, y: 40, tier: 3, rot: -5, float: 17 },
-    { x: 62, y: 38, tier: 1, rot: -8, float: 21 },
-    { x: 80, y: 32, tier: 2, rot: -6, float: 19 },
-    { x: 92, y: 40, tier: 1, rot: -9, float: 16, mdUp: true },
-    // lower-mid seam — keeps the collage continuous into the fade
-    { x: 4, y: 52, tier: 2, rot: -7, float: 21, mdUp: true },
-    { x: 24, y: 50, tier: 3, rot: -10, float: 18 },
-    { x: 44, y: 52, tier: 2, rot: -6, float: 19, mdUp: true },
-    // lower band — dissolves into the bottom scrim
-    { x: 12, y: 62, tier: 2, rot: -9, float: 20, mdUp: true },
-    { x: 36, y: 66, tier: 3, rot: -7, float: 18, mdUp: true },
-    { x: 52, y: 68, tier: 2, rot: -10, float: 22 },
-    { x: 68, y: 58, tier: 0, rot: -6, float: 19 },
-    { x: 87, y: 64, tier: 2, rot: -8, float: 17 },
+    // PRIMARY — the one anchor, top-center-right in the mask's brightest zone
+    { x: 54, y: 6, tier: 0, rot: -4, float: 11 },
+
+    // SECONDARY — two supporting stars, both above/right of the headline
+    { x: 19, y: 5, tier: 1, rot: -8, float: 9 },
+    { x: 78, y: 13, tier: 1, rot: -8, float: 12 },
+
+    // TOP band — texture above the headline (density is welcome here)
+    { x: 2, y: 9, tier: 3, rot: -12, float: 8, mdUp: true },
+    { x: 10, y: 20, tier: 4, rot: -8, float: 10, mdUp: true },
+    { x: 34, y: 4, tier: 2, rot: -4, float: 12 },
+    { x: 42, y: 18, tier: 3, rot: 0, float: 9, mdUp: true },
+    { x: 66, y: 3, tier: 2, rot: -8, float: 11 },
+    { x: 89, y: 6, tier: 2, rot: -4, float: 10, mdUp: true },
+    { x: 95, y: 19, tier: 3, rot: -8, float: 8, mdUp: true },
+    { x: 29, y: 22, tier: 4, rot: -12, float: 11, mdUp: true },
+    { x: 50, y: 21, tier: 4, rot: -8, float: 10, mdUp: true },
+
+    // RIGHT column — frames the right of the headline
+    { x: 62, y: 30, tier: 2, rot: -8, float: 10 },
+    { x: 84, y: 31, tier: 3, rot: -4, float: 12, mdUp: true },
+    { x: 93, y: 43, tier: 2, rot: -8, float: 9, mdUp: true },
+    { x: 72, y: 47, tier: 2, rot: -12, float: 11 },
+    { x: 88, y: 56, tier: 3, rot: -4, float: 8 },
+    { x: 63, y: 61, tier: 3, rot: -8, float: 10, mdUp: true },
+    { x: 79, y: 64, tier: 2, rot: -8, float: 12 },
+    { x: 95, y: 65, tier: 4, rot: 0, float: 9, mdUp: true },
+    { x: 74, y: 38, tier: 3, rot: -8, float: 11, mdUp: true },
+
+    // LOWER center-right — below the headline, fading into the scrim
+    { x: 58, y: 71, tier: 3, rot: -8, float: 11 },
+    { x: 70, y: 74, tier: 2, rot: -4, float: 10 },
+
+    // FAR-LEFT edge — dim texture behind the scrim; never competes with the text
+    { x: 0, y: 34, tier: 4, rot: -8, float: 9, mdUp: true },
+    { x: 1, y: 49, tier: 4, rot: -12, float: 12, mdUp: true },
+    { x: 2, y: 63, tier: 4, rot: -4, float: 8, mdUp: true },
 ];
 
 // Full-bleed ambient album-art collage behind the hero. A masked, gently
@@ -87,14 +105,17 @@ export default function HeroCoverWall() {
     const [covers, setCovers] = useState<string[]>([]);
     const reduced = useReducedMotion();
 
-    // Cursor parallax: the collage leans a few pixels toward the pointer,
-    // front tiles at full strength, back tiles at half — a depth cue the flat
-    // marquee never had. Springs glide rather than snap; touch devices never
-    // fire mousemove, so the wall stays still there.
+    // Cursor parallax across three planes: the near plane (primary + secondary)
+    // leans fully toward the pointer, the mid plane at 0.58×, the far plane at
+    // 0.3× — the different rates are what sell real depth, like layers of glass
+    // sliding past each other. Springs glide rather than snap; touch devices
+    // never fire mousemove, so the wall stays still there.
     const px = useSpring(0, { stiffness: 60, damping: 20, mass: 0.6 });
     const py = useSpring(0, { stiffness: 60, damping: 20, mass: 0.6 });
-    const bx = useTransform(px, (v) => v * 0.45);
-    const by = useTransform(py, (v) => v * 0.45);
+    const midX = useTransform(px, (v) => v * 0.58);
+    const midY = useTransform(py, (v) => v * 0.58);
+    const farX = useTransform(px, (v) => v * 0.3);
+    const farY = useTransform(py, (v) => v * 0.3);
 
     useEffect(() => {
         if (reduced) return;
@@ -139,10 +160,10 @@ export default function HeroCoverWall() {
 
     if (covers.length < 10) return null;
 
-    const renderTiles = (front: boolean) =>
+    const renderTiles = (depth: Depth) =>
         TILES.map((tile, i) => {
-            if (TIERS[tile.tier].front !== front) return null;
             const tier = TIERS[tile.tier];
+            if (tier.depth !== depth) return null;
             return (
                 <div
                     key={i}
@@ -176,7 +197,7 @@ export default function HeroCoverWall() {
                                     }),
                             } as React.CSSProperties}
                         >
-                            {/* Eager on purpose: all 18 tiles are above the fold and the
+                            {/* Eager on purpose: every tile is above the fold and the
                                 whole wall already mounts post-paint (Game.tsx), so lazy
                                 would only delay the reveal, not save bandwidth.
                                 Depth-of-field blur sits on the img itself, over-scaled a
@@ -223,13 +244,16 @@ export default function HeroCoverWall() {
                 className="absolute inset-0 opacity-[0.9] [filter:saturate(1.18)_contrast(1.1)_brightness(1.1)]"
                 style={reduced ? undefined : { animation: 'heroBreathe 46s ease-in-out infinite', willChange: 'transform' }}
             >
-                {/* Back depth layer: dim, soft, half-speed parallax. */}
-                <motion.div className="absolute inset-0" style={{ x: bx, y: by }}>
-                    {renderTiles(false)}
+                {/* Three depth planes, painted back-to-front so the sharp primary
+                    sits on top. Each moves at its own parallax rate (far slowest). */}
+                <motion.div className="absolute inset-0" style={{ x: farX, y: farY }}>
+                    {renderTiles('far')}
                 </motion.div>
-                {/* Front depth layer: focal covers, sharp, full parallax. */}
+                <motion.div className="absolute inset-0" style={{ x: midX, y: midY }}>
+                    {renderTiles('mid')}
+                </motion.div>
                 <motion.div className="absolute inset-0" style={{ x: px, y: py }}>
-                    {renderTiles(true)}
+                    {renderTiles('near')}
                 </motion.div>
             </div>
 
