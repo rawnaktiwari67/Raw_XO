@@ -128,12 +128,15 @@ export default function HeroCoverWall() {
                     className={`absolute ${tile.mdUp ? 'hidden md:block' : ''}`}
                     style={{ left: `${tile.x}%`, top: `${tile.y}%`, width: tier.w }}
                 >
-                    {/* Entrance: the same staggered blur-to-sharp focus pull the
-                        rows had, now per tile. One-shot; framer owns this wrapper's
-                        transform, the inner element owns the idle drift. */}
+                    {/* Entrance: staggered rise-and-settle, one-shot. Framer owns
+                        this wrapper's transform, the inner element owns the idle
+                        drift. NO filter here: blurring the wrapper smears the
+                        cover's edges into a dark halo that hard-stops at the
+                        element's layer boundary — the depth blur lives on the img
+                        below instead, cropped by the rounded frame. */}
                     <motion.div
-                        initial={reduced ? false : { opacity: 0, y: 24, scale: 0.95, filter: 'blur(10px)' }}
-                        animate={{ opacity: tier.dim, y: 0, scale: 1, filter: `blur(${tier.blur}px)` }}
+                        initial={reduced ? false : { opacity: 0, y: 24, scale: 0.95 }}
+                        animate={{ opacity: tier.dim, y: 0, scale: 1 }}
                         transition={{ duration: 0.6, delay: 0.05 + i * 0.045, ease: [0.22, 1, 0.36, 1] }}
                     >
                         {/* Idle life: an ultra-slow bob sharing one transform with the
@@ -154,12 +157,20 @@ export default function HeroCoverWall() {
                         >
                             {/* Eager on purpose: all 18 tiles are above the fold and the
                                 whole wall already mounts post-paint (Game.tsx), so lazy
-                                would only delay the reveal, not save bandwidth. */}
+                                would only delay the reveal, not save bandwidth.
+                                Depth-of-field blur sits on the img itself, over-scaled a
+                                touch so the smeared edge pixels fall outside the frame
+                                and get cropped — soft interior, crisp tile border. */}
                             <img
                                 src={covers[i % covers.length]}
                                 alt=""
                                 decoding="async"
                                 className="h-full w-full object-cover"
+                                style={
+                                    tier.blur > 0
+                                        ? { filter: `blur(${tier.blur}px)`, transform: 'scale(1.08)' }
+                                        : undefined
+                                }
                             />
                         </div>
                     </motion.div>
