@@ -206,9 +206,9 @@ export default function Leaderboard({ variant = 'compact' }: LeaderboardProps) {
                                     value={artistInput}
                                     onChange={(event) => setArtistInput(event.target.value)}
                                     placeholder="Type an artist…"
-                                    className="flex-1 rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm text-text-1 placeholder:text-text-4 focus:border-accent/40 focus:outline-none"
+                                    className="tap-target flex-1 rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm text-text-1 placeholder:text-text-4 focus:border-accent/40 focus:outline-none"
                                 />
-                                <button type="submit" className="btn-secondary rounded-full px-5 py-2 text-xs">
+                                <button type="submit" className="btn-secondary tap-target justify-center rounded-full px-5 py-2 text-xs">
                                     Go
                                 </button>
                             </form>
@@ -221,7 +221,7 @@ export default function Leaderboard({ variant = 'compact' }: LeaderboardProps) {
                                             setArtistInput(artist);
                                             applyScopeValue(artist);
                                         }}
-                                        className={`rounded-full border px-3 py-1.5 text-xs transition-all ${
+                                        className={`tap-target inline-flex items-center justify-center rounded-full border px-3 py-1.5 text-xs transition-all ${
                                             leaderboardScopeValue.toLowerCase() === artist.toLowerCase()
                                                 ? 'border-accent/35 bg-amber-dim text-accent'
                                                 : 'border-white/10 bg-white/[0.03] text-text-3 hover:text-text-1'

@@ -32,7 +32,7 @@ export default function FilterPills<T extends string>({
                         type="button"
                         whileTap={{ scale: 0.96 }}
                         onClick={() => onChange(option.value)}
-                        className={`rounded-full uppercase tracking-[0.14em] transition-all duration-300 ${pad} ${
+                        className={`tap-target inline-flex items-center justify-center rounded-full uppercase tracking-[0.14em] transition-all duration-300 ${pad} ${
                             active
                                 ? 'bg-[linear-gradient(180deg,rgba(244,162,97,0.22),rgba(244,162,97,0.10))] text-text-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_0_20px_rgba(244,162,97,0.14)]'
                                 : 'bg-white/[0.03] text-text-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] hover:text-text-1'

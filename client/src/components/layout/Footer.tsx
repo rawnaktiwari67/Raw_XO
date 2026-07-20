@@ -39,7 +39,7 @@ export default function Footer() {
             <div className="max-w-[1280px] mx-auto px-6 md:px-12 py-16">
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-12">
                     <div className="md:col-span-5">
-                        <Link to="/" aria-label="Raw XO home">
+                        <Link to="/" aria-label="Raw XO home" className="tap-target inline-flex items-center">
                             <span className="brand-mark text-[2.15rem] leading-none text-gradient-gold">
                                 Raw XO
                             </span>
@@ -57,7 +57,7 @@ export default function Footer() {
                                     <Link
                                         key={item.to}
                                         to={item.to}
-                                        className="roll-trigger self-start text-sm text-text-2 hover:text-text-1 transition-colors"
+                                        className="roll-trigger tap-target inline-flex items-center self-start text-sm text-text-2 hover:text-text-1 transition-colors"
                                     >
                                         <RollText>{item.label}</RollText>
                                     </Link>

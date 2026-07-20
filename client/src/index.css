@@ -75,6 +75,22 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Native-feel touch: kill the grey tap-flash iOS/Android paint over every
+   control (the app supplies its own :active/whileTap feedback), and opt every
+   interactive element out of the 300ms double-tap-zoom delay so taps register
+   instantly like a native app. Purely behavioural — no visual change. */
+a,
+button,
+[role='button'],
+input,
+select,
+textarea,
+label,
+summary {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
 /* ─────────────────────────────
    Body — 4-layer depth system
    ───────────────────────────── */
@@ -111,6 +127,12 @@ body.gameplay-locked #root {
 }
 
 body.gameplay-locked .vignette-overlay {
+  display: none;
+}
+
+/* Keep the install chip out of an active round (same treatment as the header/
+   footer above) so nothing floats over the gameplay controls. */
+body.gameplay-locked .install-chip {
   display: none;
 }
 
@@ -334,6 +356,47 @@ h6 {
   .px-safe {
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
+  }
+
+  /* ── Touch targets ──
+     Guarantees a ≥44×44px hit area on coarse pointers (phones/tablets) WITHOUT
+     touching the element on a fine pointer (desktop), so the visual design is
+     unchanged on mouse. Applied to controls whose glyph/label is intentionally
+     small — segmented toggles, filter chips, rating stars, small CTAs. Pair
+     with inline-flex + centering in markup so the label stays optically centered
+     inside the enlarged box. */
+  @media (pointer: coarse) {
+    .tap-target {
+      min-width: 44px;
+      min-height: 44px;
+    }
+  }
+
+  /* Nav links carry an ::after underline, so their hit area is grown with a
+     transparent ::before overlay instead of padding (which would push the
+     underline off the text). Vertical-only expansion — the horizontal gap
+     between links is wide enough that -6px never overlaps a neighbour. */
+  @media (pointer: coarse) {
+    .nav-link::before {
+      content: '';
+      position: absolute;
+      inset-block: -14px;
+      inset-inline: -6px;
+    }
+  }
+
+  /* The clip-length slider is THE difficulty control, but its rail is only 6px
+     tall. On touch we grow the element's hit box to 44px with vertical padding
+     while clipping the (inline, dynamically-coloured) fill back to the original
+     6px band via content-box — so the whole 44px-tall row is draggable but the
+     rail looks identical. */
+  @media (pointer: coarse) {
+    .pro-clip-range {
+      box-sizing: content-box;
+      height: 6px;
+      padding-block: 19px;
+      background-clip: content-box;
+    }
   }
 
   /* ── Surfaces ── */
@@ -749,6 +812,31 @@ h6 {
 
   .d-600 {
     animation-delay: 600ms;
+  }
+}
+
+/* ─────────────────────────────
+   Immersive gameplay — safe-area padding
+   ─────────────────────────────
+   The full-screen round fills 100svh; without safe-area padding the header
+   would tuck under the notch / Dynamic Island and the answer buttons under the
+   home indicator on modern phones. max() folds each inset together with the
+   original gutter, so on a device with no insets (0) the padding is exactly the
+   old px-1.5/py-1.5 (and px-4/py-4 ≥ sm) — no change off-notch, clear of the
+   unsafe zones on-notch. Unlayered so it wins over the Tailwind utility layer. */
+.guess-immersive {
+  padding-top: max(0.375rem, env(safe-area-inset-top));
+  padding-bottom: max(0.375rem, env(safe-area-inset-bottom));
+  padding-left: max(0.375rem, env(safe-area-inset-left));
+  padding-right: max(0.375rem, env(safe-area-inset-right));
+}
+
+@media (min-width: 640px) {
+  .guess-immersive {
+    padding-top: max(1rem, env(safe-area-inset-top));
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
   }
 }
 

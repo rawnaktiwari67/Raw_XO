@@ -26,7 +26,7 @@ function BigStars({ value, onPick }: { value: number | null; onPick: (rating: nu
                         aria-label={`Rate ${star} of 5`}
                         onMouseEnter={() => setHover(star)}
                         onClick={() => onPick(star)}
-                        className="rounded text-[34px] leading-none transition-transform duration-150 hover:scale-125 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/50"
+                        className="tap-target inline-flex items-center justify-center rounded text-[34px] leading-none transition-transform duration-150 hover:scale-125 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/50"
                         style={{
                             color: filled ? '#F4A261' : 'rgba(255,255,255,0.2)',
                             textShadow: filled ? '0 0 16px rgba(244,162,97,0.5)' : 'none',

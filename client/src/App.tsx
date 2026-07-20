@@ -3,6 +3,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
 import AppRouter from './router/AppRouter';
 import ErrorBoundary from './components/layout/ErrorBoundary';
+import InstallPrompt from './components/layout/InstallPrompt';
 import { setClerkTokenGetter } from './services/clerkToken';
 import { useAuthStore } from './stores/authStore';
 
@@ -45,6 +46,7 @@ function AppShell() {
         <ErrorBoundary>
             <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
                 <AppRouter />
+                <InstallPrompt />
             </BrowserRouter>
         </ErrorBoundary>
     );

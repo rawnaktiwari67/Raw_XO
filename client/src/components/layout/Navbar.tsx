@@ -67,7 +67,7 @@ export default function Navbar() {
                 }}
             >
                 <div className="pt-safe mx-auto flex h-[62px] max-w-[1280px] items-center justify-between gap-4 px-4 md:h-[76px] md:px-12">
-                    <Link to="/" className="shrink-0" aria-label="Raw XO home">
+                    <Link to="/" className="tap-target inline-flex items-center shrink-0" aria-label="Raw XO home">
                         <span className="brand-mark text-[1.6rem] leading-none text-gradient-gold md:text-[1.9rem]">
                             Raw XO
                         </span>
@@ -128,7 +128,7 @@ export default function Navbar() {
                                     and the nav shouldn't compete with it. */}
                                 <Link
                                     to="/register"
-                                    className="rounded-[1.1rem] bg-[#D69E71] px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.04em] text-ch-0 shadow-[0_8px_22px_rgba(214,158,113,0.24)] transition-all duration-300 hover:-translate-y-px hover:bg-amber md:px-5 md:text-xs"
+                                    className="tap-target inline-flex items-center justify-center rounded-[1.1rem] bg-[#D69E71] px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.04em] text-ch-0 shadow-[0_8px_22px_rgba(214,158,113,0.24)] transition-all duration-300 hover:-translate-y-px hover:bg-amber md:px-5 md:text-xs"
                                 >
                                     Join
                                 </Link>
@@ -140,7 +140,7 @@ export default function Navbar() {
                             type="button"
                             aria-label="Toggle menu"
                             onClick={() => setMobileOpen((prev) => !prev)}
-                            className="flex h-9 w-9 flex-col items-center justify-center gap-[5px] rounded-[0.7rem] bg-white/[0.04] transition-colors hover:bg-white/[0.07] md:hidden"
+                            className="flex h-11 w-11 flex-col items-center justify-center gap-[5px] rounded-[0.7rem] bg-white/[0.04] transition-colors hover:bg-white/[0.07] md:hidden"
                         >
                             <span
                                 className={`h-px w-5 bg-text-2 transition-all duration-300 ${

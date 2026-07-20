@@ -356,7 +356,7 @@ function FilterRail<T extends string>({
                             }}
                             disabled={disabled}
                             aria-disabled={locked}
-                            className={`relative min-h-10 rounded-[0.85rem] px-4 py-2 text-[11px] uppercase tracking-[0.12em] transition-[color,background-color,box-shadow] duration-300 ${
+                            className={`relative tap-target inline-flex items-center justify-center min-h-10 rounded-[0.85rem] px-4 py-2 text-[11px] uppercase tracking-[0.12em] transition-[color,background-color,box-shadow] duration-300 ${
                                 active
                                     ? 'font-semibold text-text-1'
                                     : 'bg-white/[0.035] text-text-3 hover:bg-white/[0.07] hover:text-text-1 hover:ring-1 hover:ring-white/10 hover:shadow-[0_8px_20px_rgba(0,0,0,0.35)]'
@@ -539,7 +539,7 @@ function ArtistPicker({
                     whileTap={disabled ? undefined : { scale: 0.99 }}
                     onClick={applyCustomArtist}
                     disabled={disabled}
-                    className="mt-2.5 flex min-h-10 w-full items-center justify-center gap-2 rounded-[0.85rem] bg-[linear-gradient(180deg,rgba(244,162,97,0.26),rgba(244,162,97,0.1))] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-text-1 ring-1 ring-amber/25 transition-all duration-300 disabled:opacity-60"
+                    className="tap-target mt-2.5 flex min-h-10 w-full items-center justify-center gap-2 rounded-[0.85rem] bg-[linear-gradient(180deg,rgba(244,162,97,0.26),rgba(244,162,97,0.1))] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-text-1 ring-1 ring-amber/25 transition-all duration-300 disabled:opacity-60"
                 >
                     <svg viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5 shrink-0" aria-hidden>
                         <path d="M8 5v14l11-7z" />
@@ -556,7 +556,7 @@ function ArtistPicker({
                         whileTap={disabled ? undefined : { scale: 0.99 }}
                         onClick={() => selectArtist('all')}
                         disabled={disabled}
-                        className={`min-h-9 rounded-[0.8rem] px-3 py-2 text-left text-[10px] uppercase tracking-[0.11em] transition-all duration-300 ${
+                        className={`tap-target inline-flex items-center min-h-9 rounded-[0.8rem] px-3 py-2 text-left text-[10px] uppercase tracking-[0.11em] transition-all duration-300 ${
                             value === 'all'
                                 ? 'bg-[linear-gradient(180deg,rgba(244,162,97,0.22),rgba(244,162,97,0.08))] text-text-1 ring-1 ring-amber/20'
                                 : 'bg-white/[0.03] text-text-3 opacity-60 hover:opacity-100 hover:text-text-1'
@@ -576,7 +576,7 @@ function ArtistPicker({
                                 whileTap={disabled ? undefined : { scale: 0.99 }}
                                 onClick={() => selectArtist(artist.value)}
                                 disabled={disabled}
-                                className={`min-h-9 max-w-[150px] rounded-[0.8rem] px-3 py-2 text-left text-[10px] uppercase tracking-[0.11em] transition-all duration-300 ${
+                                className={`tap-target inline-flex items-center min-h-9 max-w-[150px] rounded-[0.8rem] px-3 py-2 text-left text-[10px] uppercase tracking-[0.11em] transition-all duration-300 ${
                                     active
                                         ? 'bg-[linear-gradient(180deg,rgba(244,162,97,0.22),rgba(244,162,97,0.08))] text-text-1 ring-1 ring-amber/20'
                                         : 'bg-white/[0.03] text-text-3 opacity-60 hover:opacity-100 hover:text-text-1'
@@ -1363,7 +1363,7 @@ export default function GamePlayer() {
 
     if (phase !== 'idle' || isLoading) {
         return (
-            <div className="guess-immersive relative flex h-[100svh] min-h-[100svh] items-center justify-center overflow-hidden px-1.5 py-1.5 sm:px-4 sm:py-4">
+            <div className="guess-immersive relative flex h-[100svh] min-h-[100svh] items-center justify-center overflow-hidden">
                 {question ? <audio key={question.songId} ref={audioRef} src={question.snippetUrl} preload="auto" /> : null}
 
                 {/* Pro brace screen — held before the micro-clip so the player can
@@ -1979,7 +1979,7 @@ export default function GamePlayer() {
                                                 onClick={() => void handleRate(value)}
                                                 disabled={isRating}
                                                 aria-label={`Rate ${value} of 5`}
-                                                className={`flex min-h-10 items-center justify-center rounded-[0.6rem] transition-all duration-200 ${
+                                                className={`tap-target flex min-h-10 items-center justify-center rounded-[0.6rem] transition-all duration-200 ${
                                                     filled
                                                         ? 'bg-amber/18 ring-1 ring-amber/45'
                                                         : 'bg-white/[0.045] ring-1 ring-white/[0.05] hover:bg-white/[0.08]'
