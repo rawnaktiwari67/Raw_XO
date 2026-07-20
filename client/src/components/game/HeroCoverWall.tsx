@@ -20,11 +20,14 @@ const DESI_ARTIST = /(arijit|diljit|ap dhillon|dhillon|karan aujla|shubh|badshah
 // Size/depth tiers. Front tiers sit sharp and bright and carry the cursor
 // parallax fully; back tiers recede dim, soft, and half-speed — the same faked
 // depth of field the old wall had, now stable.
+// Depth comes from SIZE first, opacity second, blur barely at all: heavy dim +
+// blur turned the back tiers into murky black smudges against the charcoal
+// background. Every cover must still read as a cover.
 const TIERS = [
     { w: 'clamp(8.5rem, 13vw, 13rem)', dim: 1, blur: 0, front: true },     // XL focal
-    { w: 'clamp(7rem, 10.5vw, 11rem)', dim: 0.94, blur: 0.4, front: true }, // L
-    { w: 'clamp(5.5rem, 8vw, 9rem)', dim: 0.84, blur: 1.1, front: false },  // M
-    { w: 'clamp(4.25rem, 6vw, 7rem)', dim: 0.72, blur: 1.8, front: false }, // S filler
+    { w: 'clamp(7rem, 10.5vw, 11rem)', dim: 0.96, blur: 0, front: true },   // L
+    { w: 'clamp(5.5rem, 8vw, 9rem)', dim: 0.9, blur: 0.7, front: false },   // M
+    { w: 'clamp(4.25rem, 6vw, 7rem)', dim: 0.8, blur: 1.1, front: false },  // S filler
 ] as const;
 
 interface Tile {
@@ -186,11 +189,13 @@ export default function HeroCoverWall() {
             transition={{ duration: 0.4, ease: 'easeOut' }}
             className="pointer-events-none absolute inset-x-0 top-0 h-[30rem] overflow-hidden lg:h-[36rem]"
             // Soft radial mask so the collage dissolves into the dark on every edge
-            // instead of hard-cutting mid-tile — the main lever that turns a set of
-            // thumbnails into a cinematic backdrop.
+            // instead of hard-cutting mid-tile. The transparent stop ends at 78%
+            // (not 84%) so the fade reaches TRUE zero before the container's
+            // bottom edge — at 84% the graded layer was still ~2% visible there,
+            // cutting off in a faint horizontal seam against the page background.
             style={{
-                maskImage: 'radial-gradient(125% 92% at 50% 24%, #000 44%, transparent 84%)',
-                WebkitMaskImage: 'radial-gradient(125% 92% at 50% 24%, #000 44%, transparent 84%)',
+                maskImage: 'radial-gradient(125% 92% at 50% 24%, #000 44%, transparent 78%)',
+                WebkitMaskImage: 'radial-gradient(125% 92% at 50% 24%, #000 44%, transparent 78%)',
             }}
         >
             {/* The static saturate/contrast grade unifies two dozen clashing album
