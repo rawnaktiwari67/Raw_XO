@@ -53,6 +53,12 @@ const TILES: Tile[] = [
     { x: 55, y: 9, tier: 0, rot: -7, float: 22 },
     { x: 74, y: 2, tier: 2, rot: -5, float: 18 },
     { x: 88, y: 7, tier: 3, rot: -9, float: 20, mdUp: true },
+    // upper-mid seam — fillers packing the gap between the top and mid bands
+    { x: 8, y: 20, tier: 3, rot: -8, float: 19, mdUp: true },
+    { x: 21, y: 23, tier: 2, rot: -6, float: 22 },
+    { x: 35, y: 22, tier: 3, rot: -9, float: 17, mdUp: true },
+    { x: 70, y: 22, tier: 2, rot: -8, float: 20 },
+    { x: 95, y: 20, tier: 2, rot: -7, float: 18, mdUp: true },
     // mid band — right-weighted, framing the headline
     { x: 6, y: 34, tier: 3, rot: -6, float: 18, mdUp: true },
     { x: 30, y: 36, tier: 2, rot: -8, float: 23, mdUp: true },
@@ -60,6 +66,10 @@ const TILES: Tile[] = [
     { x: 62, y: 38, tier: 1, rot: -8, float: 21 },
     { x: 80, y: 32, tier: 2, rot: -6, float: 19 },
     { x: 92, y: 40, tier: 1, rot: -9, float: 16, mdUp: true },
+    // lower-mid seam — keeps the collage continuous into the fade
+    { x: 4, y: 52, tier: 2, rot: -7, float: 21, mdUp: true },
+    { x: 24, y: 50, tier: 3, rot: -10, float: 18 },
+    { x: 44, y: 52, tier: 2, rot: -6, float: 19, mdUp: true },
     // lower band — dissolves into the bottom scrim
     { x: 12, y: 62, tier: 2, rot: -9, float: 20, mdUp: true },
     { x: 36, y: 66, tier: 3, rot: -7, float: 18, mdUp: true },
@@ -100,6 +110,10 @@ export default function HeroCoverWall() {
         let alive = true;
         musicService.getHeroArtwork().then((tracks) => {
             if (!alive) return;
+            // Dedupe by artwork URL: the catalog often has several tracks off the
+            // same album, and a repeated sleeve in a hand-placed collage reads as
+            // a bug. Only genuinely distinct covers make the wall.
+            const seen = new Set<string>();
             const art = tracks
                 .filter(
                     (track) =>
@@ -111,7 +125,11 @@ export default function HeroCoverWall() {
                 // costs a quarter of the bandwidth and pops in fast. (musicService
                 // hands back 600x600; anything sharper is wasted behind the scrim.)
                 .map((track) => track.albumArt.replace('600x600bb', '300x300bb'))
-                .filter(Boolean);
+                .filter((src) => {
+                    if (!src || seen.has(src)) return false;
+                    seen.add(src);
+                    return true;
+                });
             setCovers(art.slice(0, TILES.length));
         });
         return () => {
