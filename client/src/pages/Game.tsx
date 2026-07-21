@@ -230,7 +230,7 @@ export default function Game() {
                     variants={heroContainer}
                     initial="hidden"
                     animate="visible"
-                    className="relative mb-10 flex min-h-[20rem] flex-col justify-end gap-6 md:min-h-[24rem] lg:flex-row lg:items-end lg:justify-between"
+                    className="relative mb-6 flex min-h-[20rem] flex-col justify-end gap-6 md:min-h-[24rem] lg:flex-row lg:items-end lg:justify-between"
                 >
                     {/* Outer div carries only the cursor counter-parallax so its
                         x/y never fight the entrance variants on the inner div.

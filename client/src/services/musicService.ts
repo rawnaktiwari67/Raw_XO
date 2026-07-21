@@ -90,6 +90,19 @@ const CATALOG_QUERIES = [
     'dua lipa',
     'taylor swift',
     'the chainsmokers',
+    'billie eilish',
+    'post malone',
+    'bad bunny',
+    'olivia rodrigo',
+    'frank ocean',
+    'tyler the creator',
+    'kanye west',
+    'playboi carti',
+    'ariana grande',
+    'bruno mars',
+    'rihanna',
+    'j. cole',
+    'j balvin',
     'arijit singh',
     'diljit dosanjh',
     'ap dhillon',
@@ -196,7 +209,7 @@ const fetchCatalog = (query: string): Promise<NormalizedMusicItem[]> => {
     if (!catalogCache.has(query)) {
         catalogCache.set(
             query,
-            fetchItunes(query, 6).then((results) =>
+            fetchItunes(query, 8).then((results) =>
                 results.map(baseFromResult).filter((track): track is NormalizedMusicItem => Boolean(track))
             )
         );

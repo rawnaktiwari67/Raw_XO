@@ -56,44 +56,62 @@ interface Tile {
 // top-center where the radial mask is brightest, secondaries framing it from
 // the top-left and right, and the rest arranged to frame the text rather than
 // compete with it. Lower tiles dissolve into the bottom fade on purpose.
+// Option A — cinematic, right-weighted composition. The headline is a heavy
+// mass on the LEFT, so the collage's weight is deliberately pushed RIGHT to
+// counterbalance it: one oversized anchor and its overlapping cluster form a
+// focal mass upper-right, a diagonal ridge ties that mass back to the headline,
+// and covers overlap ACROSS depth planes (occlusion, not just size) so the wall
+// reads as layered glass. Several tiles run off the top/right/bottom-left edges
+// so the frame feels like a window, not a poster. The protected headline zone
+// (x 8–56%, y 36–82%) stays clear of everything but dim far-left texture.
 const TILES: Tile[] = [
-    // PRIMARY — the one anchor, top-center-right in the mask's brightest zone
-    { x: 54, y: 6, tier: 0, rot: -4, float: 11 },
+    // ── PRIMARY FOCAL CLUSTER (upper-right) — the counterweight to the headline.
+    // One oversized sharp anchor with secondaries and mids overlapping it, so the
+    // right reads as a single deliberate mass rather than a scatter of covers.
+    // The tier-0 anchor is oversized on a phone's narrow band — it would dip into
+    // the full-width mobile headline — so it and the mid beneath it are desktop-
+    // only; on mobile the tier-1 secondary below carries the top-right cluster.
+    { x: 71, y: 12, tier: 0, rot: -4, float: 11, mdUp: true },  // the one anchor (desktop)
+    { x: 61, y: 5, tier: 1, rot: -8, float: 9 },                // overlaps anchor, top-left
+    { x: 86, y: 33, tier: 1, rot: -4, float: 12, mdUp: true },  // overlaps anchor, bleeds off right
+    { x: 76, y: 30, tier: 2, rot: -8, float: 10, mdUp: true },  // packs the cluster core
+    { x: 67, y: 43, tier: 2, rot: -8, float: 11, mdUp: true },  // under the anchor (desktop)
+    { x: 84, y: 51, tier: 2, rot: -4, float: 9, mdUp: true },   // lower-right of cluster
 
-    // SECONDARY — two supporting stars, both above/right of the headline
-    { x: 19, y: 5, tier: 1, rot: -8, float: 9 },
-    { x: 78, y: 13, tier: 1, rot: -8, float: 12 },
+    // ── CONNECTIVE RIDGE — a diagonal of mids arcing from above the headline into
+    // the cluster, so the left and right masses read as one composition, not two.
+    { x: 40, y: 4, tier: 2, rot: -4, float: 12 },
+    { x: 48, y: 11, tier: 2, rot: -12, float: 10 },
+    { x: 56, y: 24, tier: 2, rot: -8, float: 11, mdUp: true },
+    { x: 62, y: 31, tier: 3, rot: -4, float: 9, mdUp: true },
 
-    // TOP band — texture above the headline (density is welcome here)
-    { x: 2, y: 9, tier: 3, rot: -12, float: 8, mdUp: true },
-    { x: 10, y: 20, tier: 4, rot: -8, float: 10, mdUp: true },
-    { x: 34, y: 4, tier: 2, rot: -4, float: 12 },
-    { x: 42, y: 18, tier: 3, rot: 0, float: 9, mdUp: true },
-    { x: 66, y: 3, tier: 2, rot: -8, float: 11 },
-    { x: 89, y: 6, tier: 2, rot: -4, float: 10, mdUp: true },
-    { x: 95, y: 19, tier: 3, rot: -8, float: 8, mdUp: true },
-    { x: 29, y: 22, tier: 4, rot: -12, float: 11, mdUp: true },
-    { x: 50, y: 21, tier: 4, rot: -8, float: 10, mdUp: true },
+    // ── TOP BAND — texture above the headline; density welcome, and a couple of
+    // covers bleed off the top edge so the collage feels windowed, not framed.
+    { x: 20, y: 6, tier: 3, rot: -8, float: 10 },
+    { x: 30, y: 16, tier: 3, rot: -12, float: 8 },
+    { x: 10, y: 18, tier: 4, rot: -8, float: 11 },              // top-left texture (also mobile)
+    { x: 36, y: -6, tier: 3, rot: -8, float: 12, mdUp: true },  // bleeds off top
+    { x: 50, y: 1, tier: 4, rot: -4, float: 10 },               // top texture (also mobile)
+    { x: 44, y: 27, tier: 4, rot: -8, float: 9, mdUp: true },   // dim atmosphere above headline
+    { x: 86, y: 7, tier: 3, rot: -4, float: 11 },               // top-right corner (mobile anchor)
 
-    // RIGHT column — frames the right of the headline
-    { x: 62, y: 30, tier: 2, rot: -8, float: 10 },
-    { x: 84, y: 31, tier: 3, rot: -4, float: 12, mdUp: true },
-    { x: 93, y: 43, tier: 2, rot: -8, float: 9, mdUp: true },
-    { x: 72, y: 47, tier: 2, rot: -12, float: 11 },
-    { x: 88, y: 56, tier: 3, rot: -4, float: 8 },
-    { x: 63, y: 61, tier: 3, rot: -8, float: 10, mdUp: true },
-    { x: 79, y: 64, tier: 2, rot: -8, float: 12 },
-    { x: 95, y: 65, tier: 4, rot: 0, float: 9, mdUp: true },
-    { x: 74, y: 38, tier: 3, rot: -8, float: 11, mdUp: true },
+    // ── BACKGROUND — far plane, blurred and small; right edge + lower-right, some
+    // running off frame and dissolving into the bottom fade.
+    { x: 94, y: 15, tier: 4, rot: -8, float: 9, mdUp: true },   // bleeds off right
+    { x: 96, y: 47, tier: 4, rot: -4, float: 12, mdUp: true },  // bleeds off right
+    { x: 90, y: 65, tier: 3, rot: -4, float: 8 },               // lower-right anchor
+    { x: 78, y: 70, tier: 4, rot: 0, float: 11, mdUp: true },   // fades into bottom scrim
+    { x: 70, y: 57, tier: 3, rot: -8, float: 10, mdUp: true },
+    { x: 60, y: 66, tier: 3, rot: -8, float: 11 },              // lower center-right (right of zone)
+    { x: 66, y: 78, tier: 4, rot: -4, float: 9, mdUp: true },
 
-    // LOWER center-right — below the headline, fading into the scrim
-    { x: 58, y: 71, tier: 3, rot: -8, float: 11 },
-    { x: 70, y: 74, tier: 2, rot: -4, float: 10 },
-
-    // FAR-LEFT edge — dim texture behind the scrim; never competes with the text
-    { x: 0, y: 34, tier: 4, rot: -8, float: 9, mdUp: true },
-    { x: 1, y: 49, tier: 4, rot: -12, float: 12, mdUp: true },
-    { x: 2, y: 63, tier: 4, rot: -4, float: 8, mdUp: true },
+    // ── FAR-LEFT COLUMN — dim texture behind the headline scrim; gives the left
+    // atmospheric depth without ever competing with the type, and clips the edge.
+    { x: -3, y: 10, tier: 4, rot: -8, float: 10, mdUp: true },  // bleeds off left
+    { x: 0, y: 24, tier: 4, rot: -12, float: 12 },
+    { x: 1, y: 42, tier: 4, rot: -4, float: 8, mdUp: true },
+    { x: 2, y: 58, tier: 4, rot: -8, float: 9 },
+    { x: -2, y: 76, tier: 4, rot: -4, float: 11, mdUp: true },  // bleeds off bottom-left
 ];
 
 // Full-bleed ambient album-art collage behind the hero. A masked, gently
@@ -151,6 +169,16 @@ export default function HeroCoverWall() {
                     seen.add(src);
                     return true;
                 });
+
+            // Fisher-Yates shuffle, unseeded — so the collage draws a different
+            // set of covers into different tiles on every mount, for every
+            // visitor. The composition itself (tiers, positions, hierarchy) is
+            // fixed; only WHICH sleeve lands in each slot re-rolls, so the wall
+            // feels freshly arranged every visit without ever looking scattered.
+            for (let i = art.length - 1; i > 0; i -= 1) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [art[i], art[j]] = [art[j], art[i]];
+            }
             setCovers(art.slice(0, TILES.length));
         });
         return () => {
@@ -244,6 +272,15 @@ export default function HeroCoverWall() {
                 className="absolute inset-0 opacity-[0.9] [filter:saturate(1.18)_contrast(1.1)_brightness(1.1)]"
                 style={reduced ? undefined : { animation: 'heroBreathe 46s ease-in-out infinite', willChange: 'transform' }}
             >
+                {/* Volumetric key light — a warm radial anchored on the focal
+                    cluster, painted BEHIND every plane so the covers sit in front
+                    of it and catch the glow. Depth, not brightness: low alpha, wide
+                    falloff, no hard core (that would read as bloom). */}
+                <div
+                    aria-hidden
+                    className="absolute inset-0"
+                    style={{ background: 'radial-gradient(42% 40% at 73% 22%, rgba(244,162,97,0.16), transparent 72%)' }}
+                />
                 {/* Three depth planes, painted back-to-front so the sharp primary
                     sits on top. Each moves at its own parallax rate (far slowest). */}
                 <motion.div className="absolute inset-0" style={{ x: farX, y: farY }}>
@@ -261,10 +298,21 @@ export default function HeroCoverWall() {
                 darkness, a bottom fade dissolves the wall into the content below,
                 and a warm amber wash lifts the top. */}
             <div className="absolute inset-0 bg-[linear-gradient(90deg,#0B0B0F_0%,rgba(11,11,15,0.16)_34%,transparent_60%)]" />
+            {/* Cinematic vignette — deepens the far corners to push the focal
+                cluster forward. Its clear centre is offset to the cluster (62% 26%)
+                so the glow stays open there while the edges fall into shadow;
+                the left side darkening also reinforces the headline safe zone. */}
+            <div
+                aria-hidden
+                className="absolute inset-0"
+                style={{ background: 'radial-gradient(130% 118% at 62% 26%, transparent 54%, rgba(11,11,15,0.55) 100%)' }}
+            />
             {/* Strong lower fade to solid #0B0B0F (= --bg-0), so the wall is fully
                 gone before the game setup below and never bleeds through its cards. */}
             <div className="absolute inset-x-0 bottom-0 h-1/2 bg-[linear-gradient(180deg,transparent_0%,#0B0B0F_78%)]" />
-            <div className="absolute inset-x-0 top-0 h-48 bg-[radial-gradient(65%_100%_at_18%_0%,rgba(244,162,97,0.14),transparent_72%)]" />
+            {/* Top warm wash, re-anchored over the focal cluster (was top-left) so
+                the collage's brightest light and its focal mass agree. */}
+            <div className="absolute inset-x-0 top-0 h-56 bg-[radial-gradient(60%_100%_at_68%_0%,rgba(244,162,97,0.13),transparent_70%)]" />
         </motion.div>
     );
 }
