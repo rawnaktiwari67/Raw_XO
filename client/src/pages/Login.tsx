@@ -46,7 +46,7 @@ export default function Login() {
             <div className="mx-auto flex max-w-[1180px] items-start justify-center">
                 <div className="w-full max-w-[440px]">
                     <div className="mb-3 flex items-center justify-between gap-3 rounded-[0.9rem] border border-white/[0.06] bg-white/[0.025] px-3 py-3 text-xs text-text-3 sm:mb-4 sm:rounded-[1rem] sm:px-4">
-                        <span>New Google account?</span>
+                        <span>New to Raw XO?</span>
                         <Link to="/register" className="font-semibold text-accent hover:text-text-1">
                             Create account
                         </Link>

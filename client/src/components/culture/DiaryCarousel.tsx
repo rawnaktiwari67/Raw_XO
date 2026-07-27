@@ -99,7 +99,7 @@ export default function DiaryCarousel({ title, hint, cards, onRate, emptyText }:
                 <div className="relative">
                 <div
                     ref={scrollRef}
-                    className="hide-scrollbar flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-1"
+                    className="hide-scrollbar flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain scroll-smooth pb-1"
                 >
                     {cards.map((card, index) => (
                         <motion.div

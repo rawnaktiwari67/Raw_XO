@@ -1,18 +1,12 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence, useMotionValueEvent, useScroll } from 'framer-motion';
+import { motion, useMotionValueEvent, useScroll } from 'framer-motion';
 import { UserButton, useClerk } from '@clerk/clerk-react';
 import { useAuthStore } from '../../stores/authStore';
 import { shouldUseClerk } from '../../services/authMode';
 import { authService } from '../../services/authService';
 import RollText from '../motion/RollText';
-
-const LINKS = [
-    { to: '/', label: 'Play' },
-    { to: '/archive', label: 'Culture' },
-    { to: '/tours', label: 'Live' },
-    { to: '/leaderboard', label: 'Rank' },
-];
+import { LINKS } from './navLinks';
 
 function NavLink({ to, label, onClick }: { to: string; label: string; onClick?: () => void }) {
     const { pathname } = useLocation();
@@ -32,7 +26,6 @@ export default function Navbar() {
     const navigate = useNavigate();
     const { scrollY } = useScroll();
     const [isScrolled, setIsScrolled] = useState(false);
-    const [mobileOpen, setMobileOpen] = useState(false);
 
     useMotionValueEvent(scrollY, 'change', (value) => setIsScrolled(value > 14));
 
@@ -41,7 +34,6 @@ export default function Navbar() {
             await authService.logout();
         } finally {
             clearSession();
-            setMobileOpen(false);
             navigate('/');
         }
     };
@@ -79,44 +71,42 @@ export default function Navbar() {
                         ))}
                     </nav>
 
+                    {/* Account cluster. Primary navigation now lives in the phone
+                        bottom tab bar (MobileTabBar), so this stays lean on mobile:
+                        just enough to reach your profile and sign out. */}
                     <div className="flex items-center gap-2 md:gap-3">
                         {isAuthenticated && user ? (
                             <>
                                 <Link
                                     to={`/profile/${user.username}`}
-                                    className="hidden text-[11px] uppercase tracking-[0.14em] text-text-3 transition-colors hover:text-text-1 sm:block"
+                                    className="block max-w-[92px] truncate text-[11px] uppercase tracking-[0.14em] text-text-3 transition-colors hover:text-text-1 sm:max-w-none"
                                 >
                                     {user.username}
                                 </Link>
                                 {shouldUseClerk ? (
-                                    <div className="hidden sm:block">
-                                        <ClerkSignedInControls
-                                            onAfterSignOut={() => {
-                                                clearSession();
-                                                setMobileOpen(false);
-                                                navigate('/');
-                                            }}
-                                        />
-                                    </div>
+                                    <ClerkSignedInControls
+                                        onAfterSignOut={() => {
+                                            clearSession();
+                                            navigate('/');
+                                        }}
+                                    />
                                 ) : (
-                                    <div className="hidden sm:block">
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                void handleLocalSignOut();
-                                            }}
-                                            className="btn-secondary rounded-[1.1rem] px-4 py-2 text-[11px] md:px-5 md:text-xs"
-                                        >
-                                            Sign Out
-                                        </button>
-                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            void handleLocalSignOut();
+                                        }}
+                                        className="btn-secondary rounded-[1.1rem] px-4 py-2 text-[11px] md:px-5 md:text-xs"
+                                    >
+                                        Sign Out
+                                    </button>
                                 )}
                             </>
                         ) : (
                             <>
                                 <Link
                                     to="/login"
-                                    className="hidden text-[11px] font-semibold uppercase tracking-[0.14em] text-text-2 transition-colors hover:text-text-1 sm:block"
+                                    className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-2 transition-colors hover:text-text-1"
                                 >
                                     Sign In
                                 </Link>
@@ -134,104 +124,14 @@ export default function Navbar() {
                                 </Link>
                             </>
                         )}
-
-                        {/* Mobile hamburger */}
-                        <button
-                            type="button"
-                            aria-label="Toggle menu"
-                            onClick={() => setMobileOpen((prev) => !prev)}
-                            className="flex h-11 w-11 flex-col items-center justify-center gap-[5px] rounded-[0.7rem] bg-white/[0.04] transition-colors hover:bg-white/[0.07] md:hidden"
-                        >
-                            <span
-                                className={`h-px w-5 bg-text-2 transition-all duration-300 ${
-                                    mobileOpen ? 'translate-y-[6px] rotate-45' : ''
-                                }`}
-                            />
-                            <span
-                                className={`h-px w-5 bg-text-2 transition-all duration-300 ${
-                                    mobileOpen ? 'opacity-0' : ''
-                                }`}
-                            />
-                            <span
-                                className={`h-px w-5 bg-text-2 transition-all duration-300 ${
-                                    mobileOpen ? '-translate-y-[6px] -rotate-45' : ''
-                                }`}
-                            />
-                        </button>
                     </div>
                 </div>
-
-                {/* Mobile dropdown menu */}
-                <AnimatePresence>
-                    {mobileOpen && (
-                        <motion.nav
-                            key="mobile-menu"
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            exit={{ opacity: 0, height: 0 }}
-                            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                            className="overflow-hidden border-t border-white/[0.04] md:hidden"
-                        >
-                            <div className="flex flex-col gap-4 px-4 py-5">
-                                {LINKS.map((item) => (
-                                    <NavLink
-                                        key={item.to}
-                                        to={item.to}
-                                        label={item.label}
-                                        onClick={() => setMobileOpen(false)}
-                                    />
-                                ))}
-                                {isAuthenticated && user ? (
-                                    <div className="mt-1 rounded-[0.95rem] bg-white/[0.035] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
-                                        <div className="flex items-center justify-between gap-3">
-                                            <Link
-                                                to={`/profile/${user.username}`}
-                                                onClick={() => setMobileOpen(false)}
-                                                className="min-w-0 text-[11px] uppercase tracking-[0.14em] text-text-3 transition-colors hover:text-text-1"
-                                            >
-                                                <span className="block truncate">{user.username}</span>
-                                            </Link>
-                                            {shouldUseClerk ? (
-                                                <ClerkSignedInControls
-                                                    compact
-                                                    onAfterSignOut={() => {
-                                                        clearSession();
-                                                        setMobileOpen(false);
-                                                        navigate('/');
-                                                    }}
-                                                />
-                                            ) : (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        void handleLocalSignOut();
-                                                    }}
-                                                    className="btn-secondary shrink-0 rounded-[0.8rem] px-3 py-2 text-[10px]"
-                                                >
-                                                    Sign Out
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <Link
-                                        to="/login"
-                                        onClick={() => setMobileOpen(false)}
-                                        className="mt-1 text-[11px] uppercase tracking-[0.14em] text-text-3 transition-colors hover:text-text-1"
-                                    >
-                                        Sign In
-                                    </Link>
-                                )}
-                            </div>
-                        </motion.nav>
-                    )}
-                </AnimatePresence>
             </div>
         </motion.header>
     );
 }
 
-function ClerkSignedInControls({ onAfterSignOut, compact = false }: { onAfterSignOut: () => void; compact?: boolean }) {
+function ClerkSignedInControls({ onAfterSignOut }: { onAfterSignOut: () => void }) {
     const { signOut } = useClerk();
 
     return (
@@ -239,19 +139,19 @@ function ClerkSignedInControls({ onAfterSignOut, compact = false }: { onAfterSig
             <UserButton
                 appearance={{
                     elements: {
-                        avatarBox: compact ? 'h-8 w-8 ring-1 ring-white/10' : 'h-9 w-9 ring-1 ring-white/10',
+                        avatarBox: 'h-9 w-9 ring-1 ring-white/10',
                     },
                 }}
                 afterSignOutUrl="/"
             />
+            {/* On phones the avatar's own Clerk menu carries "Sign out", so the
+                explicit pill only appears from sm up to avoid a crowded top bar. */}
             <button
                 onClick={async () => {
                     await signOut();
                     onAfterSignOut();
                 }}
-                className={compact
-                    ? 'btn-secondary rounded-[0.8rem] px-3 py-2 text-[10px]'
-                    : 'btn-secondary rounded-[1.1rem] px-4 py-2 text-[11px] md:px-5 md:text-xs'}
+                className="btn-secondary hidden rounded-[1.1rem] px-4 py-2 text-[11px] sm:inline-flex md:px-5 md:text-xs"
             >
                 Sign Out
             </button>

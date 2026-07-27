@@ -4,7 +4,7 @@ import { animate, AnimatePresence, motion, useMotionValue, useSpring, useTransfo
 import { useGameStore, HINT_POINT_PENALTY, REPLAY_POINT_PENALTY, MAX_REPLAYS } from '../../stores/gameStore';
 import { gameService } from '../../services/gameService';
 import { aiService } from '../../services/aiService';
-import { roundSecondsFor, difficultyForClipSeconds, CLIP_MIN_SECONDS, CLIP_MAX_SECONDS, PRO_CLIP_MAX_SECONDS } from '../../config/gameConfig';
+import { roundSecondsFor, difficultyForClipSeconds, DIFFICULTY_SECONDS, CLIP_MIN_SECONDS, CLIP_MAX_SECONDS, PRO_CLIP_MAX_SECONDS } from '../../config/gameConfig';
 import ShareButton from './ShareButton';
 import SoundToggle from './SoundToggle';
 import { unlock, playTick, playCorrect, playWrong, playComplete, vibrate } from '../../services/sound';
@@ -104,15 +104,27 @@ const clipTaunt = (seconds: number): { text: string; color: string } => {
 
 const TIER_LABEL: Record<GameDifficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', pro: 'Pro' };
 
+// Tier geometry along the 0.1–10s rail, as % positions — so the legend labels
+// and boundary ticks land exactly where difficultyForClipSeconds flips tier.
+const clipPct = (seconds: number) => ((seconds - CLIP_MIN_SECONDS) / (CLIP_MAX_SECONDS - CLIP_MIN_SECONDS)) * 100;
+const TIER_TICKS = [PRO_CLIP_MAX_SECONDS, DIFFICULTY_SECONDS.hard, DIFFICULTY_SECONDS.medium].map(clipPct);
+const TIER_BANDS: Array<{ label: string; value: GameDifficulty; at: number }> = [
+    { label: 'Pro', value: 'pro', at: clipPct((CLIP_MIN_SECONDS + PRO_CLIP_MAX_SECONDS) / 2) },
+    { label: 'Hard', value: 'hard', at: clipPct((PRO_CLIP_MAX_SECONDS + DIFFICULTY_SECONDS.hard) / 2) },
+    { label: 'Med', value: 'medium', at: clipPct((DIFFICULTY_SECONDS.hard + DIFFICULTY_SECONDS.medium) / 2) },
+    { label: 'Easy', value: 'easy', at: clipPct((DIFFICULTY_SECONDS.medium + CLIP_MAX_SECONDS) / 2) },
+];
+
 function ClipLengthBar({ seconds, onChange, compact = false }: { seconds: number; onChange: (value: number) => void; compact?: boolean }) {
     const taunt = clipTaunt(seconds);
-    const tier = TIER_LABEL[difficultyForClipSeconds(seconds)];
-    const pct = ((seconds - CLIP_MIN_SECONDS) / (CLIP_MAX_SECONDS - CLIP_MIN_SECONDS)) * 100;
+    const activeTier = difficultyForClipSeconds(seconds);
+    const tier = TIER_LABEL[activeTier];
+    const pct = clipPct(seconds);
 
     return (
         <div
             className={`w-full rounded-[0.9rem] bg-white/[0.035] ring-1 ring-white/[0.07] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] ${
-                compact ? 'px-3 py-2 sm:px-4 sm:py-2.5' : 'px-4 py-3'
+                compact ? 'px-3 py-2 sm:px-4 sm:py-2.5' : 'px-4 py-3.5'
             }`}
         >
             <div className="flex items-baseline justify-between gap-3">
@@ -123,7 +135,7 @@ function ClipLengthBar({ seconds, onChange, compact = false }: { seconds: number
                     Clip Length
                 </span>
                 <span className="flex items-baseline gap-1.5">
-                    <span className="font-heading text-[1.05rem] leading-none tabular-nums sm:text-[1.25rem]" style={{ color: taunt.color }}>
+                    <span className="font-heading text-[1.15rem] leading-none tabular-nums sm:text-[1.25rem]" style={{ color: taunt.color }}>
                         {seconds.toFixed(1)}s
                     </span>
                     <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-text-4">
@@ -131,21 +143,57 @@ function ClipLengthBar({ seconds, onChange, compact = false }: { seconds: number
                     </span>
                 </span>
             </div>
-            <input
-                type="range"
-                min={CLIP_MIN_SECONDS}
-                max={CLIP_MAX_SECONDS}
-                step={0.1}
-                value={seconds}
-                aria-label="Clip length in seconds"
-                onChange={(e) => onChange(Number(e.target.value))}
-                className={`pro-clip-range w-full ${compact ? 'mt-1.5' : 'mt-2.5'}`}
-                style={{
-                    background: `linear-gradient(90deg, ${taunt.color} 0%, ${taunt.color} ${pct}%, rgba(255,255,255,0.09) ${pct}%)`,
-                }}
-            />
+
+            {/* Rail with boundary ticks. The ticks sit just under the rail at the
+                three tier edges (3 / 5 / 7s) so the heat fill reads against fixed
+                landmarks rather than a featureless track. */}
+            <div className={`relative ${compact ? 'mt-2' : 'mt-3'}`}>
+                <input
+                    type="range"
+                    min={CLIP_MIN_SECONDS}
+                    max={CLIP_MAX_SECONDS}
+                    step={0.1}
+                    value={seconds}
+                    aria-label="Clip length in seconds"
+                    aria-valuetext={`${seconds.toFixed(1)} seconds, ${tier}`}
+                    onChange={(e) => onChange(Number(e.target.value))}
+                    className="pro-clip-range relative z-[1] w-full"
+                    style={{
+                        background: `linear-gradient(90deg, ${taunt.color} 0%, ${taunt.color} ${pct}%, rgba(255,255,255,0.09) ${pct}%)`,
+                    }}
+                />
+                <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-[-3px] z-0">
+                    {TIER_TICKS.map((t) => (
+                        <span
+                            key={t}
+                            className="absolute h-1.5 w-px -translate-x-1/2 rounded-full bg-white/25"
+                            style={{ left: `${t}%` }}
+                        />
+                    ))}
+                </div>
+            </div>
+
+            {/* Tier legend — the Pro→Easy map, active band lit amber. Shown only on
+                the roomier setup card; the compact in-round bar stays lean and lets
+                the header value + taunt carry the read. */}
+            {!compact ? (
+                <div className="relative mt-2.5 h-3.5">
+                    {TIER_BANDS.map((band) => (
+                        <span
+                            key={band.value}
+                            className={`absolute -translate-x-1/2 text-[9px] font-bold uppercase tracking-[0.1em] transition-colors duration-200 ${
+                                band.value === activeTier ? 'text-amber' : 'text-text-4'
+                            }`}
+                            style={{ left: `${band.at}%` }}
+                        >
+                            {band.label}
+                        </span>
+                    ))}
+                </div>
+            ) : null}
+
             {/* Reactive trash-talk — keyed on the text so each tier change re-pops. */}
-            <div className={`${compact ? 'mt-1 min-h-[14px]' : 'mt-1.5 min-h-[16px]'}`}>
+            <div className={`${compact ? 'mt-1.5 min-h-[14px]' : 'mt-2 min-h-[16px]'}`}>
                 <AnimatePresence mode="popLayout" initial={false}>
                     <motion.p
                         key={taunt.text}
@@ -1149,6 +1197,30 @@ export default function GamePlayer() {
         void submitAnswer(option, responseTimeMs, hintsUsedRef.current, replaysUsedRef.current);
     };
 
+    // Keyboard play: press 1–4 to lock in the matching option. Makes the timed
+    // round fully operable without a mouse (and faster for everyone who has a
+    // keyboard). Bound only while a round is live and unanswered, and ignores
+    // keystrokes aimed at a text field so typing elsewhere never fires a guess.
+    useEffect(() => {
+        if (phase !== 'playing' || selectedOption || awaitingReady || !question) return;
+        const onKey = (event: KeyboardEvent) => {
+            if (event.metaKey || event.ctrlKey || event.altKey) return;
+            const target = event.target as HTMLElement | null;
+            if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+                return;
+            }
+            if (event.key >= '1' && event.key <= String(question.options.length)) {
+                event.preventDefault();
+                handleSelectOption(question.options[Number(event.key) - 1]);
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+        // handleSelectOption is recreated each render but only closes over the same
+        // guarded state and stable refs re-bound here, so omitting it is safe.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [phase, selectedOption, awaitingReady, question]);
+
     const handleReveal = () => {
         if (phase !== 'playing' || awaitingReady) return;
         // "Fold" haptic — softer than the answer-lock buzz since it's a concession.
@@ -1448,7 +1520,7 @@ export default function GamePlayer() {
                     initial={{ opacity: 0, scale: 0.985 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
-                    className="relative grid h-full w-full max-w-[1060px] grid-rows-[auto_minmax(0,1fr)_auto] gap-1.5 sm:gap-3"
+                    className="relative grid h-full w-full max-w-[1060px] grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)_auto] gap-1.5 sm:gap-3"
                 >
                     <header className="grid min-h-[52px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 rounded-[0.75rem] bg-white/[0.035] px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:min-h-[72px] sm:gap-3 sm:rounded-[0.85rem] sm:px-4">
                         <button
@@ -1491,7 +1563,12 @@ export default function GamePlayer() {
                         <div className="grid shrink-0 grid-cols-3 gap-2 text-right sm:gap-5">
                             <div>
                                 <p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-text-3 sm:text-[0.6875rem] sm:tracking-[0.12em]">Time</p>
-                                <p className={`font-heading text-[1.15rem] leading-none sm:text-[2.2rem] ${isUrgent ? 'text-orange-100' : 'text-text-1'}`}>
+                                {/* Phone: the live countdown is the dominant read (bigger
+                                    than streak/score), so the deadline reads at a glance in
+                                    the cramped header; the result-phase response time stays
+                                    at the compact size so "2.34s" never crowds the cluster.
+                                    sm+ keeps the reference 2.2rem for both. */}
+                                <p className={`font-heading leading-none sm:text-[2.2rem] ${phase === 'playing' ? 'text-[1.6rem]' : 'text-[1.15rem]'} ${isUrgent ? 'text-orange-100' : 'text-text-1'}`}>
                                     {phase === 'playing'
                                         ? (
                                             <span className="relative inline-block">
@@ -1533,7 +1610,7 @@ export default function GamePlayer() {
                         </div>
                     </header>
 
-                    <main className="grid min-h-0 grid-rows-[minmax(74px,0.42fr)_minmax(0,1fr)] gap-1.5 sm:grid-rows-[minmax(128px,0.58fr)_minmax(0,1fr)] sm:gap-3">
+                    <main className="grid min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(74px,0.42fr)_minmax(0,1fr)] gap-1.5 sm:grid-rows-[minmax(128px,0.58fr)_minmax(0,1fr)] sm:gap-3">
                         {/* ── Hero Card ─────────────────────────────────────── */}
                         <motion.div
                             ref={heroCardRef}
@@ -1659,7 +1736,7 @@ export default function GamePlayer() {
                                         animate={{ opacity: 1, y: 0 }}
                                         exit={{ opacity: 0, y: -8 }}
                                         transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-                                        className="relative grid w-full max-w-[900px] items-center gap-2 px-2 py-2 sm:gap-5 sm:px-4 sm:py-3 grid-cols-[56px_minmax(0,1fr)] text-left sm:grid-cols-[152px_minmax(0,1fr)]"
+                                        className="relative grid w-full max-w-[900px] items-center gap-3 px-2 py-2 sm:gap-5 sm:px-4 sm:py-3 grid-cols-[76px_minmax(0,1fr)] text-left sm:grid-cols-[152px_minmax(0,1fr)]"
                                     >
                                         <div className="relative">
                                             <motion.img
@@ -1899,11 +1976,27 @@ export default function GamePlayer() {
                             </motion.div>
                         ) : null}
 
-                        <div className="grid min-h-0 flex-1 grid-cols-2 gap-1.5 sm:gap-2">
+                        <div
+                            role="group"
+                            aria-label="Answer options — press 1 to 4 to choose"
+                            // Phone: a single column of four full-width rows — long
+                            // titles ("Defying Gravity (feat. Ariana Grande)") get the
+                            // whole width and read on one line, and four rows scan
+                            // faster one-handed than a 2×2 of tall half-width tiles.
+                            // sm+ keeps the reference 2×2.
+                            className="grid min-h-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2"
+                        >
                             {question?.options.map((option, index) => {
                                 const isSelected = selectedOption === option;
                                 const isCorrectOption = isResult && result?.correctAnswer === option;
                                 const isWrongOption = isResult && isSelected && !isCorrectOption;
+                                const stateSuffix = isResult
+                                    ? isCorrectOption
+                                        ? ' — correct answer'
+                                        : isWrongOption
+                                          ? ' — your answer, incorrect'
+                                          : ''
+                                    : '';
 
                                 return (
                                     <motion.button
@@ -1916,6 +2009,8 @@ export default function GamePlayer() {
                                         whileTap={phase === 'playing' && !selectedOption && !awaitingReady ? { scale: 0.99 } : undefined}
                                         onClick={() => handleSelectOption(option)}
                                         disabled={!!selectedOption || phase !== 'playing' || awaitingReady}
+                                        aria-keyshortcuts={String(index + 1)}
+                                        aria-label={`Option ${index + 1}: ${option}${stateSuffix}`}
                                         className={`flex min-h-[60px] items-center rounded-[1.25rem] px-4 py-3 text-left text-text-1 transition-all duration-200 sm:min-h-[84px] sm:rounded-[1.6rem] sm:px-5 ${
                                             isCorrectOption
                                                 ? 'bg-[linear-gradient(180deg,rgba(16,185,129,0.22),rgba(16,185,129,0.08))] ring-1 ring-emerald-300/55 shadow-[0_18px_45px_rgba(16,185,129,0.16),inset_0_1px_0_rgba(52,211,153,0.18)]'
@@ -1926,12 +2021,33 @@ export default function GamePlayer() {
                                                     : 'bg-[linear-gradient(180deg,rgba(255,255,255,0.07),rgba(255,255,255,0.022))] ring-1 ring-white/[0.06] shadow-[0_10px_26px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.08)] hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.1),rgba(255,255,255,0.035))] hover:ring-white/[0.1] hover:shadow-[0_16px_34px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.12)]'
                                         } disabled:opacity-100`}
                                     >
+                                        {/* Keyboard-shortcut badge — teaches the 1–4 mapping. Desktop
+                                            only (that is where a keyboard is), and decorative to SR
+                                            users since aria-keyshortcuts already carries the mapping. */}
+                                        <span
+                                            aria-hidden
+                                            className="mr-3 hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] text-[0.72rem] font-bold text-text-4 ring-1 ring-white/[0.08] sm:flex"
+                                        >
+                                            {index + 1}
+                                        </span>
                                         <span className="line-clamp-2 block text-[clamp(0.95rem,3.6vw,1.25rem)] font-bold leading-tight tracking-[-0.01em]">
                                             {option}
                                         </span>
                                     </motion.button>
                                 );
                             })}
+                        </div>
+
+                        {/* Screen-reader-only result announcement. The reveal is otherwise
+                            purely visual + audio, so without this a non-sighted player
+                            never learns whether they were right or what the track was.
+                            Assertive so it interrupts the moment an answer locks. */}
+                        <div className="sr-only" role="status" aria-live="assertive">
+                            {isResult && result
+                                ? isCorrect
+                                    ? `Correct. ${result.correctAnswer} by ${result.correctArtist || 'unknown artist'}. Plus ${result.pointsAwarded} points.`
+                                    : `Incorrect. The answer was ${result.correctAnswer} by ${result.correctArtist || 'unknown artist'}.`
+                                : ''}
                         </div>
                         </div>
                     </main>
@@ -1955,20 +2071,24 @@ export default function GamePlayer() {
                                         initial={{ scale: 0.8, opacity: 0 }}
                                         animate={{ scale: 1, opacity: 1 }}
                                         transition={{ type: 'spring', stiffness: 520, damping: 24 }}
-                                        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                                        className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold sm:text-[11px] ${
                                             isCorrect ? 'bg-emerald-400/15 text-emerald-100' : 'bg-rose-400/15 text-rose-100'
                                         }`}
                                     >
                                         {isCorrect ? <>+<CountUp value={result.pointsAwarded} duration={0.7} /> pts</> : 'Missed'}
                                     </motion.span>
-                                    <span className={`truncate text-[10px] font-semibold uppercase tracking-[0.12em] ${
+                                    <span className={`truncate text-[11px] font-semibold uppercase tracking-[0.12em] sm:text-[10px] ${
                                         rating ? (rating >= 4 ? 'text-emerald-200/90' : rating <= 2 ? 'text-rose-200/90' : 'text-amber-200/90') : 'text-text-4'
                                     }`}>
                                         {rating ? getRatingMessage(rating) : 'Rate this track'}
                                     </span>
                                 </div>
 
-                                <div className="grid grid-cols-5 gap-1.5">
+                                {/* Phone: the rating is the round's repeated action, sitting
+                                    in the bottom thumb zone — so the stars are taller and the
+                                    glyphs bigger for a confident tap. sm+ resets to the compact
+                                    reference row. */}
+                                <div className="grid grid-cols-5 gap-2 sm:gap-1.5">
                                     {[1, 2, 3, 4, 5].map((value) => {
                                         const filled = !!rating && value <= rating;
                                         return (
@@ -1979,13 +2099,13 @@ export default function GamePlayer() {
                                                 onClick={() => void handleRate(value)}
                                                 disabled={isRating}
                                                 aria-label={`Rate ${value} of 5`}
-                                                className={`tap-target flex min-h-10 items-center justify-center rounded-[0.6rem] transition-all duration-200 ${
+                                                className={`tap-target flex min-h-12 items-center justify-center rounded-[0.6rem] transition-all duration-200 sm:min-h-10 ${
                                                     filled
                                                         ? 'bg-amber/18 ring-1 ring-amber/45'
                                                         : 'bg-white/[0.045] ring-1 ring-white/[0.05] hover:bg-white/[0.08]'
                                                 } disabled:opacity-70`}
                                             >
-                                                <svg viewBox="0 0 24 24" fill="currentColor" className={`h-4 w-4 transition-colors ${filled ? 'text-amber' : 'text-text-4'}`} aria-hidden>
+                                                <svg viewBox="0 0 24 24" fill="currentColor" className={`h-6 w-6 transition-colors sm:h-4 sm:w-4 ${filled ? 'text-amber' : 'text-text-4'}`} aria-hidden>
                                                     <path d="M12 2.6l2.9 5.88 6.49.94-4.7 4.58 1.11 6.46L12 17.9l-5.8 3.04 1.1-6.46-4.69-4.58 6.49-.94z" />
                                                 </svg>
                                             </motion.button>
