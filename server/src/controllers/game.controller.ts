@@ -889,6 +889,10 @@ const CULTURE_CATALOG_TTL_MS = 10 * 60_000;
 // back cleanly to its iTunes catalog.
 export const getCultureCatalog = async (_req: Request, res: Response): Promise<void> => {
     try {
+        // Edge-cache at the CDN so the Culture archive isn't gated on a cold
+        // serverless start. Every response path here is a 200 (errors return an
+        // empty list the client treats as "use iTunes"), so caching is safe.
+        res.setHeader('Cache-Control', 'public, s-maxage=600, stale-while-revalidate=86400');
         if (!hasSpotifyCredentials) {
             res.json(successResponse([]));
             return;

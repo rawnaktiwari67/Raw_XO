@@ -7,6 +7,7 @@ import { shouldUseClerk } from '../../services/authMode';
 import { authService } from '../../services/authService';
 import RollText from '../motion/RollText';
 import { LINKS } from './navLinks';
+import { prefetchRoute } from '../../router/prefetch';
 
 function NavLink({ to, label, onClick }: { to: string; label: string; onClick?: () => void }) {
     const { pathname } = useLocation();
@@ -15,7 +16,15 @@ function NavLink({ to, label, onClick }: { to: string; label: string; onClick?: 
         : pathname === to;
 
     return (
-        <Link to={to} onClick={onClick} className={`nav-link roll-trigger ${active ? 'nav-link-active' : ''}`}>
+        // Hover/focus warms the target chunk so the click navigates with no
+        // chunk-download wait.
+        <Link
+            to={to}
+            onClick={onClick}
+            onMouseEnter={() => prefetchRoute(to)}
+            onFocus={() => prefetchRoute(to)}
+            className={`nav-link roll-trigger ${active ? 'nav-link-active' : ''}`}
+        >
             <RollText>{label}</RollText>
         </Link>
     );

@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { LINKS } from './navLinks';
+import { prefetchRoute } from '../../router/prefetch';
 
 // Phone-only primary navigation. Desktop/tablet keep the top bar (this is
 // `md:hidden`); it replaces the old hamburger dropdown so the four core
@@ -82,6 +83,10 @@ export default function MobileTabBar() {
                             <Link
                                 to={link.to}
                                 aria-current={active ? 'page' : undefined}
+                                // Warm the target chunk the instant a finger lands
+                                // or focus arrives, so the tap navigates instantly.
+                                onPointerDown={() => prefetchRoute(link.to)}
+                                onFocus={() => prefetchRoute(link.to)}
                                 className={`tap-target relative mx-auto flex min-h-[54px] flex-col items-center justify-center gap-1 pb-1 pt-2 transition-colors duration-200 ${
                                     active ? 'text-amber' : 'text-text-3 hover:text-text-2'
                                 }`}

@@ -1,5 +1,6 @@
-import { lazy, Suspense, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, type ReactNode } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { prefetchPrimaryRoutesWhenIdle } from './prefetch';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useSmoothScroll } from '../hooks/useSmoothScroll';
 import { useCanonical } from '../hooks/useDocumentMeta';
@@ -76,6 +77,12 @@ export default function AppRouter() {
     const reducedMotion = useReducedMotion();
     useSmoothScroll();
     useCanonical();
+
+    // Once the landing route is painted, quietly warm the Archive/Live/Rank
+    // chunks during idle time so the first navigation to any of them is instant.
+    useEffect(() => {
+        prefetchPrimaryRoutesWhenIdle();
+    }, []);
 
     return (
         <div className="min-h-screen flex flex-col">

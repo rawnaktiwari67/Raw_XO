@@ -90,8 +90,10 @@ export default function Tours() {
         title: 'Tours — Raw XO',
         description: 'Live music listings for Indian cities, with quick links out to tickets.',
     });
-    const [tours, setTours] = useState<Tour[]>([]);
-    const [loading, setLoading] = useState(true);
+    // Hydrate from the session cache so a return visit paints immediately
+    // instead of flashing skeletons while the (possibly cold) request runs.
+    const [tours, setTours] = useState<Tour[]>(() => tourService.getCachedTours() ?? []);
+    const [loading, setLoading] = useState(() => tourService.getCachedTours() === null);
     const [search, setSearch] = useState('');
     const [activeCity, setActiveCity] = useState('All Cities');
     const [sourceNote, setSourceNote] = useState('District live listings with Spotify artist discovery');
@@ -100,7 +102,9 @@ export default function Tours() {
         let mounted = true;
 
         const loadTours = async () => {
-            setLoading(true);
+            // Only show the skeleton on a cold first load. When we already have
+            // cached rows on screen we revalidate silently underneath them.
+            if (tourService.getCachedTours() === null) setLoading(true);
             try {
                 const response = await tourService.getTours();
                 const incoming = Array.isArray(response.data?.data) ? (response.data.data as Tour[]) : [];
@@ -110,6 +114,7 @@ export default function Tours() {
                     setTours(FALLBACK_TOURS);
                     setSourceNote('Preview listings with Spotify artist search');
                 } else {
+                    tourService.setCachedTours(incoming);
                     setTours(incoming);
                     setSourceNote('District live listings with Spotify artist discovery');
                 }

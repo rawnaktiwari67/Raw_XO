@@ -139,6 +139,11 @@ export const getTours = async (req: Request, res: Response): Promise<void> => {
     try {
         const city = typeof req.query.city === 'string' ? req.query.city : undefined;
         const liveTours = await fetchDistrictTours(city);
+        // Edge-cache at Vercel's CDN: repeat visitors are served from the edge,
+        // skipping the cold serverless start + 7 district.in scrapes entirely.
+        // `public` lets it cache even for signed-in users (axios adds a Clerk
+        // bearer). SWR keeps serving the last good copy while it revalidates.
+        res.setHeader('Cache-Control', 'public, s-maxage=600, stale-while-revalidate=86400');
         res.json(successResponse(liveTours));
     } catch {
         res.status(500).json(errorResponse('Server error'));

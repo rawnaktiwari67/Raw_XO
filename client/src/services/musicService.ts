@@ -280,11 +280,16 @@ export const musicService = {
                     TRENDING_TRACK_SEEDS.map((seed, index) => fetchFeatured(seed, index))
                 );
 
-                let catalog = await fetchSpotifyCatalog();
-                if (catalog.length === 0) {
-                    const catalogBatches = await Promise.all(CATALOG_QUERIES.map((query) => fetchCatalog(query)));
-                    catalog = catalogBatches.flat();
-                }
+                // Fire Spotify and the iTunes fallback concurrently rather than
+                // awaiting the (cold, serverless) Spotify round-trip first and only
+                // then starting iTunes. Prefer Spotify when it returns data; else
+                // use iTunes. The iTunes batch is memoized (catalogCache) and often
+                // already warm from the hero wall, so racing it costs ~nothing.
+                const [spotifyCatalog, itunesBatches] = await Promise.all([
+                    fetchSpotifyCatalog(),
+                    Promise.all(CATALOG_QUERIES.map((query) => fetchCatalog(query))),
+                ]);
+                const catalog = spotifyCatalog.length > 0 ? spotifyCatalog : itunesBatches.flat();
 
                 const seen = new Set<string>();
                 const ordered: NormalizedMusicItem[] = [];
