@@ -162,6 +162,41 @@ body.gameplay-locked .mobile-tabbar {
    sequenced rather than stacked — targeting a stable 60fps. `lite` is the single
    source of truth for "spend less motion here"; gate new animation behind it. */
 
+/* ── Rotate-to-portrait nudge (gameplay, landscape phones only) ──
+   The cockpit is a one-screen PORTRAIT layout; a landscape phone's short
+   viewport can't contain it, so we cover it with a prompt to rotate rather than
+   a clipped board. Shown only while a round is active (body.gameplay-locked) AND
+   the viewport is a short, coarse-pointer landscape — i.e. a phone held
+   sideways. Portrait phones (≥600px tall) and every laptop/desktop (fine pointer
+   and/or tall) never match, so the element stays hidden for them. */
+.rotate-nudge {
+  display: none;
+}
+
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  body.gameplay-locked .rotate-nudge {
+    display: flex;
+  }
+}
+
+/* The phone icon tilts from sideways to upright and holds — a wordless demo of
+   the gesture we're asking for. */
+.rotate-nudge-icon svg {
+  transform-origin: center;
+  animation: rotateHint 2.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+@keyframes rotateHint {
+  0%, 16%   { transform: rotate(-88deg); }
+  46%, 100% { transform: rotate(0deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rotate-nudge-icon svg {
+    animation: none;
+  }
+}
+
 body::before {
   content: '';
   position: fixed;

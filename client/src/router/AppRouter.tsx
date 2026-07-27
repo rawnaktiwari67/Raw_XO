@@ -5,6 +5,7 @@ import { useSmoothScroll } from '../hooks/useSmoothScroll';
 import { useCanonical } from '../hooks/useDocumentMeta';
 import Navbar from '../components/layout/Navbar';
 import MobileTabBar from '../components/layout/MobileTabBar';
+import RotatePrompt from '../components/layout/RotatePrompt';
 import Footer from '../components/layout/Footer';
 import ScrollToTop from '../components/layout/ScrollToTop';
 import IntroReveal from '../components/layout/IntroReveal';
@@ -118,6 +119,7 @@ export default function AppRouter() {
             </main>
             <Footer />
             <MobileTabBar />
+            <RotatePrompt />
         </div>
     );
 }
