@@ -118,8 +118,10 @@ export default function Leaderboard({ variant = 'compact' }: LeaderboardProps) {
 
     const podium = isFull ? leaderboard.slice(0, 3) : [];
     // The compact sidebar shows only the top 5 to stay tight; the full board lives
-    // on the Rank page (linked below). The full variant lists everyone past the podium.
-    const rest = isFull ? leaderboard.slice(3) : leaderboard.slice(0, 5);
+    // on the Rank page (linked below). The server now returns the top 100 (so a
+    // viewer's rank past the visible list still resolves client-side), but we keep
+    // the full page capped at 50 rows for the same length it has always shown.
+    const rest = isFull ? leaderboard.slice(3, 50) : leaderboard.slice(0, 5);
 
     // Who is the player chasing? The entry directly above their rank, if visible.
     const yourEntry = useMemo(

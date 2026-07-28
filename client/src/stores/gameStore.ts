@@ -18,6 +18,7 @@ import type {
     GameSession,
 } from '../types/game';
 import { gameService } from '../services/gameService';
+import { useAuthStore } from './authStore';
 import { useDiaryStore } from './diaryStore';
 import {
     CLIP_MAX_SECONDS,
@@ -26,9 +27,38 @@ import {
     difficultyForClipSeconds,
 } from '../config/gameConfig';
 import { trackEvent } from '../services/analytics';
+import {
+    getDailyState,
+    recordDailyCompletion,
+    type DailyState,
+} from '../services/dailyStore';
 
 type Phase = 'idle' | 'playing' | 'answered' | 'result';
 const ROUND_LIMIT = 5;
+
+// The leaderboard response is now identical for every viewer so the CDN can
+// edge-cache it (no cold start per visit). That means "your rank" can't come
+// from the server anymore — we derive it here from the viewer's identity:
+// signed-in users match their user id, guests match the (non-httpOnly) xo_guest
+// cookie that the server encodes into each entry's `guest:<id>` key.
+const readGuestId = (): string => {
+    if (typeof document === 'undefined') return '';
+    const match = document.cookie.match(/(?:^|;\s*)xo_guest=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : '';
+};
+
+const viewerRankIn = (entries: LeaderboardEntry[]): number | null => {
+    const userId = useAuthStore.getState().user?._id;
+    const selfKey = userId ? String(userId) : (readGuestId() ? `guest:${readGuestId()}` : '');
+    if (!selfKey) return null;
+    const index = entries.findIndex((entry) => String(entry._id) === selfKey);
+    return index >= 0 ? index + 1 : null;
+};
+
+// Stamp the viewer's rank onto a board fetched for the round summary, matching
+// the shape the UI expects (board.userRank).
+const withViewerRank = (data: LeaderboardData | null): LeaderboardData | null =>
+    data ? { ...data, userRank: viewerRankIn(data.entries) } : data;
 
 // Round clock per difficulty, in ms — must mirror the server's
 // DIFFICULTY_ROUND_SECONDS so client-computed scores match what the server
@@ -532,10 +562,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         try {
             const res = await gameService.getLeaderboard(requestedPeriod, requestedScope, requestedScopeValue);
             const payload = getApiData<LeaderboardData>(res);
+            const entries = Array.isArray(payload?.entries) ? payload.entries : [];
 
             set({
-                leaderboard: Array.isArray(payload?.entries) ? payload.entries : [],
-                leaderboardRank: payload?.userRank ?? null,
+                leaderboard: entries,
+                leaderboardRank: viewerRankIn(entries),
                 leaderboardPeriod: payload?.period ?? requestedPeriod,
                 leaderboardScope: requestedScope,
                 leaderboardScopeValue: requestedScopeValue,
@@ -570,9 +601,9 @@ export const useGameStore = create<GameState>((set, get) => ({
 
             set({
                 roundLeaderboards: {
-                    daily: getApiData<LeaderboardData>(daily) ?? null,
-                    artist: artist ? getApiData<LeaderboardData>(artist) ?? null : null,
-                    genre: genre ? getApiData<LeaderboardData>(genre) ?? null : null,
+                    daily: withViewerRank(getApiData<LeaderboardData>(daily) ?? null),
+                    artist: artist ? withViewerRank(getApiData<LeaderboardData>(artist) ?? null) : null,
+                    genre: genre ? withViewerRank(getApiData<LeaderboardData>(genre) ?? null) : null,
                 },
             });
         } catch {

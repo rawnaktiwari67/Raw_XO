@@ -822,18 +822,17 @@ export const getLeaderboard = async (_req: Request, res: Response): Promise<void
             },
         ];
         const fullLeaderboard = await GameScore.aggregate(pipeline as any);
-        const guestId = !_req.userId && typeof _req.cookies?.xo_guest === 'string'
-            ? _req.cookies.xo_guest.trim()
-            : '';
-        const userRank = _req.userId
-            ? fullLeaderboard.findIndex((entry) => String(entry.userId) === String(_req.userId)) + 1 || null
-            : guestId
-                ? fullLeaderboard.findIndex((entry) => String(entry._id) === `guest:${guestId}`) + 1 || null
-                : null;
 
+        // The board is identical for every viewer, so it can be edge-cached at
+        // Vercel's CDN — no cold start / Mongo hit for repeat visitors. The only
+        // per-user field, "your rank", is intentionally omitted and derived
+        // client-side from these entries (see gameStore.viewerRankIn). We return
+        // the full top-100 so a rank past the visible 50 still resolves. A short
+        // s-maxage keeps standings fresh while stale-while-revalidate serves the
+        // last board instantly during the background refresh.
+        res.setHeader('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=300');
         res.json(successResponse({
-            entries: fullLeaderboard.slice(0, 50),
-            userRank,
+            entries: fullLeaderboard.slice(0, 100),
             period,
             scope,
             scopeValue,
