@@ -26,6 +26,9 @@ export const gameService = {
                 ...(excludeSongIds && excludeSongIds.length > 0 ? { excludeSongIds: excludeSongIds.join(',') } : {}),
             },
         }),
+    // The one shared puzzle for today — deterministic, same for every player
+    // (see server GET /game/daily). Returns the same question shape as a session.
+    getDaily: () => api.get('/game/daily'),
     submitAnswer: (songId: string, answer: string, streak: number, responseTimeMs: number, filters: GameFilters, hintsUsed = 0, replaysUsed = 0) =>
         api.post('/game/answer', { songId, answer, streak, responseTimeMs, hintsUsed, replaysUsed, ...filters }),
     rateTrack: (trackId: string, rating: number, filters: GameFilters) =>

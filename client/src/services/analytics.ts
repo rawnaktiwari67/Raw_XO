@@ -23,6 +23,8 @@ const isPlaceholderWebsiteId = (websiteId: string) =>
 export type AnalyticsEvent =
     | 'game_started'
     | 'game_finished'
+    | 'daily_started'
+    | 'daily_completed'
     | 'guess_correct'
     | 'guess_wrong'
     | 'artist_selected'

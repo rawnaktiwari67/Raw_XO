@@ -138,6 +138,15 @@ interface GameState {
     correctAnswersInSession: number;
     sessionSummary: SessionSummary | null;
     isSummaryVisible: boolean;
+    // Daily challenge. `isDaily` flags the active session as today's shared puzzle
+    // so completion rolls the streak; `sessionRoundResults` records per-round
+    // correctness (in play order) for the spoiler-free share grid; `dailyState`
+    // mirrors the persisted streak/last-result so the UI is reactive.
+    isDaily: boolean;
+    dailyPuzzleNumber: number | null;
+    dailyDate: string | null;
+    sessionRoundResults: boolean[];
+    dailyState: DailyState;
     roundLeaderboards: RoundLeaderboards;
     leaderboard: LeaderboardEntry[];
     leaderboardPeriod: LeaderboardPeriod;
@@ -157,6 +166,7 @@ interface GameState {
     setClipSeconds: (clipSeconds: number) => void;
     setArtist: (artist: string) => void;
     startRound: () => Promise<void>;
+    loadDaily: () => Promise<void>;
     prefetchNextQuestion: () => Promise<void>;
     clearSession: () => void;
     startFreshSession: () => Promise<void>;
@@ -192,6 +202,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     correctAnswersInSession: 0,
     sessionSummary: null,
     isSummaryVisible: false,
+    isDaily: false,
+    dailyPuzzleNumber: null,
+    dailyDate: null,
+    sessionRoundResults: [],
+    dailyState: getDailyState(),
     roundLeaderboards: { daily: null, artist: null, genre: null },
     leaderboard: [],
     leaderboardPeriod: 'all-time',
@@ -264,6 +279,12 @@ export const useGameStore = create<GameState>((set, get) => ({
             correctAnswersInSession: 0,
             sessionSummary: null,
             isSummaryVisible: false,
+            // Leaving any prior daily: drop its flag and queue so a normal session
+            // never replays daily leftovers or mis-records a streak.
+            isDaily: false,
+            sessionRoundResults: [],
+            sessionQueue: [],
+            prefetchedQuestion: null,
             roundLeaderboards: { daily: null, artist: null, genre: null },
             error: null,
         });
@@ -315,9 +336,61 @@ export const useGameStore = create<GameState>((set, get) => ({
                 roundFilters: first.filters ?? filters,
                 phase: 'playing',
                 isLoading: false,
+                // A freshly fetched batch is a normal session, never the daily.
+                isDaily: false,
+                sessionRoundResults: [],
             });
         } catch (error) {
             set({ isLoading: false, error: getApiError(error, 'Could not load a song clip.') });
+        }
+    },
+
+    // Load today's shared daily puzzle and start it. Reuses the exact session
+    // machinery (question + sessionQueue), so GamePlayer plays it with no special
+    // casing — the only difference is the isDaily flag, which makes completion
+    // roll the streak. Fixed difficulty comes from the server (medium).
+    loadDaily: async () => {
+        set({
+            isLoading: true,
+            question: null,
+            result: null,
+            selectedAnswer: null,
+            phase: 'idle',
+            error: null,
+            lastBrokenStreak: null,
+            streak: 0,
+            bestSessionStreak: 0,
+            sessionScore: 0,
+            roundsPlayedInSession: 0,
+            correctAnswersInSession: 0,
+            sessionSummary: null,
+            isSummaryVisible: false,
+            isDaily: true,
+            sessionRoundResults: [],
+            sessionQueue: [],
+            prefetchedQuestion: null,
+            dailyState: getDailyState(),
+        });
+        try {
+            const res = await gameService.getDaily();
+            const batch = getApiData<GameSessionBatch & { puzzleNumber: number; date: string }>(res);
+            const questions = batch?.questions ?? [];
+            if (questions.length === 0) throw new Error('Invalid daily payload');
+
+            const [first, ...rest] = questions;
+            trackEvent('daily_started', { puzzle: batch?.puzzleNumber ?? 0 });
+            set({
+                question: first,
+                sessionQueue: rest,
+                prefetchedQuestion: rest[0] ?? null,
+                roundFilters: first.filters ?? get().filters,
+                dailyPuzzleNumber: batch?.puzzleNumber ?? null,
+                dailyDate: batch?.date ?? null,
+                phase: 'playing',
+                isLoading: false,
+            });
+        } catch (error) {
+            set({ isLoading: false, isDaily: false, error: getApiError(error, 'Could not load today’s daily.') });
         }
     },
 
@@ -403,11 +476,26 @@ export const useGameStore = create<GameState>((set, get) => ({
                         }
                         : s.sessionSummary,
                     isSummaryVisible: shouldShowSummary,
+                    sessionRoundResults: [...s.sessionRoundResults, correct],
                     recentSongIds: correct && reveal.songKey
                         ? [reveal.songKey, ...s.recentSongIds.filter((item) => item !== reveal.songKey)].slice(0, 60)
                         : s.recentSongIds,
                 };
             });
+
+            // Daily wrap-up: on the final round, roll the streak forward and stash
+            // the result grid (localStorage, via dailyStore) so the card can show
+            // "done — come back tomorrow" and a spoiler-free share. Idempotent per
+            // puzzle, so a same-day replay never inflates the streak.
+            if (shouldShowSummary && get().isDaily) {
+                const puzzle = get().dailyPuzzleNumber;
+                if (puzzle != null) {
+                    const results = get().sessionRoundResults;
+                    const nextDaily = recordDailyCompletion(puzzle, results, get().dailyDate ?? '');
+                    set({ dailyState: nextDaily });
+                    trackEvent('daily_completed', { puzzle, correct: results.filter(Boolean).length });
+                }
+            }
 
             // Log the heard track into the local listening diary so the culture
             // page auto-fills from play. songKey embeds the real track id as its

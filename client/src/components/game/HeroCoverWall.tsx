@@ -123,6 +123,22 @@ export default function HeroCoverWall() {
     const [covers, setCovers] = useState<string[]>([]);
     const reduced = useReducedMotion();
 
+    // Touch devices get the "lite" treatment for anything that runs FOREVER, not
+    // just reduced-motion users. The one-shot entrance below is cheap and stays,
+    // but the perpetual per-tile bob + container breathe are pure battery/
+    // compositor drain on a phone with nobody hovering the hero — so we stop them
+    // on coarse pointers too. Mirrors usePerfLite in GamePlayer.
+    const [coarse, setCoarse] = useState(false);
+    useEffect(() => {
+        if (typeof window.matchMedia !== 'function') return;
+        const mq = window.matchMedia('(pointer: coarse)');
+        const update = () => setCoarse(mq.matches);
+        update();
+        mq.addEventListener?.('change', update);
+        return () => mq.removeEventListener?.('change', update);
+    }, []);
+    const lite = reduced || coarse;
+
     // Cursor parallax across three planes: the near plane (primary + secondary)
     // leans fully toward the pointer, the mid plane at 0.58×, the far plane at
     // 0.3× — the different rates are what sell real depth, like layers of glass
@@ -217,7 +233,7 @@ export default function HeroCoverWall() {
                             style={{
                                 '--tile-rot': `${tile.rot}deg`,
                                 transform: `rotate(${tile.rot}deg)`,
-                                ...(reduced
+                                ...(lite
                                     ? {}
                                     : {
                                         animation: `heroFloat ${tile.float}s ease-in-out ${-i * 1.7}s infinite alternate`,
@@ -270,7 +286,7 @@ export default function HeroCoverWall() {
                 hair (compositor-only) so the arrangement feels alive, not frozen. */}
             <div
                 className="absolute inset-0 opacity-[0.9] [filter:saturate(1.18)_contrast(1.1)_brightness(1.1)]"
-                style={reduced ? undefined : { animation: 'heroBreathe 46s ease-in-out infinite', willChange: 'transform' }}
+                style={lite ? undefined : { animation: 'heroBreathe 46s ease-in-out infinite', willChange: 'transform' }}
             >
                 {/* Volumetric key light — a warm radial anchored on the focal
                     cluster, painted BEHIND every plane so the covers sit in front

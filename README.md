@@ -28,7 +28,7 @@ The whole session (all rounds plus their reveal data) is fetched in a single bat
 
 ## Built with
 
-**Frontend:** Vite + React 18 + TypeScript, Tailwind CSS, Framer Motion for the motion design, a hand-written Three.js/GLSL shader (LaserFlow) for the backdrop, Zustand for state, React Router, Axios.
+**Frontend:** Vite + React 18 + TypeScript, Tailwind CSS, Framer Motion for the motion design, a hand-composed album-cover collage hero (depth-graded, cursor-parallaxed), Zustand for state, React Router, Axios.
 
 **Backend:** Express + MongoDB (Mongoose), with an in-memory `dev-data.json`-backed store (`server/src/utils/devStore.ts`) so the app still runs without a database connection.
 
@@ -42,7 +42,7 @@ The whole session (all rounds plus their reveal data) is fetched in a single bat
 
 ```
 client/    Vite + React frontend
-  src/components/   game/, culture/, thread/, comment/, era/, user/, effects/ (LaserFlow), layout/, ui/
+  src/components/   game/ (incl. HeroCoverWall), culture/, thread/, comment/, era/, user/, motion/, layout/, ui/
   src/pages/        Game, Home, EraPage, ThreadDetail, Profile, Tours, Leaderboard, Login, Register
   src/services/     API clients (api.ts, authService, cultureService, ...)
   src/stores/       Zustand stores
@@ -314,8 +314,8 @@ The 5-second guess game adapts to the difficulty you pick.
 - **LCP-safe entrances.** Page and hero entrance animations use transform-only motion (a GPU-composited slide), never an `opacity: 0` fade — Chrome skips transparent elements when choosing the Largest Contentful Paint candidate, so fading the hero in from zero used to delay the headline by the whole animation. Reduced-motion users get an instant, static render.
 - **Eager landing route.** The `/` route (the game) is statically imported, so the first screen ships in the initial bundle instead of waiting on a second lazy-chunk fetch. Every other route stays code-split.
 - **Non-blocking fonts.** Barlow Condensed is preloaded as a `woff2` with a `size-adjust` fallback and `display=swap`, so text paints immediately in the fallback face and swaps in without layout shift when the web font is ready.
-- **Lazy, self-governing WebGL.** The Three.js LaserFlow backdrop (the single heaviest dependency) is lazy-loaded, mounted only after the page is idle, and skipped entirely for small screens and reduced-motion users. While running it adapts its pixel ratio to the live frame rate and pauses when off-screen or when the tab is hidden.
-- **Code-split vendors.** React, Three.js, Framer Motion, and Clerk are split into separate chunks so a change in one doesn't bust the cache for the others.
+- **Lazy, self-governing hero.** The album-cover collage (`HeroCoverWall`) is lazy-loaded and mounted only after the page is idle, so it never blocks LCP. Its artwork is downscaled to 300px and deduped, and its two perpetual animations (the per-tile idle bob and the container breathe) are disabled on touch devices and for reduced-motion users — one-shot entrance only on a phone, so the hero costs nothing to keep on screen.
+- **Code-split vendors.** React, Framer Motion, and Clerk are split into separate chunks so a change in one doesn't bust the cache for the others.
 - **Serverless cold-start.** On Vercel, the MongoDB connection is kicked off during function cold-start instead of on the first request, avoiding a connect-then-query waterfall.
 
 Audit the bundle any time with `npm run build` from `client` — Vite prints the gzipped size of every chunk.

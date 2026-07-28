@@ -137,7 +137,19 @@ function siteJsonLd(origin: string): Record<string, unknown>[] {
             url: `${origin}/`,
             applicationCategory: 'GameApplication',
             operatingSystem: 'Any',
+            browserRequirements: 'Requires JavaScript and a modern browser.',
             description: DEFAULT_DESCRIPTION,
+            // Accurate, non-fabricated detail that improves rich-result
+            // eligibility for a web game (no invented ratings).
+            genre: 'Music guessing game',
+            inLanguage: ['en', 'hi', 'pa', 'ko', 'es'],
+            featureList: [
+                'Daily music challenge with a shareable streak',
+                '5-second guess-the-song rounds',
+                'Global and daily leaderboards',
+                'Culture feed: rate tracks and debate lyric meanings',
+            ],
+            screenshot: `${origin}/og-cover.png`,
             offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
         },
     ];

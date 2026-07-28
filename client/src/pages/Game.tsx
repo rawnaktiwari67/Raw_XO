@@ -6,6 +6,7 @@ import { useGameStore } from '../stores/gameStore';
 import { getLenis } from '../hooks/useSmoothScroll';
 import { playHover, unlock } from '../services/sound';
 import GamePlayer from '../components/game/GamePlayer';
+import DailyCard from '../components/game/DailyCard';
 import Leaderboard from '../components/game/Leaderboard';
 import { useDocumentMeta } from '../hooks/useDocumentMeta';
 import type { GameSession } from '../types/game';
@@ -278,6 +279,10 @@ export default function Game() {
                         </motion.div>
                     ) : null}
                 </motion.section>
+
+                <div className="mb-6">
+                    <DailyCard />
+                </div>
 
                 <section id="play" className="min-w-0 scroll-mt-24">
                     <GamePlayer />

@@ -43,6 +43,8 @@ import {
     type SpotifySearchPayload,
 } from '../game/musicProviders';
 import { env } from '../config/env';
+import { getFallbackPool } from '../game/fallbackPool';
+import { buildDailySelection, dailyPuzzleNumber, dailyDateKey, DAILY_ROUND_COUNT } from '../game/daily';
 import {
     CURATED_ARTISTS,
     GENRE_QUERY_MAP,
@@ -56,6 +58,15 @@ const TRACK_CACHE_MS = Math.max(
     Number.parseInt(env.GAME_TRACK_CACHE_MS, 10) || 10 * 60_000
 );
 const SPOTIFY_CACHE_MS = Math.min(TRACK_CACHE_MS, 5 * 60_000);
+// Hard ceiling on how long the FIRST clip may wait for the live iTunes fetch on
+// a cold instance (empty cache). If iTunes hasn't produced a playable pool by
+// then, we serve the baked-in fallback pool instantly rather than let a recruiter
+// watch a spinner — the live fetch keeps warming the cache in the background for
+// later rounds/visits. Tunable via env; kept short on purpose.
+const FIRST_CLIP_BUDGET_MS = Math.min(
+    4000,
+    Math.max(400, Number.parseInt(env.GAME_FIRST_CLIP_BUDGET_MS, 10) || 1200)
+);
 const ARTIST_QUERIES = env.GAME_ARTIST_QUERY
     .split(',')
     .map((value) => value.trim())
@@ -289,7 +300,11 @@ const getSongPool = async (filters: GameFilters): Promise<SongPreview[]> => {
                 return getSongPool({ ...filters, artist: 'all' });
             }
 
-            return [];
+            // Live providers gave us nothing playable and there is no cache — the
+            // shared in-flight promise must still resolve to a usable pool so any
+            // concurrent awaiter (see the inFlightSongPools short-circuit above)
+            // never gets an empty pool and 503s.
+            return getFallbackPool(filters);
         })
         .catch(() => {
             if (cached?.songs && cached.songs.length >= 4) {
@@ -300,7 +315,7 @@ const getSongPool = async (filters: GameFilters): Promise<SongPreview[]> => {
                 return getSongPool({ ...filters, artist: 'all' });
             }
 
-            return [];
+            return getFallbackPool(filters);
         })
         .finally(() => {
             inFlightSongPools.delete(cacheKey);
@@ -313,18 +328,30 @@ const getSongPool = async (filters: GameFilters): Promise<SongPreview[]> => {
     // pool, answer with it now while nextFetch keeps warming the cache with the
     // fuller Spotify+iTunes merge for subsequent rounds. nextFetch is never
     // slower than before, so this only ever helps.
-    const itunesOnly = await itunesSongPoolPromise
+    const itunesOnlyPromise = itunesSongPoolPromise
         .then((itunesSongs) => prepareMergedPool([], itunesSongs))
         .catch(() => [] as SongPreview[]);
-    if (itunesOnly.length >= 4) {
-        return itunesOnly;
+
+    // ...but never let a cold, slow, or empty iTunes hold the first clip hostage.
+    // Race the live pool against a short budget; whichever produces a playable
+    // pool first wins. If the budget expires with nothing playable, serve the
+    // baked-in fallback immediately so the round is instant and can never 503 —
+    // nextFetch keeps running to warm songPoolCache for the next request.
+    const budget = new Promise<null>((resolve) => {
+        setTimeout(() => resolve(null), FIRST_CLIP_BUDGET_MS);
+    });
+    const raced = await Promise.race([itunesOnlyPromise, budget]);
+    if (raced && raced.length >= 4) {
+        return raced;
     }
 
-    const songs = await nextFetch;
-    if (songs.length < 4) {
-        throw new Error('Song pool unavailable');
+    // Budget blown (or iTunes returned a thin pool). Prefer a still-usable stale
+    // cache if one exists; otherwise fall back to the guaranteed static pool.
+    // We deliberately do NOT await nextFetch here — that is the whole point.
+    if (cached?.songs && cached.songs.length >= 4) {
+        return cached.songs;
     }
-    return songs;
+    return getFallbackPool(filters);
 };
 
 const buildQuestionWithExclusion = (songs: SongPreview[], excludeSongIds: string[] = [], cacheKey: string): {
@@ -464,6 +491,49 @@ export const getSession = async (req: Request, res: Response): Promise<void> => 
         res.json(successResponse({ questions, filters }));
     } catch {
         res.status(503).json(errorResponse('Game session unavailable'));
+    }
+};
+
+// GET /game/daily — the one shared puzzle for today. Deterministic and built
+// from the baked pool (see game/daily.ts), so it's identical for every player,
+// needs no database, and can't cold-start-fail. Same question/reveal shape as
+// /game/session, so the client plays it through the exact same engine; the only
+// extras are the puzzle number and date the client keys its streak on. Fixed to
+// 'medium' difficulty so every player's score is comparable.
+export const getDaily = async (_req: Request, res: Response): Promise<void> => {
+    try {
+        const puzzleNumber = dailyPuzzleNumber();
+        const filters = parseFilters({ difficulty: 'medium' });
+        const selection = buildDailySelection(puzzleNumber);
+
+        const questions = selection.slice(0, DAILY_ROUND_COUNT).map(({ correct, options }) => {
+            const token = createSongToken(correct);
+            return {
+                snippetUrl: correct.snippetUrl,
+                options,
+                songId: token,
+                artistName: correct.artist,
+                filters,
+                reveal: {
+                    correctAnswer: correct.title,
+                    correctArtist: correct.artist,
+                    album: correct.album,
+                    artworkUrl: correct.artworkUrl,
+                    trackUrl: correct.trackUrl,
+                    songKey: encodeSongMemory(correct),
+                    trackId: token,
+                },
+            };
+        });
+
+        if (questions.length === 0) {
+            res.status(503).json(errorResponse('Daily challenge unavailable'));
+            return;
+        }
+
+        res.json(successResponse({ puzzleNumber, date: dailyDateKey(), questions, filters }));
+    } catch {
+        res.status(503).json(errorResponse('Daily challenge unavailable'));
     }
 };
 
