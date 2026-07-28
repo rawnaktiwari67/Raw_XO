@@ -19,22 +19,44 @@ const DESI_ARTIST = /(arijit|diljit|ap dhillon|dhillon|karan aujla|shubh|badshah
 
 // Five size/depth tiers with a deliberate visual hierarchy — ONE primary that
 // owns the eye, two secondaries at ~70%, and everything else receding into the
-// background. Depth reads through three levers at once: SIZE (a 6× span from
-// primary to tiny), OPACITY (100 → 24%), and a light BLUR that grows as tiles
-// shrink. `depth` sorts each tier into one of three parallax planes so the
-// collage moves like layered glass, not a flat sheet. Blur stays modest —
-// heavy blur turned the back tiers into murky smudges against the charcoal.
+// background. Depth reads through SIX levers now, not three: SIZE (a widened
+// span so Large/Medium/Small/Tiny read as distinct distances, not one busy
+// field), OPACITY, BLUR, plus a per-tile SHADOW, a directional LIGHT grade, and
+// a SINK that darkens far tiles so they recede as *shadow* rather than ghosting
+// to transparency. `depth` sorts each tier into one of three parallax planes so
+// the collage moves like layered glass, not a flat sheet.
+//
+// One environment lights everything: a warm key from the upper-right (agreeing
+// with the volumetric glow + top wash), so every cover carries an amber catch on
+// its top-right and falls to shadow at its lower-left, and every shadow is cast
+// down-left. `shadow` is soft + ambient (big blur, negative spread, no hard
+// core) and scales with the plane — near tiles sit ON the scene and cast real
+// shadow; far tiles are embedded in the dark and cast almost none. `ring` is the
+// tile's edge; `hi` is the crisp light caught on its top sleeve edge (near tiers
+// only). `amber`/`shade` are the strength of that directional grade.
 const TIERS = [
-    // 0 · PRIMARY — the single anchor. Largest, brightest, sharpest, oversized.
-    { w: 'clamp(11rem, 16.5vw, 16.5rem)', dim: 1, blur: 0, depth: 'near' },
-    // 1 · SECONDARY — two supporting stars at ~70%, still sharp.
-    { w: 'clamp(8rem, 11.5vw, 12rem)', dim: 0.72, blur: 0.3, depth: 'near' },
-    // 2 · SUPPORTING — mid plane, half weight, a touch soft.
-    { w: 'clamp(5.25rem, 7.5vw, 8rem)', dim: 0.5, blur: 0.9, depth: 'mid' },
-    // 3 · SMALL — far plane, dim and soft, recedes.
-    { w: 'clamp(3.75rem, 5vw, 5.5rem)', dim: 0.34, blur: 1.6, depth: 'far' },
-    // 4 · TINY — the blurred-tiny background floor; pure atmosphere.
-    { w: 'clamp(2.75rem, 3.6vw, 4rem)', dim: 0.26, blur: 2.1, depth: 'far' },
+    // 0 · PRIMARY — the single anchor. Largest, brightest, sharpest, the glossy
+    // hero: strongest edge + top highlight so it reads as a different *material*,
+    // not merely a bigger cover.
+    { w: 'clamp(11.5rem, 17vw, 17rem)', dim: 1, blur: 0, depth: 'near',
+      shadow: '-6px 16px 40px -14px rgba(0,0,0,0.72), -2px 4px 11px -5px rgba(0,0,0,0.5)',
+      ring: 'rgba(255,255,255,0.16)', hi: 0.2, amber: 0.16, shade: 0.28, sink: 0 },
+    // 1 · SECONDARY — two supporting stars at ~75%, still sharp, still lit.
+    { w: 'clamp(8rem, 11.5vw, 12rem)', dim: 0.76, blur: 0.3, depth: 'near',
+      shadow: '-5px 13px 32px -14px rgba(0,0,0,0.64), -2px 3px 8px -4px rgba(0,0,0,0.44)',
+      ring: 'rgba(255,255,255,0.13)', hi: 0.15, amber: 0.14, shade: 0.31, sink: 0.05 },
+    // 2 · SUPPORTING — mid plane, a touch soft, beginning to sink into shadow.
+    { w: 'clamp(5.5rem, 8vw, 8.5rem)', dim: 0.56, blur: 0.9, depth: 'mid',
+      shadow: '-4px 9px 22px -12px rgba(0,0,0,0.55)',
+      ring: 'rgba(255,255,255,0.1)', hi: 0.08, amber: 0.1, shade: 0.34, sink: 0.12 },
+    // 3 · SMALL — far plane, soft, receding into the dark as a solid mass.
+    { w: 'clamp(3.5rem, 4.4vw, 4.9rem)', dim: 0.46, blur: 1.6, depth: 'far',
+      shadow: '-3px 6px 16px -12px rgba(0,0,0,0.5)',
+      ring: 'rgba(255,255,255,0.08)', hi: 0, amber: 0.06, shade: 0.38, sink: 0.22 },
+    // 4 · TINY — the blurred-tiny background floor; atmosphere sunk deep in shadow.
+    { w: 'clamp(2.6rem, 3.2vw, 3.6rem)', dim: 0.36, blur: 2.1, depth: 'far',
+      shadow: '-2px 4px 12px -12px rgba(0,0,0,0.45)',
+      ring: 'rgba(255,255,255,0.06)', hi: 0, amber: 0.04, shade: 0.4, sink: 0.3 },
 ] as const;
 
 type Depth = (typeof TIERS)[number]['depth'];
@@ -64,6 +86,12 @@ interface Tile {
 // reads as layered glass. Several tiles run off the top/right/bottom-left edges
 // so the frame feels like a window, not a poster. The protected headline zone
 // (x 8–56%, y 36–82%) stays clear of everything but dim far-left texture.
+// Rotations are a restrained bidirectional FAMILY (|rot| ≤ 8°, both directions),
+// not the old uniform counter-clockwise lean that sheared the whole wall one way.
+// The hero anchor sits UPRIGHT (rot 0) facing the viewer — the most stable, most
+// premium pose — and the covers around it fan gently both ways so the scene reads
+// as photographed, not templated. The 3D pose (perspective tilt) is derived from
+// position in `pose()` below; these rot values are only the in-plane sway.
 const TILES: Tile[] = [
     // ── PRIMARY FOCAL CLUSTER (upper-right) — the counterweight to the headline.
     // One oversized sharp anchor with secondaries and mids overlapping it, so the
@@ -71,48 +99,66 @@ const TILES: Tile[] = [
     // The tier-0 anchor is oversized on a phone's narrow band — it would dip into
     // the full-width mobile headline — so it and the mid beneath it are desktop-
     // only; on mobile the tier-1 secondary below carries the top-right cluster.
-    { x: 71, y: 12, tier: 0, rot: -4, float: 11, mdUp: true },  // the one anchor (desktop)
-    { x: 61, y: 5, tier: 1, rot: -8, float: 9 },                // overlaps anchor, top-left
-    { x: 86, y: 33, tier: 1, rot: -4, float: 12, mdUp: true },  // overlaps anchor, bleeds off right
-    { x: 76, y: 30, tier: 2, rot: -8, float: 10, mdUp: true },  // packs the cluster core
-    { x: 67, y: 43, tier: 2, rot: -8, float: 11, mdUp: true },  // under the anchor (desktop)
-    { x: 84, y: 51, tier: 2, rot: -4, float: 9, mdUp: true },   // lower-right of cluster
+    { x: 71, y: 12, tier: 0, rot: 0, float: 11, mdUp: true },   // the one anchor — upright, faces viewer
+    { x: 61, y: 5, tier: 1, rot: 4, float: 9 },                 // overlaps anchor, top-left
+    { x: 86, y: 33, tier: 1, rot: -5, float: 12, mdUp: true },  // overlaps anchor, bleeds off right
+    { x: 76, y: 30, tier: 2, rot: 3, float: 10, mdUp: true },   // packs the cluster core
+    { x: 67, y: 43, tier: 2, rot: -6, float: 11, mdUp: true },  // under the anchor (desktop)
+    { x: 84, y: 51, tier: 2, rot: 5, float: 9, mdUp: true },    // lower-right of cluster
 
     // ── CONNECTIVE RIDGE — a diagonal of mids arcing from above the headline into
     // the cluster, so the left and right masses read as one composition, not two.
     { x: 40, y: 4, tier: 2, rot: -4, float: 12 },
-    { x: 48, y: 11, tier: 2, rot: -12, float: 10 },
-    { x: 56, y: 24, tier: 2, rot: -8, float: 11, mdUp: true },
-    { x: 62, y: 31, tier: 3, rot: -4, float: 9, mdUp: true },
+    { x: 48, y: 11, tier: 2, rot: 6, float: 10 },
+    { x: 56, y: 24, tier: 2, rot: -3, float: 11, mdUp: true },
+    { x: 62, y: 31, tier: 3, rot: 4, float: 9, mdUp: true },
 
     // ── TOP BAND — texture above the headline; density welcome, and a couple of
     // covers bleed off the top edge so the collage feels windowed, not framed.
-    { x: 20, y: 6, tier: 3, rot: -8, float: 10 },
-    { x: 30, y: 16, tier: 3, rot: -12, float: 8 },
-    { x: 10, y: 18, tier: 4, rot: -8, float: 11 },              // top-left texture (also mobile)
-    { x: 36, y: -6, tier: 3, rot: -8, float: 12, mdUp: true },  // bleeds off top
+    { x: 20, y: 6, tier: 3, rot: -6, float: 10 },
+    { x: 30, y: 16, tier: 3, rot: 5, float: 8 },
+    { x: 10, y: 18, tier: 4, rot: -7, float: 11 },              // top-left texture (also mobile)
+    { x: 36, y: -6, tier: 3, rot: 6, float: 12, mdUp: true },   // bleeds off top
     { x: 50, y: 1, tier: 4, rot: -4, float: 10 },               // top texture (also mobile)
-    { x: 44, y: 27, tier: 4, rot: -8, float: 9, mdUp: true },   // dim atmosphere above headline
-    { x: 86, y: 7, tier: 3, rot: -4, float: 11 },               // top-right corner (mobile anchor)
+    { x: 44, y: 27, tier: 4, rot: 3, float: 9, mdUp: true },    // dim atmosphere above headline
+    { x: 86, y: 7, tier: 3, rot: -5, float: 11 },               // top-right corner (mobile anchor)
 
     // ── BACKGROUND — far plane, blurred and small; right edge + lower-right, some
     // running off frame and dissolving into the bottom fade.
-    { x: 94, y: 15, tier: 4, rot: -8, float: 9, mdUp: true },   // bleeds off right
+    { x: 94, y: 15, tier: 4, rot: 5, float: 9, mdUp: true },    // bleeds off right
     { x: 96, y: 47, tier: 4, rot: -4, float: 12, mdUp: true },  // bleeds off right
-    { x: 90, y: 65, tier: 3, rot: -4, float: 8 },               // lower-right anchor
-    { x: 78, y: 70, tier: 4, rot: 0, float: 11, mdUp: true },   // fades into bottom scrim
-    { x: 70, y: 57, tier: 3, rot: -8, float: 10, mdUp: true },
-    { x: 60, y: 66, tier: 3, rot: -8, float: 11 },              // lower center-right (right of zone)
+    { x: 90, y: 65, tier: 3, rot: 4, float: 8 },                // lower-right anchor
+    { x: 78, y: 70, tier: 4, rot: -3, float: 11, mdUp: true },  // fades into bottom scrim
+    { x: 70, y: 57, tier: 3, rot: -6, float: 10, mdUp: true },
+    { x: 60, y: 66, tier: 3, rot: 5, float: 11 },               // lower center-right (right of zone)
     { x: 66, y: 78, tier: 4, rot: -4, float: 9, mdUp: true },
 
     // ── FAR-LEFT COLUMN — dim texture behind the headline scrim; gives the left
     // atmospheric depth without ever competing with the type, and clips the edge.
-    { x: -3, y: 10, tier: 4, rot: -8, float: 10, mdUp: true },  // bleeds off left
-    { x: 0, y: 24, tier: 4, rot: -12, float: 12 },
+    { x: -3, y: 10, tier: 4, rot: -7, float: 10, mdUp: true },  // bleeds off left
+    { x: 0, y: 24, tier: 4, rot: 6, float: 12 },
     { x: 1, y: 42, tier: 4, rot: -4, float: 8, mdUp: true },
-    { x: 2, y: 58, tier: 4, rot: -8, float: 9 },
+    { x: 2, y: 58, tier: 4, rot: 5, float: 9 },
     { x: -2, y: 76, tier: 4, rot: -4, float: 11, mdUp: true },  // bleeds off bottom-left
 ];
+
+// Restrained per-tile 3D pose. One camera looks at the whole scene from over the
+// focal cluster, so covers subtly turn to FACE it — outer covers angle inward
+// (rotateY), covers above/below the eye-line tip to meet it (rotateX) — and the
+// wall reads as a shallow gallery arc instead of a flat plane. Kept tiny (≤6°/
+// ≤3.5°) on purpose: premium reads as restraint, not floating-card theatrics.
+// Near plane gets the full tilt, mid a fraction, far stays flat (quiet backdrop).
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+const PLANE_TILT: Record<Depth, number> = { near: 1, mid: 0.4, far: 0 };
+function pose(tile: Tile): string | undefined {
+    const k = PLANE_TILT[TIERS[tile.tier].depth];
+    if (k === 0) return undefined;
+    const cx = tile.x + 6; // rough tile-center x, % (frame ≈ 12% wide)
+    const cy = tile.y + 6;
+    const ry = clamp((cx - 50) * 0.13, -6, 6) * k;   // outer covers face inward
+    const rx = clamp((30 - cy) * 0.055, -3.5, 3.5) * k; // above/below eye-line meet it
+    return `perspective(900px) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg)`;
+}
 
 // Full-bleed ambient album-art collage behind the hero. A masked, gently
 // breathing arrangement of covers — present enough to set the tone, feathered
@@ -225,39 +271,65 @@ export default function HeroCoverWall() {
                         animate={{ opacity: tier.dim, y: 0, scale: 1 }}
                         transition={{ duration: 0.6, delay: 0.05 + i * 0.045, ease: [0.22, 1, 0.36, 1] }}
                     >
-                        {/* Idle life: an ultra-slow bob sharing one transform with the
-                            static tilt via --tile-rot (see heroFloat keyframes). Phase
-                            is staggered with a negative delay so tiles never sync. */}
-                        <div
-                            className="aspect-square overflow-hidden rounded-2xl ring-1 ring-white/10"
-                            style={{
-                                '--tile-rot': `${tile.rot}deg`,
-                                transform: `rotate(${tile.rot}deg)`,
-                                ...(lite
-                                    ? {}
-                                    : {
-                                        animation: `heroFloat ${tile.float}s ease-in-out ${-i * 1.7}s infinite alternate`,
-                                        willChange: 'transform',
-                                    }),
-                            } as React.CSSProperties}
-                        >
-                            {/* Eager on purpose: every tile is above the fold and the
-                                whole wall already mounts post-paint (Game.tsx), so lazy
-                                would only delay the reveal, not save bandwidth.
-                                Depth-of-field blur sits on the img itself, over-scaled a
-                                touch so the smeared edge pixels fall outside the frame
-                                and get cropped — soft interior, crisp tile border. */}
-                            <img
-                                src={covers[i % covers.length]}
-                                alt=""
-                                decoding="async"
-                                className="h-full w-full object-cover"
-                                style={
-                                    tier.blur > 0
-                                        ? { filter: `blur(${tier.blur}px)`, transform: 'scale(1.08)' }
-                                        : undefined
-                                }
-                            />
+                        {/* 3D pose: a static perspective tilt so the cover FACES the
+                            scene's single camera (see pose()). It lives on its own
+                            wrapper so the heroFloat animation below — which owns the
+                            frame's transform — never overwrites it. Far tiles get
+                            no pose (flat backdrop) and skip the extra layer. */}
+                        <div style={pose(tile) ? { transform: pose(tile) } : undefined}>
+                            {/* Idle life: an ultra-slow bob sharing one transform with the
+                                static tilt via --tile-rot (see heroFloat keyframes). Phase
+                                is staggered with a negative delay so tiles never sync.
+                                boxShadow is the tile's soft ambient shadow (cast down-left,
+                                away from the upper-right key light) plus its 1px edge ring —
+                                what stops overlapping covers from looking like flat pasted
+                                paper. */}
+                            <div
+                                className="relative aspect-square overflow-hidden rounded-2xl"
+                                style={{
+                                    '--tile-rot': `${tile.rot}deg`,
+                                    transform: `rotate(${tile.rot}deg)`,
+                                    boxShadow: `${tier.shadow}, 0 0 0 1px ${tier.ring}`,
+                                    ...(lite
+                                        ? {}
+                                        : {
+                                            animation: `heroFloat ${tile.float}s ease-in-out ${-i * 1.7}s infinite alternate`,
+                                            willChange: 'transform',
+                                        }),
+                                } as React.CSSProperties}
+                            >
+                                {/* Eager on purpose: every tile is above the fold and the
+                                    whole wall already mounts post-paint (Game.tsx), so lazy
+                                    would only delay the reveal, not save bandwidth.
+                                    Depth-of-field blur sits on the img itself, over-scaled a
+                                    touch so the smeared edge pixels fall outside the frame
+                                    and get cropped — soft interior, crisp tile border. */}
+                                <img
+                                    src={covers[i % covers.length]}
+                                    alt=""
+                                    decoding="async"
+                                    className="h-full w-full object-cover"
+                                    style={
+                                        tier.blur > 0
+                                            ? { filter: `blur(${tier.blur}px)`, transform: 'scale(1.08)' }
+                                            : undefined
+                                    }
+                                />
+                                {/* Directional light grade, painted OVER the sleeve: a warm
+                                    amber catch at the top-right (the key light) fading to a
+                                    shadow at the lower-left, over a flat `sink` that darkens
+                                    far tiles so they recede as shadow, not as transparency.
+                                    `hi` adds the crisp light caught on the top sleeve edge —
+                                    near tiers only. One consistent environment on every cover
+                                    is what makes the wall read as lit, not assembled. */}
+                                <div
+                                    className="pointer-events-none absolute inset-0"
+                                    style={{
+                                        background: `linear-gradient(215deg, rgba(244,162,97,${tier.amber}) 0%, rgba(244,162,97,0) 30%, rgba(0,0,0,0) 58%, rgba(0,0,0,${tier.shade}) 100%), rgba(0,0,0,${tier.sink})`,
+                                        boxShadow: tier.hi ? `inset 0 1px 0 rgba(255,255,255,${tier.hi})` : undefined,
+                                    }}
+                                />
+                            </div>
                         </div>
                     </motion.div>
                 </div>
