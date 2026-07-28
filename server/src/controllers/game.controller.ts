@@ -830,7 +830,13 @@ export const getLeaderboard = async (_req: Request, res: Response): Promise<void
         // the full top-100 so a rank past the visible 50 still resolves. A short
         // s-maxage keeps standings fresh while stale-while-revalidate serves the
         // last board instantly during the background refresh.
-        res.setHeader('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=300');
+        // A post-round refresh (?fresh=1) must reflect the score just submitted,
+        // so it bypasses the edge cache entirely; plain browsing stays cached.
+        const wantsFresh = _req.query.fresh !== undefined;
+        res.setHeader(
+            'Cache-Control',
+            wantsFresh ? 'no-store' : 'public, s-maxage=30, stale-while-revalidate=300',
+        );
         res.json(successResponse({
             entries: fullLeaderboard.slice(0, 100),
             period,

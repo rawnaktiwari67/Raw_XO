@@ -31,12 +31,16 @@ export const gameService = {
     rateTrack: (trackId: string, rating: number, filters: GameFilters) =>
         api.post('/game/rating', { trackId, rating, ...filters }),
     getStats: () => api.get('/game/stats'),
-    getLeaderboard: (period: LeaderboardPeriod, scope: LeaderboardScope = 'global', scopeValue?: string) =>
+    // `fresh` marks a post-round refresh that must reflect the score just
+    // submitted: it adds ?fresh=1, and the server answers those with no-store so
+    // they bypass the edge cache. Plain browsing omits it and stays edge-cached.
+    getLeaderboard: (period: LeaderboardPeriod, scope: LeaderboardScope = 'global', scopeValue?: string, fresh = false) =>
         api.get('/game/leaderboard', {
             params: {
                 period,
                 scope,
                 ...(scopeValue ? { scopeValue } : {}),
+                ...(fresh ? { fresh: 1 } : {}),
             },
         }),
     getHistory: () => api.get('/game/history'),

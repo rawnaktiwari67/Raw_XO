@@ -166,7 +166,7 @@ interface GameState {
     revealSessionSummary: () => void;
     dismissSessionSummary: () => void;
     fetchStats: () => Promise<void>;
-    fetchLeaderboard: (period?: LeaderboardPeriod, scope?: LeaderboardScope, scopeValue?: string) => Promise<void>;
+    fetchLeaderboard: (period?: LeaderboardPeriod, scope?: LeaderboardScope, scopeValue?: string, fresh?: boolean) => Promise<void>;
     fetchRoundLeaderboards: () => Promise<void>;
     fetchHistory: () => Promise<void>;
     fetchArtists: () => Promise<void>;
@@ -441,7 +441,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             if (shouldShowSummary) {
                 void get().fetchStats();
                 void get().fetchHistory();
-                void get().fetchLeaderboard(get().leaderboardPeriod);
+                void get().fetchLeaderboard(get().leaderboardPeriod, undefined, undefined, true);
                 void get().fetchRoundLeaderboards();
             }
             return;
@@ -504,7 +504,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             if (shouldShowSummary) {
                 void get().fetchStats();
                 void get().fetchHistory();
-                void get().fetchLeaderboard(get().leaderboardPeriod);
+                void get().fetchLeaderboard(get().leaderboardPeriod, undefined, undefined, true);
                 void get().fetchRoundLeaderboards();
             }
         } catch (error) {
@@ -554,13 +554,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
     },
 
-    fetchLeaderboard: async (period, scope, scopeValue) => {
+    fetchLeaderboard: async (period, scope, scopeValue, fresh = false) => {
         const requestedPeriod = period ?? get().leaderboardPeriod;
         const requestedScope = scope ?? get().leaderboardScope;
         const requestedScopeValue = scopeValue ?? get().leaderboardScopeValue;
         set({ leaderboardLoading: true });
         try {
-            const res = await gameService.getLeaderboard(requestedPeriod, requestedScope, requestedScopeValue);
+            const res = await gameService.getLeaderboard(requestedPeriod, requestedScope, requestedScopeValue, fresh);
             const payload = getApiData<LeaderboardData>(res);
             const entries = Array.isArray(payload?.entries) ? payload.entries : [];
 
@@ -593,10 +593,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         const genreValue = activeFilters.genre !== 'all' ? activeFilters.genre : undefined;
 
         try {
+            // Round-summary boards run right after a score is submitted, so they
+            // always request the fresh (uncached) board — the player must see the
+            // standing they just earned, not a copy from up to 30s ago.
             const [daily, artist, genre] = await Promise.all([
-                gameService.getLeaderboard('daily'),
-                artistValue ? gameService.getLeaderboard('daily', 'artist', artistValue) : Promise.resolve(null),
-                genreValue ? gameService.getLeaderboard('daily', 'genre', genreValue) : Promise.resolve(null),
+                gameService.getLeaderboard('daily', 'global', undefined, true),
+                artistValue ? gameService.getLeaderboard('daily', 'artist', artistValue, true) : Promise.resolve(null),
+                genreValue ? gameService.getLeaderboard('daily', 'genre', genreValue, true) : Promise.resolve(null),
             ]);
 
             set({
