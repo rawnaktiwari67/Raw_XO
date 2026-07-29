@@ -1,5 +1,4 @@
 import { Request, Response } from 'express';
-import crypto from 'crypto';
 import GameScore from '../models/GameScore';
 import TrackRating from '../models/TrackRating';
 import User from '../models/User';
@@ -7,7 +6,7 @@ import { isDbConnected } from '../config/db';
 import { devStore } from '../utils/devStore';
 import { successResponse, errorResponse } from '../utils/apiResponse';
 import { calculateLevel, calculateGameXP } from '../utils/xpUtils';
-import { shuffle, roundWindowMs, calculateScorePayload, guestNameFromId, MAX_HINTS_PER_ROUND, MAX_REPLAYS_PER_ROUND } from '../utils/gameLogic';
+import { shuffle, roundWindowMs, calculateScorePayload, MAX_HINTS_PER_ROUND, MAX_REPLAYS_PER_ROUND } from '../utils/gameLogic';
 import { createSongToken, decodeSongToken, type SongPreview } from '../utils/songTokens';
 import type {
     GameGenre,
@@ -206,36 +205,21 @@ const getPeriodStart = (period: LeaderboardPeriod): Date | null => {
     return start;
 };
 
-// ─── Guest identity ──────────────────────────────────────────────────────────
-// Anonymous players get a stable id stored in a cookie so their scores group
-// into a single leaderboard entry across rounds, with a friendly display name
-// derived deterministically from that id (see utils/gameLogic).
-const getOrCreateGuest = (req: Request, res: Response): { guestId: string; guestName: string } => {
-    const existing = typeof req.cookies?.xo_guest === 'string' ? req.cookies.xo_guest.trim() : '';
-    const guestId = existing && existing.length >= 8 ? existing : crypto.randomBytes(12).toString('base64url');
-
-    if (guestId !== existing) {
-        res.cookie('xo_guest', guestId, {
-            httpOnly: false,
-            sameSite: 'lax',
-            secure: env.NODE_ENV === 'production',
-            maxAge: 1000 * 60 * 60 * 24 * 365, // 1 year
-        });
-    }
-
-    return { guestId, guestName: guestNameFromId(guestId) };
-};
-
+// A guess is correct only when it exactly matches the track title (after the
+// same light normalization we use for display). This mirrors the client's own
+// `answer === reveal.correctAnswer` check, so the instant reveal and the
+// server-persisted score can never disagree.
+//
+// The previous version also accepted the artist name and ANY substring of the
+// title/artist. In ordinary multiple-choice play that marked wrong options as
+// correct server-side — e.g. picking "Hold On" when the answer was "Hold On,
+// We're Going Home" — while the UI (exact match) showed them as wrong. Options
+// are always full titles, so exact-title matching loses no legitimate answer.
 const matchesGuess = (guess: string, song: SongPreview): boolean => {
     const normalizedGuess = normalizeTitle(guess);
     if (!normalizedGuess) return false;
 
-    const title = normalizeTitle(song.title);
-    const artist = normalizeTitle(song.artist);
-    return normalizedGuess === title ||
-        normalizedGuess === artist ||
-        title.includes(normalizedGuess) ||
-        artist.includes(normalizedGuess);
+    return normalizedGuess === normalizeTitle(song.title);
 };
 
 const getSongPool = async (filters: GameFilters): Promise<SongPreview[]> => {
@@ -552,6 +536,27 @@ export const submitAnswer = async (req: Request, res: Response): Promise<void> =
             return;
         }
 
+        // Sanity-check the client-reported score inputs. A legitimate client only
+        // ever sends finite, non-negative values; a negative time, NaN, or
+        // Infinity is tampering. Reject outright rather than silently clamp so an
+        // impossible submission can never land on the leaderboard. Plausible
+        // values are still range-clamped below, so this rejects only garbage and
+        // never a real player's answer (zero client-side drift).
+        const scoreInputsPlausible = [
+            req.body.responseTimeMs,
+            req.body.streak,
+            req.body.hintsUsed,
+            req.body.replaysUsed,
+        ].every((value) => {
+            if (value === undefined || value === null) return true;
+            const numeric = Number(value);
+            return Number.isFinite(numeric) && numeric >= 0;
+        });
+        if (!scoreInputsPlausible) {
+            res.status(400).json(errorResponse('Invalid score parameters'));
+            return;
+        }
+
         const filters = parseFilters({
             genre: req.body.genre,
             language: req.body.language,
@@ -579,10 +584,6 @@ export const submitAnswer = async (req: Request, res: Response): Promise<void> =
         if (correct) {
             rememberCorrectSong(filtersCacheKey(filters), song);
         }
-
-        // Resolve guest identity up front — it sets a cookie, which has to be on
-        // the response headers, so it must run before res.json below.
-        const guest = !req.userId && isDbConnected() ? getOrCreateGuest(req, res) : null;
 
         // Send the reveal immediately. Persisting the score used to sit on this
         // critical path (two sequential DB round-trips before the player saw the
@@ -644,10 +645,12 @@ export const submitAnswer = async (req: Request, res: Response): Promise<void> =
             } else if (req.userId) {
                 devStore.saveGameScore({ user: req.userId, ...scoreDoc });
                 devStore.incrementUserXp(req.userId, xpEarned);
-            } else if (guest) {
-                // Anonymous play — persist under a stable guest id so leaderboards populate.
-                await GameScore.create({ guestId: guest.guestId, guestName: guest.guestName, ...scoreDoc });
             }
+            // Anonymous (guest) play is intentionally NOT persisted: appearing on
+            // the leaderboard now requires a signed-in account. This closes the
+            // anonymous score-stuffing vector. The reveal above still returns the
+            // player's score, so guests see their result — they just don't rank
+            // until they sign in.
         } catch (error) {
             console.error('submitAnswer: failed to persist score', error);
         }
