@@ -28,6 +28,14 @@ const allowedOrigins = env.CLIENT_ORIGIN
     .map((origin) => origin.trim())
     .filter(Boolean);
 
+// This deployment's own Vercel URLs (preview + branch). Allowing exactly these
+// keeps preview deployments working WITHOUT reflecting every *.vercel.app origin.
+// The old wildcard let any attacker-hosted *.vercel.app page make credentialed
+// cross-origin requests to this API; scoping to our own hosts closes that.
+const ownVercelOrigins = [process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL]
+    .filter((host): host is string => Boolean(host))
+    .map((host) => `https://${host}`);
+
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 // MUST come BEFORE clerkMiddleware so preflight OPTIONS requests receive the
 // correct CORS headers before Clerk attempts to verify auth tokens.
@@ -52,8 +60,9 @@ const corsOptions: cors.CorsOptions = {
             callback(null, true);
             return;
         }
-        // Allow Vercel deployment and preview URLs (*.vercel.app)
-        if (origin.endsWith('.vercel.app')) {
+        // Allow this deployment's own Vercel origins (preview/branch) — but not
+        // arbitrary *.vercel.app sites.
+        if (ownVercelOrigins.includes(origin)) {
             callback(null, true);
             return;
         }
