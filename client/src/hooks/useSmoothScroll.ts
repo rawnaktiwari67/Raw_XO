@@ -11,6 +11,24 @@ export const getLenis = () => lenis;
 // reduced-motion users and touch devices — native momentum scrolling on
 // phones already feels right, and hijacking it reads as jank, not polish.
 export function useSmoothScroll() {
+    // Pause work while the tab is backgrounded: stop Lenis and flip a root flag
+    // that parks every CSS animation (see `html[data-tab-hidden]` in index.css).
+    // A hidden tab still burns CPU/battery running dozens of perpetual keyframe
+    // animations for a page nobody is looking at. Always on (touch included).
+    useEffect(() => {
+        const onVisibility = () => {
+            const hidden = document.hidden;
+            document.documentElement.toggleAttribute('data-tab-hidden', hidden);
+            if (hidden) lenis?.stop();
+            else lenis?.start();
+        };
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => {
+            document.removeEventListener('visibilitychange', onVisibility);
+            document.documentElement.removeAttribute('data-tab-hidden');
+        };
+    }, []);
+
     useEffect(() => {
         const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         const coarse = window.matchMedia('(pointer: coarse)').matches;

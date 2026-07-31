@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion, useSpring, useTransform } from 'framer-motion';
 import { musicService } from '../../services/musicService';
 
@@ -185,6 +185,15 @@ export default function HeroCoverWall() {
     }, []);
     const lite = reduced || coarse;
 
+    // The wall lives only in the top band, but its ~two-dozen perpetual float
+    // animations + the mousemove parallax keep compositing (and firing) even
+    // after the reader has scrolled well past the hero. Pause everything while
+    // it's off-screen: no visual change (it isn't visible), a real saving on
+    // scroll/idle further down the page. Resumes the moment it re-enters view.
+    const wrapRef = useRef<HTMLDivElement | null>(null);
+    const [onscreen, setOnscreen] = useState(true);
+    const onscreenRef = useRef(true);
+
     // Cursor parallax across three planes: the near plane (primary + secondary)
     // leans fully toward the pointer, the mid plane at 0.58×, the far plane at
     // 0.3× — the different rates are what sell real depth, like layers of glass
@@ -200,6 +209,8 @@ export default function HeroCoverWall() {
     useEffect(() => {
         if (reduced) return;
         const onMove = (e: MouseEvent) => {
+            // Skip the spring updates while the wall is scrolled out of view.
+            if (!onscreenRef.current) return;
             px.set((e.clientX / window.innerWidth - 0.5) * 26);
             py.set((e.clientY / window.innerHeight - 0.5) * 20);
         };
@@ -248,7 +259,28 @@ export default function HeroCoverWall() {
         };
     }, []);
 
-    if (covers.length < 10) return null;
+    // Observe the wall for on/off-screen — but only once it has actually
+    // rendered (covers loaded; before that the component returns null and
+    // wrapRef is empty). Keyed on `rendered` so the observer attaches the moment
+    // the wall mounts, not on the first null render.
+    const rendered = covers.length >= 10;
+    useEffect(() => {
+        const el = wrapRef.current;
+        if (!rendered || !el || typeof IntersectionObserver !== 'function') return;
+        const io = new IntersectionObserver(
+            (entries) => {
+                const vis = entries.some((e) => e.isIntersecting);
+                onscreenRef.current = vis;
+                setOnscreen(vis);
+            },
+            { rootMargin: '150px' }
+        );
+        io.observe(el);
+        return () => io.disconnect();
+    }, [rendered]);
+    const animState = onscreen ? 'running' : 'paused';
+
+    if (!rendered) return null;
 
     const renderTiles = (depth: Depth) =>
         TILES.map((tile, i) => {
@@ -294,6 +326,7 @@ export default function HeroCoverWall() {
                                         ? {}
                                         : {
                                             animation: `heroFloat ${tile.float}s ease-in-out ${-i * 1.7}s infinite alternate`,
+                                            animationPlayState: animState,
                                             willChange: 'transform',
                                         }),
                                 } as React.CSSProperties}
@@ -338,6 +371,7 @@ export default function HeroCoverWall() {
 
     return (
         <motion.div
+            ref={wrapRef}
             aria-hidden
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -358,7 +392,7 @@ export default function HeroCoverWall() {
                 hair (compositor-only) so the arrangement feels alive, not frozen. */}
             <div
                 className="absolute inset-0 opacity-[0.9] [filter:saturate(1.18)_contrast(1.1)_brightness(1.1)]"
-                style={lite ? undefined : { animation: 'heroBreathe 46s ease-in-out infinite', willChange: 'transform' }}
+                style={lite ? undefined : { animation: 'heroBreathe 46s ease-in-out infinite', animationPlayState: animState, willChange: 'transform' }}
             >
                 {/* Volumetric key light — a warm radial anchored on the focal
                     cluster, painted BEHIND every plane so the covers sit in front

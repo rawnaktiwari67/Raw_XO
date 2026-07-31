@@ -5,7 +5,6 @@ import { useAuthStore } from '../stores/authStore';
 import { useGameStore } from '../stores/gameStore';
 import { getLenis } from '../hooks/useSmoothScroll';
 import { playHover, unlock } from '../services/sound';
-import GamePlayer from '../components/game/GamePlayer';
 import DailyCard from '../components/game/DailyCard';
 import Leaderboard from '../components/game/Leaderboard';
 import { useDocumentMeta } from '../hooks/useDocumentMeta';
@@ -13,10 +12,23 @@ import type { GameSession } from '../types/game';
 import ScrollReveal from '../components/motion/ScrollReveal';
 import Magnetic from '../components/motion/Magnetic';
 import PinnedShowcase, { type ShowcasePanel } from '../components/motion/PinnedShowcase';
+import DeferMount from '../components/motion/DeferMount';
 
 // Album-art wall for the hero — lazy + post-idle so its imagery never competes
 // with the LCP headline for bandwidth on first paint.
 const HeroCoverWall = lazy(() => import('../components/game/HeroCoverWall'));
+
+// GamePlayer is the heaviest component in the app (the whole guess-game engine +
+// its framer tree). Code-split it so parsing/mounting it never blocks the hero's
+// first paint; it's prefetched on idle (below) so it's warm before the reader
+// scrolls to it or hits Start Playing.
+const GamePlayer = lazy(() => import('../components/game/GamePlayer'));
+
+// Reserved-height stand-in shown for the ~one idle tick before the GamePlayer
+// chunk lands, so the setup card's slot never shifts.
+function GamePlayerSkeleton() {
+    return <div className="min-h-[560px] w-full rounded-[1.5rem] bg-white/[0.02] ring-1 ring-white/[0.04]" aria-hidden />;
+}
 
 // Hero entrance choreography. Children stagger; the headline animates on
 // transform only (never opacity) so it stays the immediate LCP paint.
@@ -170,6 +182,19 @@ export default function Game() {
         return () => window.clearTimeout(t);
     }, []);
 
+    // Warm the (code-split) GamePlayer chunk once the hero has painted, so the
+    // setup card and the Start-Playing jump land with no visible chunk fetch.
+    useEffect(() => {
+        const warm = () => { void import('../components/game/GamePlayer'); };
+        const ric = (window as unknown as { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback;
+        if (ric) {
+            const id = ric(warm);
+            return () => (window as unknown as { cancelIdleCallback?: (h: number) => void }).cancelIdleCallback?.(id);
+        }
+        const t = window.setTimeout(warm, 200);
+        return () => window.clearTimeout(t);
+    }, []);
+
     useEffect(() => {
         document.body.classList.toggle('gameplay-locked', isGameplayActive);
         // Lenis owns the wheel; pause it while gameplay locks the viewport so
@@ -189,7 +214,9 @@ export default function Game() {
             // dvh tracks the visible viewport on mobile (URL bar collapse), so
             // gameplay controls never sit under the browser chrome.
             <div className="gameplay-page relative h-screen overflow-hidden supports-[height:100dvh]:h-[100dvh]">
-                <GamePlayer />
+                <Suspense fallback={<div className="h-full w-full bg-bg" aria-hidden />}>
+                    <GamePlayer />
+                </Suspense>
             </div>
         );
     }
@@ -285,7 +312,9 @@ export default function Game() {
                 </div>
 
                 <section id="play" className="min-w-0 scroll-mt-24">
-                    <GamePlayer />
+                    <Suspense fallback={<GamePlayerSkeleton />}>
+                        <GamePlayer />
+                    </Suspense>
                 </section>
 
                 <section className="mt-12 grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -375,13 +404,22 @@ export default function Game() {
                     </div>
 
                     <aside className="xl:pt-2">
-                        <Leaderboard />
+                        {/* Below the fold: mount only when scrolled near so its
+                            framer tree + board fetch stay off the initial commit. */}
+                        <DeferMount minHeight={640}>
+                            <Leaderboard />
+                        </DeferMount>
                     </aside>
                 </section>
             </div>
         </div>
 
-            <PinnedShowcase panels={SHOWCASE_PANELS} />
+            {/* 3×100vh sticky-scroll section at the very bottom — its useScroll
+                measurement and framer tree only need to exist once the reader is
+                near it. Reserve the full track height so scroll length is stable. */}
+            <DeferMount minHeight={`${SHOWCASE_PANELS.length * 100}vh`}>
+                <PinnedShowcase panels={SHOWCASE_PANELS} />
+            </DeferMount>
         </div>
     );
 }

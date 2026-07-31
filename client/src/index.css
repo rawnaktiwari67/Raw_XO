@@ -988,6 +988,16 @@ html.lenis {
   50%      { transform: scale(1.025); }
 }
 
+/* Park every CSS animation while the tab is backgrounded (flag set in
+   useSmoothScroll on visibilitychange). A hidden tab shouldn't keep dozens of
+   perpetual keyframe animations compositing — pure battery/CPU with nothing to
+   see. Resumes on return; no visual change while the tab is actually visible. */
+html[data-tab-hidden] *,
+html[data-tab-hidden] *::before,
+html[data-tab-hidden] *::after {
+  animation-play-state: paused !important;
+}
+
 /* One-shot glow flash for the filter-rail selection pill. Box-shadow only —
    transforms stay owned by framer's layoutId glide. Ends on the pill's static
    resting shadow so there's no visible snap when the animation finishes. */

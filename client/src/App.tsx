@@ -97,16 +97,11 @@ function ClerkSessionBridge() {
         };
     }, [clearSession, fetchMe, getToken, isLoaded, isSignedIn]);
 
-    if (!isLoaded) {
-        return (
-            <div className="min-h-screen bg-bg text-text-1">
-                <div className="mx-auto h-screen max-w-[1280px] px-6 py-28 md:px-12">
-                    <div className="h-12 w-36 animate-pulse rounded bg-white/[0.04]" />
-                </div>
-            </div>
-        );
-    }
-
+    // Render the app immediately — never block first paint on Clerk's SDK. The
+    // effects above hydrate auth into authStore in the background once Clerk is
+    // loaded; the UI starts in guest state and fills in the signed-in details
+    // when they arrive. (Previously this returned a full-screen skeleton until
+    // `isLoaded`, which is what froze the deployed site behind a blank splash.)
     return <AppShell />;
 }
 
