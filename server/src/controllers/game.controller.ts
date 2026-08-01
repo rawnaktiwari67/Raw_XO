@@ -7,7 +7,7 @@ import { devStore } from '../utils/devStore';
 import { successResponse, errorResponse } from '../utils/apiResponse';
 import { calculateLevel, calculateGameXP } from '../utils/xpUtils';
 import { shuffle, roundWindowMs, calculateScorePayload, MAX_HINTS_PER_ROUND, MAX_REPLAYS_PER_ROUND } from '../utils/gameLogic';
-import { createSongToken, decodeSongToken, type SongPreview } from '../utils/songTokens';
+import { createSongToken, decodeSongToken, isSongTokenExpired, type SongPreview } from '../utils/songTokens';
 import type {
     GameGenre,
     GameLanguage,
@@ -536,6 +536,16 @@ export const submitAnswer = async (req: Request, res: Response): Promise<void> =
             return;
         }
 
+        // Reject tokens older than the TTL. A reveal token is the only proof of
+        // which track a submission answers, and nothing else stops one from being
+        // replayed; a short lifetime caps how long a harvested token can keep
+        // feeding the leaderboard. The window is far longer than any real round,
+        // so a genuine player is never rejected.
+        if (isSongTokenExpired(song)) {
+            res.status(400).json(errorResponse('This round has expired — start a new one'));
+            return;
+        }
+
         // Sanity-check the client-reported score inputs. A legitimate client only
         // ever sends finite, non-negative values; a negative time, NaN, or
         // Infinity is tampering. Reject outright rather than silently clamp so an
@@ -858,11 +868,10 @@ export const getLeaderboard = async (_req: Request, res: Response): Promise<void
             ...(matchStage ? [matchStage] : []),
             {
                 $group: {
-                    // Group by signed-in user, or fall back to the guest id so anonymous
-                    // players still rank. Their rows have no user document.
-                    _id: { $ifNull: ['$user', { $concat: ['guest:', { $ifNull: ['$guestId', 'anon'] }] }] },
+                    // Only signed-in players are persisted, so every row groups by a
+                    // real user id.
+                    _id: '$user',
                     userId: { $first: '$user' },
-                    guestName: { $first: '$guestName' },
                     totalScore: { $sum: '$score' },
                     sessions: { $sum: 1 },
                     correctCount: { $sum: { $cond: ['$correct', 1, 0] } },
@@ -876,10 +885,13 @@ export const getLeaderboard = async (_req: Request, res: Response): Promise<void
             { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
             {
                 $project: {
-                    username: { $ifNull: ['$user.username', { $ifNull: ['$guestName', 'Guest'] }] },
+                    // Fallbacks cover only the rare orphaned row (user doc deleted
+                    // while its scores remain), never guests.
+                    username: { $ifNull: ['$user.username', 'Player'] },
                     avatar: '$user.avatar',
-                    levelBadge: { $ifNull: ['$user.levelBadge', 'guest'] },
-                    isGuest: { $cond: [{ $ifNull: ['$user', false] }, false, true] },
+                    levelBadge: { $ifNull: ['$user.levelBadge', 'XO Initiate'] },
+                    // Retained (always false) so the client's guest branch keeps working.
+                    isGuest: { $literal: false },
                     totalScore: 1,
                     sessions: 1,
                     accuracy: {

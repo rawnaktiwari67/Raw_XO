@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateScorePayload, guestNameFromId, roundWindowMs, shuffle, GUEST_ADJECTIVES, GUEST_NOUNS, HINT_POINT_PENALTY, MAX_HINTS_PER_ROUND, REPLAY_POINT_PENALTY, MAX_REPLAYS_PER_ROUND } from './gameLogic';
+import { calculateScorePayload, roundWindowMs, shuffle, HINT_POINT_PENALTY, MAX_HINTS_PER_ROUND, REPLAY_POINT_PENALTY, MAX_REPLAYS_PER_ROUND } from './gameLogic';
 import { DIFFICULTY_ROUND_SECONDS } from '../config/gameConstants';
 
 describe('calculateScorePayload', () => {
@@ -148,35 +148,5 @@ describe('shuffle', () => {
     it('handles empty and single-element arrays', () => {
         expect(shuffle([])).toEqual([]);
         expect(shuffle([42])).toEqual([42]);
-    });
-});
-
-describe('guestNameFromId', () => {
-    it('is deterministic for the same id', () => {
-        expect(guestNameFromId('abc123xyz789')).toBe(guestNameFromId('abc123xyz789'));
-    });
-
-    it('never produces "undefined" in the name (regression: signed >> hash)', () => {
-        // Long/high-charcode ids used to overflow into negative indexes.
-        const ids = [
-            'a'.repeat(64),
-            '￿￿￿￿￿￿',
-            'zzzzzzzzzzzzzzzzzzzzzzzz',
-            crypto.randomUUID?.() ?? 'fallback-id-0001',
-        ];
-        for (const id of ids) {
-            const name = guestNameFromId(id);
-            expect(name).not.toContain('undefined');
-            const [adjective, noun] = name.split(' ');
-            expect(GUEST_ADJECTIVES).toContain(adjective);
-            expect(GUEST_NOUNS).toContain(noun);
-        }
-    });
-
-    it('holds for arbitrary random ids', () => {
-        for (let i = 0; i < 500; i += 1) {
-            const id = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-            expect(guestNameFromId(id)).not.toContain('undefined');
-        }
     });
 });

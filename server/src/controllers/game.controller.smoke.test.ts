@@ -156,4 +156,21 @@ describe('core gameplay loop (smoke)', () => {
         });
         expect(res.status).toBe(400);
     });
+
+    // Leaderboard protection: a reveal token can't be replayed forever. Fake only
+    // Date (leave real timers for fetch and the pool-fetch budget), mint a token,
+    // jump past the TTL, and confirm the stale token is rejected.
+    it('rejects an answer whose reveal token has expired', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+            const q = await startRound('smokestale');
+            vi.setSystemTime(Date.now() + 60 * 60 * 1000 + 5_000); // past the 60-min default TTL
+            const res = await postAnswer({
+                songId: q.songId, answer: q.reveal.correctAnswer, difficulty: 'medium', responseTimeMs: 800, streak: 0,
+            });
+            expect(res.status).toBe(400);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 });

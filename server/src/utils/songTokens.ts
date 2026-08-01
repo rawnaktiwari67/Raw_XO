@@ -19,10 +19,31 @@ export type SongPreview = {
     // 0–100 stream popularity. Real value from Spotify when available; a rank-based
     // approximation for iTunes-only results; -1 when we have no signal at all.
     popularity: number;
+    // Epoch ms the reveal token was minted. Stamped by createSongToken and read
+    // back by decodeSongToken so the answer path can reject stale tokens (see
+    // isSongTokenExpired). Absent on pool songs that were never tokenized.
+    issuedAt?: number;
 };
 
 const tokenKey = (): Buffer =>
     crypto.createHash('sha256').update(env.GAME_SECRET).digest();
+
+// A reveal token is answerable for this long after it's minted. Configurable via
+// GAME_TOKEN_TTL_MS; floored at one minute so a misconfiguration can't make every
+// token instantly stale.
+export const SONG_TOKEN_TTL_MS = Math.max(
+    60_000,
+    Number.parseInt(env.GAME_TOKEN_TTL_MS, 10) || 60 * 60_000
+);
+
+// True when a decoded token is older than the TTL. Tokens minted before this
+// field existed (or forged without the secret — impossible, the payload is
+// GCM-authenticated) carry no issuedAt and are treated as fresh, so a deploy that
+// introduces the TTL never rejects a token already in a player's hand.
+export const isSongTokenExpired = (
+    song: Pick<SongPreview, 'issuedAt'>,
+    now: number = Date.now()
+): boolean => typeof song.issuedAt === 'number' && now - song.issuedAt > SONG_TOKEN_TTL_MS;
 
 /**
  * Encrypt a song into a tamper-resistant reveal token (AES-256-GCM). The GCM
@@ -31,8 +52,12 @@ const tokenKey = (): Buffer =>
 export const createSongToken = (song: SongPreview): string => {
     const iv = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv('aes-256-gcm', tokenKey(), iv);
+    // Stamp the mint time so the answer path can enforce a TTL. Spread first so a
+    // re-tokenized song (e.g. the echoed trackId on submit) always gets a fresh
+    // issuedAt rather than carrying an older one forward.
+    const payload = JSON.stringify({ ...song, issuedAt: Date.now() });
     const encrypted = Buffer.concat([
-        cipher.update(JSON.stringify(song), 'utf8'),
+        cipher.update(payload, 'utf8'),
         cipher.final(),
     ]);
     const authTag = cipher.getAuthTag();

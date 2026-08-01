@@ -24,6 +24,10 @@ const getEnv = () => ({
     GAME_MAX_QUERY_TERMS: process.env.GAME_MAX_QUERY_TERMS || '6',
     GAME_TRACK_CACHE_MS: process.env.GAME_TRACK_CACHE_MS || '600000',
     GAME_FIRST_CLIP_BUDGET_MS: process.env.GAME_FIRST_CLIP_BUDGET_MS || '1200',
+    // How long a reveal token stays answerable. Comfortably longer than any real
+    // session so a legitimate slow player is never rejected, but finite so a
+    // harvested token can't be replayed onto the leaderboard indefinitely.
+    GAME_TOKEN_TTL_MS: process.env.GAME_TOKEN_TTL_MS || '3600000',
     GROQ_API_KEY: (process.env.GROQ_API_KEY || '').trim(),
     GROQ_MODEL: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
     GEMINI_API_KEY: (process.env.GEMINI_API_KEY || '').trim(),

@@ -2,8 +2,6 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IGameScore extends Document {
     user?: mongoose.Types.ObjectId;
-    guestId?: string;
-    guestName?: string;
     trackId: string;
     trackName: string;
     artistName: string;
@@ -23,10 +21,9 @@ export interface IGameScore extends Document {
 }
 
 const GameScoreSchema = new Schema<IGameScore>({
-    // Either user (signed-in) or guestId (anonymous) identifies the player.
-    user: { type: Schema.Types.ObjectId, ref: 'User', required: false, index: true },
-    guestId: { type: String, index: true },
-    guestName: { type: String, default: '' },
+    // Only signed-in players are persisted; anonymous play is intentionally not
+    // recorded (see submitAnswer), so every score row has a user.
+    user: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     trackId: { type: String, default: '', index: true },
     trackName: { type: String, default: '' },
     artistName: { type: String, default: '' },

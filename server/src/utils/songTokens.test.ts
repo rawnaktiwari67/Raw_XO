@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import crypto from 'crypto';
 import { env } from '../config/env';
-import { createSongToken, decodeSongToken, type SongPreview } from './songTokens';
+import { createSongToken, decodeSongToken, isSongTokenExpired, SONG_TOKEN_TTL_MS, type SongPreview } from './songTokens';
 
 const sampleSong: SongPreview = {
     id: 'track-123',
@@ -37,7 +37,10 @@ const encryptPayload = (payload: unknown): string => {
 describe('song reveal tokens', () => {
     it('round-trips a song through encrypt then decrypt', () => {
         const token = createSongToken(sampleSong);
-        expect(decodeSongToken(token)).toEqual(sampleSong);
+        // createSongToken stamps issuedAt, so the decoded payload is the song plus
+        // a mint timestamp — match the song fields and assert the stamp separately.
+        expect(decodeSongToken(token)).toMatchObject(sampleSong);
+        expect(typeof decodeSongToken(token)!.issuedAt).toBe('number');
     });
 
     it('produces a fresh IV each call so tokens are non-deterministic', () => {
@@ -45,8 +48,8 @@ describe('song reveal tokens', () => {
         const b = createSongToken(sampleSong);
         expect(a).not.toEqual(b);
         // ...but both still decode to the same song.
-        expect(decodeSongToken(a)).toEqual(sampleSong);
-        expect(decodeSongToken(b)).toEqual(sampleSong);
+        expect(decodeSongToken(a)).toMatchObject(sampleSong);
+        expect(decodeSongToken(b)).toMatchObject(sampleSong);
     });
 
     // Tampering flips the FIRST character of a segment: it always encodes the
@@ -95,5 +98,28 @@ describe('song reveal tokens', () => {
     it('accepts a validly-encrypted token with all required fields present', () => {
         const token = encryptPayload(sampleSong);
         expect(decodeSongToken(token)).toEqual(sampleSong);
+    });
+});
+
+describe('isSongTokenExpired', () => {
+    it('treats a freshly minted token as valid', () => {
+        const song = decodeSongToken(createSongToken(sampleSong))!;
+        expect(isSongTokenExpired(song)).toBe(false);
+    });
+
+    it('rejects a token once it is older than the TTL', () => {
+        const issuedAt = Date.now() - (SONG_TOKEN_TTL_MS + 1);
+        expect(isSongTokenExpired({ issuedAt })).toBe(true);
+    });
+
+    it('keeps a token valid right up to the TTL boundary', () => {
+        const now = Date.now();
+        expect(isSongTokenExpired({ issuedAt: now - SONG_TOKEN_TTL_MS }, now)).toBe(false);
+    });
+
+    it('treats a token with no issuedAt as valid (pre-TTL / grandfathered)', () => {
+        // Legacy tokens minted before the field existed carry no issuedAt and must
+        // not be rejected on the deploy that introduces the TTL.
+        expect(isSongTokenExpired({})).toBe(false);
     });
 });
