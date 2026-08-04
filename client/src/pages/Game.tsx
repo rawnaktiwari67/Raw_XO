@@ -317,6 +317,11 @@ export default function Game() {
                     </Suspense>
                 </section>
 
+                {/* Below-the-fold explainer + leaderboard. Deferring the whole
+                    block keeps its ScrollReveal scroll-tracking and the board
+                    fetch off the initial mount (they were a chunk of the mount
+                    long-task). Mounts on approach; reserved height avoids shift. */}
+                <DeferMount minHeight={700} rootMargin="250px">
                 <section className="mt-12 grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
                     <div className="space-y-6">
                         {!isAuthenticated ? (
@@ -404,13 +409,10 @@ export default function Game() {
                     </div>
 
                     <aside className="xl:pt-2">
-                        {/* Below the fold: mount only when scrolled near so its
-                            framer tree + board fetch stay off the initial commit. */}
-                        <DeferMount minHeight={640}>
-                            <Leaderboard />
-                        </DeferMount>
+                        <Leaderboard />
                     </aside>
                 </section>
+                </DeferMount>
             </div>
         </div>
 

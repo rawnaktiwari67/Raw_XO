@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { motion, useMotionValueEvent, useScroll } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { UserButton, useClerk } from '@clerk/clerk-react';
 import { useAuthStore } from '../../stores/authStore';
 import { shouldUseClerk } from '../../services/authMode';
@@ -33,10 +33,18 @@ function NavLink({ to, label, onClick }: { to: string; label: string; onClick?: 
 export default function Navbar() {
     const { user, isAuthenticated, clearSession } = useAuthStore();
     const navigate = useNavigate();
-    const { scrollY } = useScroll();
     const [isScrolled, setIsScrolled] = useState(false);
 
-    useMotionValueEvent(scrollY, 'change', (value) => setIsScrolled(value > 14));
+    // A plain passive scroll listener toggles the scrolled state — framer's
+    // useScroll() re-measures the whole document on every layout change (it was
+    // the single biggest cost during mount), which is absurd overkill for a
+    // 14px threshold. This fires only on real scroll and never measures layout.
+    useEffect(() => {
+        const onScroll = () => setIsScrolled(window.scrollY > 14);
+        onScroll();
+        window.addEventListener('scroll', onScroll, { passive: true });
+        return () => window.removeEventListener('scroll', onScroll);
+    }, []);
 
     const handleLocalSignOut = async () => {
         try {
