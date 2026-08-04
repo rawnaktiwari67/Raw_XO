@@ -1,47 +1,36 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
-// Mounts its children only once they scroll within `rootMargin` of the viewport,
-// so heavy below-the-fold sections (their framer trees, scroll listeners, and
-// data fetches) don't inflate the first render/commit or run before they're
-// needed. A reserved-height placeholder holds the layout so nothing shifts when
-// the real content swaps in, and `rootMargin` pre-mounts it ahead of arrival so
-// the reveal is never visible. Purely a performance wrapper — no visual change.
+// Holds heavy below-the-fold content out of the *initial* React commit so it
+// never blocks first paint (LCP) — then mounts it on the first idle tick after
+// paint, well before the reader can scroll to it. Mounting on idle (rather than
+// on scroll via IntersectionObserver) is deliberate: on-scroll mounting shifts
+// the framer/layout cost INTO the scroll and janks it, whereas an idle mount
+// pays that cost once, off the critical path, while the content slot sits
+// reserved so nothing shifts. Purely a scheduling wrapper — no visual change.
 export default function DeferMount({
     children,
     minHeight,
-    rootMargin = '900px',
 }: {
     children: ReactNode;
     minHeight: number | string;
+    // Kept for call-site compatibility; mounting is idle-based, not margin-based.
     rootMargin?: string;
 }) {
-    const ref = useRef<HTMLDivElement | null>(null);
     const [show, setShow] = useState(false);
 
     useEffect(() => {
         if (show) return;
-        const el = ref.current;
-        if (!el) return;
-        if (typeof IntersectionObserver !== 'function') {
-            setShow(true);
-            return;
+        const mount = () => setShow(true);
+        const ric = (window as unknown as {
+            requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+        }).requestIdleCallback;
+        if (ric) {
+            const id = ric(mount, { timeout: 1500 });
+            return () => (window as unknown as { cancelIdleCallback?: (h: number) => void }).cancelIdleCallback?.(id);
         }
-        const io = new IntersectionObserver(
-            (entries) => {
-                if (entries.some((e) => e.isIntersecting)) {
-                    setShow(true);
-                    io.disconnect();
-                }
-            },
-            { rootMargin }
-        );
-        io.observe(el);
-        return () => io.disconnect();
-    }, [show, rootMargin]);
+        const t = window.setTimeout(mount, 300);
+        return () => window.clearTimeout(t);
+    }, [show]);
 
-    return (
-        <div ref={ref} style={show ? undefined : { minHeight }}>
-            {show ? children : null}
-        </div>
-    );
+    return <div style={show ? undefined : { minHeight }}>{show ? children : null}</div>;
 }
