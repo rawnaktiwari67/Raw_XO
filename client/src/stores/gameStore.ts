@@ -26,6 +26,10 @@ import {
     CLIP_SECONDS_FOR_DIFFICULTY,
     difficultyForClipSeconds,
 } from '../config/gameConfig';
+import { scoreAnswerLocally } from '../game/scoring';
+// The score constants live in game/scoring.ts now (unit-tested there); re-export
+// them so existing importers (GamePlayer) keep resolving them from the store.
+export { HINT_POINT_PENALTY, REPLAY_POINT_PENALTY, MAX_REPLAYS } from '../game/scoring';
 import { trackEvent } from '../services/analytics';
 import {
     getDailyState,
@@ -59,48 +63,6 @@ const viewerRankIn = (entries: LeaderboardEntry[]): number | null => {
 // the shape the UI expects (board.userRank).
 const withViewerRank = (data: LeaderboardData | null): LeaderboardData | null =>
     data ? { ...data, userRank: viewerRankIn(data.entries) } : data;
-
-// Round clock per difficulty, in ms — must mirror the server's
-// DIFFICULTY_ROUND_SECONDS so client-computed scores match what the server
-// re-derives when it persists the answer.
-const ROUND_WINDOW_MS: Record<GameDifficulty, number> = { easy: 10_000, medium: 7_000, hard: 5_000, pro: 7_000 };
-
-// Each AI hint shaves points off the round's base score before the multiplier.
-// Must mirror HINT_POINT_PENALTY / MAX_HINTS_PER_ROUND in the server's
-// utils/gameLogic.ts — same reason as the round clock above. Exported so the
-// Hint button can show the real cost.
-export const HINT_POINT_PENALTY = 15;
-const MAX_HINTS_PER_ROUND = 3;
-
-// Replays: up to MAX_REPLAYS re-listens per round, each shaving points off the
-// base (first auto-play is free). Must mirror REPLAY_POINT_PENALTY /
-// MAX_REPLAYS_PER_ROUND in the server's utils/gameLogic.ts. Exported so the
-// Replay button can show the cost and remaining count.
-export const REPLAY_POINT_PENALTY = 10;
-export const MAX_REPLAYS = 3;
-
-// Ported from the server's calculateScorePayload + calculateGameXP so a batched
-// round can be scored instantly on the client (no network round-trip). The
-// server re-scores authoritatively when the answer is POSTed in the background,
-// so this only drives the immediate reveal — any drift would be corrected on the
-// server, but the formulas are identical, so they won't drift.
-const scoreAnswerLocally = (correct: boolean, streak: number, responseTimeMs: number, difficulty: GameDifficulty, hintsUsed: number, replaysUsed: number) => {
-    if (!correct) return { pointsAwarded: 0, speedBonus: 0, multiplier: 1, xpEarned: 5 };
-
-    const windowMs = ROUND_WINDOW_MS[difficulty] ?? ROUND_WINDOW_MS.medium;
-    const safeResponseTime = responseTimeMs > 0 ? Math.min(responseTimeMs, windowMs) : windowMs;
-    const speedBonus = Math.max(0, Math.round(((windowMs - safeResponseTime) / windowMs) * 60));
-    const multiplier = Math.min(1 + Math.floor(streak / 3) * 0.25, 2);
-    const hintPenalty = Math.min(MAX_HINTS_PER_ROUND, Math.max(0, hintsUsed)) * HINT_POINT_PENALTY;
-    const replayPenalty = Math.min(MAX_REPLAYS, Math.max(0, replaysUsed)) * REPLAY_POINT_PENALTY;
-    // Pro rounds pay a bigger base for calling a track off a fraction of a
-    // second — mirrors the server's calculateScorePayload.
-    const base = difficulty === 'pro' ? 150 : 100;
-    const pointsAwarded = Math.round(Math.max(0, base + speedBonus - hintPenalty - replayPenalty) * multiplier);
-    const xpEarned = 50 + Math.min(streak * 10, 50) + Math.round(speedBonus * 0.5);
-
-    return { pointsAwarded, speedBonus, multiplier, xpEarned };
-};
 
 const getApiData = <T>(response: { data?: { data?: T } }): T | undefined => response.data?.data;
 const getApiError = (error: unknown, fallback: string): string => {
