@@ -4,6 +4,9 @@
     "server",
     "client"
   ],
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "typecheck:vercel": "tsc --noEmit -p tsconfig.json",
     "build:apps": "npm run build --workspace xo-universe-server && npm run build --workspace xo-universe-client",

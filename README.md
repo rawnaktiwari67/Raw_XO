@@ -209,6 +209,7 @@ Vercel should use the root project directory with these settings from `vercel.js
 - Install command: `npm ci --include=dev`
 - Build command: `npm run build:vercel`
 - Output directory: `client/dist`
+- Node runtime: pinned to **22.x** via `engines.node` in the root `package.json` (and `.nvmrc` for local parity), so the serverless functions and build run on a fixed major version.
 
 Required Vercel environment variables:
 
