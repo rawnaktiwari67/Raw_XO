@@ -8,6 +8,15 @@ import { musicService } from '../../services/musicService';
 const DESI_GENRE = /(indian|bolly|punjabi|desi|world|hindi)/i;
 const DESI_ARTIST = /(arijit|diljit|ap dhillon|dhillon|karan aujla|shubh|badshah|honey singh|sidhu|nucleya|prateek)/i;
 
+// Colour grade that unifies two dozen clashing sleeves into one backdrop. This
+// USED to live on the full-hero container as a single CSS filter — but a filter
+// on a large box whose descendants animate every frame (the floating tiles +
+// parallax planes) forces the whole ~765k-px subtree to re-rasterise per frame,
+// which was the landing's biggest source of jank. Applied to each *static* <img>
+// instead, it rasterises once per tile (the image never changes; only its
+// transform does), so the grade is now effectively free.
+const COVER_GRADE = 'saturate(1.34) contrast(1.12) brightness(1.18)';
+
 // ── Art-directed composition ─────────────────────────────────────────────────
 // The wall is a fixed arrangement, not a scrolling strip: every tile has a
 // hand-placed position in % of the hero band and a size in clamped vw, so the
@@ -344,8 +353,8 @@ export default function HeroCoverWall() {
                                     className="h-full w-full object-cover"
                                     style={
                                         tier.blur > 0
-                                            ? { filter: `blur(${tier.blur}px)`, transform: 'scale(1.08)' }
-                                            : undefined
+                                            ? { filter: `blur(${tier.blur}px) ${COVER_GRADE}`, transform: 'scale(1.08)' }
+                                            : { filter: COVER_GRADE }
                                     }
                                 />
                                 {/* Directional light grade, painted OVER the sleeve: a warm
@@ -387,13 +396,14 @@ export default function HeroCoverWall() {
                 WebkitMaskImage: 'radial-gradient(125% 92% at 50% 24%, #000 44%, transparent 78%)',
             }}
         >
-            {/* The static saturate/contrast grade unifies two dozen clashing album
-                sleeves into one graded backdrop, and the whole canvas breathes a
-                hair (compositor-only) so the arrangement feels alive, not frozen. */}
-            <div
-                className="absolute inset-0 opacity-[0.9] [filter:saturate(1.18)_contrast(1.1)_brightness(1.1)]"
-                style={lite ? undefined : { animation: 'heroBreathe 46s ease-in-out infinite', animationPlayState: animState, willChange: 'transform' }}
-            >
+            {/* The colour grade now rides on each tile <img> (see COVER_GRADE) rather
+                than on this container, so animating descendants no longer trigger a
+                full-subtree re-filter every frame. The old `heroBreathe` whole-canvas
+                scale is gone too: it forced this large box (and all its composited
+                tile layers) to recomposite continuously for a barely-visible whisper
+                of scale — the per-tile floats + cursor parallax already keep the wall
+                alive, so dropping it is pure headroom. */}
+            <div className="absolute inset-0">
                 {/* Volumetric key light — a warm radial anchored on the focal
                     cluster, painted BEHIND every plane so the covers sit in front
                     of it and catch the glow. Depth, not brightness: low alpha, wide

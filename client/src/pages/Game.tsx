@@ -11,12 +11,18 @@ import { useDocumentMeta } from '../hooks/useDocumentMeta';
 import type { GameSession } from '../types/game';
 import ScrollReveal from '../components/motion/ScrollReveal';
 import Magnetic from '../components/motion/Magnetic';
+import Marquee from '../components/motion/Marquee';
 import PinnedShowcase, { type ShowcasePanel } from '../components/motion/PinnedShowcase';
 import DeferMount from '../components/motion/DeferMount';
 
 // Album-art wall for the hero — lazy + post-idle so its imagery never competes
 // with the LCP headline for bandwidth on first paint.
 const HeroCoverWall = lazy(() => import('../components/game/HeroCoverWall'));
+
+// Saloon-inspired "live room" layer (frosted now-playing capsule + ambient
+// clock/Daily HUD). Lazy + post-paint alongside the wall so it stays off the
+// LCP path; it fetches its tracks from the already-warm catalog cache.
+const HeroLiveRoom = lazy(() => import('../components/game/HeroLiveRoom'));
 
 // GamePlayer is the heaviest component in the app (the whole guess-game engine +
 // its framer tree). Code-split it so parsing/mounting it never blocks the hero's
@@ -47,6 +53,17 @@ const heroHeadline = {
     hidden: { y: '115%' },
     visible: { y: '0%', transition: { duration: 0.72, ease: [0.16, 1, 0.3, 1] as const } },
 };
+
+// Artists ticking under the hero — a slow "in heavy rotation" strip so the
+// landing reads as full of music, not an empty template. Static (no fetch); the
+// real names come off the same catalog the game draws from. Every third name is
+// lit amber so the strip has rhythm instead of a flat wall of grey.
+const ROTATION_ARTISTS = [
+    'The Weeknd', 'Drake', 'Kendrick Lamar', 'SZA', 'Travis Scott', 'Frank Ocean',
+    'Tyler, the Creator', 'Kanye West', 'Doja Cat', 'Playboi Carti', 'Bad Bunny',
+    'Dua Lipa', 'Billie Eilish', 'Post Malone', 'Arijit Singh', 'Diljit Dosanjh',
+    'Ariana Grande', 'J. Cole', 'Rihanna', 'Bruno Mars',
+];
 
 // Signed-out explainer — fills the left column beside the leaderboard so the
 // page has no dead gutter, and doubles as onboarding.
@@ -275,13 +292,14 @@ export default function Game() {
                         <div className="overflow-hidden pb-[0.16em] -mb-[0.16em]">
                             <motion.h1
                                 variants={heroHeadline}
-                                className="font-heading text-[clamp(2.4rem,5.4vw,4.4rem)] leading-[0.9] tracking-[-0.02em] text-text-1"
+                                className="font-heading text-[clamp(2.4rem,5.4vw,4.4rem)] leading-[0.9] tracking-[-0.02em] text-text-1 [text-shadow:0_2px_24px_rgba(0,0,0,0.6)]"
                             >
                                 <span className="text-gradient-gold">5 seconds.</span> Pick it before it disappears.
                             </motion.h1>
                         </div>
-                        <motion.p variants={heroItem} className="mt-4 max-w-xl text-sm leading-relaxed text-text-3 md:text-base">
-                            Guess the track in five seconds. Build your streak. Climb the rankings.
+                        <motion.p variants={heroItem} className="mt-4 max-w-xl text-sm leading-relaxed text-text-2 md:text-[15px] [text-shadow:0_1px_12px_rgba(0,0,0,0.55)]">
+                            No title, no artist — just the drop. Four names, a five-second clock,
+                            and one shot to prove your ear is faster than your brain.
                         </motion.p>
                         <motion.div variants={heroItem} className="mt-7">
                             <Magnetic>
@@ -289,7 +307,7 @@ export default function Game() {
                                     type="button"
                                     onClick={scrollToPlay}
                                     onMouseEnter={() => playHover()}
-                                    className="inline-flex items-center gap-2.5 rounded-[1rem] bg-amber px-7 py-4 text-[13px] font-extrabold uppercase tracking-[0.02em] text-ch-0 shadow-[0_14px_36px_rgba(244,162,97,0.32)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(244,162,97,0.42)] active:scale-[0.99]"
+                                    className="group inline-flex items-center gap-2.5 rounded-[1rem] bg-[linear-gradient(180deg,#F8BE86,#F4A261_58%,#E68A3F)] px-7 py-4 text-[13px] font-extrabold uppercase tracking-[0.02em] text-ch-0 shadow-[0_14px_36px_rgba(244,162,97,0.36),inset_0_1px_0_rgba(255,255,255,0.4)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_20px_50px_rgba(244,162,97,0.5),inset_0_1px_0_rgba(255,255,255,0.5)] active:scale-[0.99]"
                                 >
                                     <svg viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5" aria-hidden>
                                         <path d="M8 5v14l11-7z" />
@@ -300,12 +318,44 @@ export default function Game() {
                         </motion.div>
                     </motion.div>
                     </motion.div>
-                    {isAuthenticated && user ? (
-                        <motion.div variants={heroItem} className="relative z-[1] rounded-full bg-white/[0.03] px-4 py-2 text-sm text-text-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                            Playing as <span className="text-text-1">{user.username}</span>
-                        </motion.div>
+                    {/* Right column: the saloon-inspired live-room cluster. Mounts
+                        post-paint with the cover wall (both gated on showImagery)
+                        so neither competes with the LCP headline. Folds the old
+                        "Playing as {username}" pill into its HUD row. */}
+                    {showImagery ? (
+                        <Suspense fallback={null}>
+                            <HeroLiveRoom username={isAuthenticated && user ? user.username : undefined} />
+                        </Suspense>
                     ) : null}
                 </motion.section>
+
+                {/* "In heavy rotation" ticker — a living strip of the catalog's
+                    artists. Movement + real names = the page reads as full of
+                    music. The Marquee loop is compositor-only CSS and already
+                    honours reduced-motion (index.css). */}
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.6, delay: 0.35, ease: 'easeOut' }}
+                    className="mb-6 flex items-center gap-4 border-y border-white/[0.06] py-3"
+                >
+                    <span className="label-xs hidden shrink-0 text-text-3 sm:inline">In heavy rotation</span>
+                    <span aria-hidden className="hidden h-3 w-px shrink-0 bg-white/10 sm:inline-block" />
+                    <Marquee duration={42} className="min-w-0 flex-1">
+                        {ROTATION_ARTISTS.map((name, i) => (
+                            <span key={name} className="flex items-center">
+                                <span
+                                    className={`brand-mark whitespace-nowrap text-[0.82rem] ${
+                                        i % 3 === 0 ? 'text-amber/90' : 'text-text-2/80'
+                                    }`}
+                                >
+                                    {name}
+                                </span>
+                                <span aria-hidden className="mx-5 text-amber/40">◆</span>
+                            </span>
+                        ))}
+                    </Marquee>
+                </motion.div>
 
                 <div className="mb-6">
                     <DailyCard />

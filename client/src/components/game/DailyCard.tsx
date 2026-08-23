@@ -132,7 +132,7 @@ export default function DailyCard() {
                         type="button"
                         onClick={() => void loadDaily()}
                         disabled={isLoading}
-                        className="tap-target inline-flex w-full items-center justify-center rounded-xl bg-amber px-4 py-3 text-sm font-bold text-black shadow-[0_10px_28px_rgba(244,162,97,0.28)] transition-transform hover:scale-[1.01] disabled:opacity-60"
+                        className="tap-target inline-flex w-full items-center justify-center rounded-xl bg-[linear-gradient(180deg,#F8BE86,#F4A261_58%,#E68A3F)] px-4 py-3 text-sm font-bold text-ch-0 shadow-[0_10px_28px_rgba(244,162,97,0.32),inset_0_1px_0_rgba(255,255,255,0.4)] transition-transform hover:scale-[1.01] disabled:opacity-60"
                     >
                         {isLoading ? 'Loading…' : 'Play today’s daily'}
                     </button>
