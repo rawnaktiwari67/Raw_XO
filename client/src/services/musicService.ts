@@ -294,16 +294,14 @@ export const musicService = {
                 // reliable previews. The broad pool prefers Spotify, then iTunes.
                 const featuredPromise = this.getFeaturedTracks();
 
-                // Keep the iTunes fallback in flight alongside Spotify, but do
-                // not wait for all 26 searches when Spotify has already supplied
-                // the broad catalog. That fallback is only needed when Spotify
-                // is unavailable or returns no tracks.
+                // Only start the broad iTunes fallback when Spotify is missing.
+                // Running all 26 searches beside a successful Spotify request
+                // wastes bandwidth, especially on mobile connections.
                 const spotifyPromise = fetchSpotifyCatalog();
-                const itunesPromise = Promise.all(CATALOG_QUERIES.map((query) => fetchCatalog(query)));
                 const [featured, spotifyCatalog] = await Promise.all([featuredPromise, spotifyPromise]);
                 const catalog = spotifyCatalog.length > 0
                     ? spotifyCatalog
-                    : (await itunesPromise).flat();
+                    : (await Promise.all(CATALOG_QUERIES.map((query) => fetchCatalog(query)))).flat();
 
                 const seen = new Set<string>();
                 const ordered: NormalizedMusicItem[] = [];

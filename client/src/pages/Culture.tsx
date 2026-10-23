@@ -47,6 +47,7 @@ export default function Culture() {
     const [toast, setToast] = useState<string | null>(null);
     const [reelsOpen, setReelsOpen] = useState(false);
     const toastTimer = useRef<number | null>(null);
+    const catalogRequested = useRef(false);
 
     useEffect(() => {
         let alive = true;
@@ -55,13 +56,16 @@ export default function Culture() {
         musicService.getFeaturedTracks().then((tracks) => {
             if (alive) setCatalog(tracks);
         });
-        musicService.getTrendingTracks().then((tracks) => {
-            if (alive) setCatalog(tracks);
-        });
         return () => {
             alive = false;
         };
     }, []);
+
+    const loadCatalog = () => {
+        if (catalogRequested.current) return;
+        catalogRequested.current = true;
+        musicService.getTrendingTracks().then(setCatalog);
+    };
 
     useEffect(() => () => {
         if (toastTimer.current) window.clearTimeout(toastTimer.current);
@@ -178,6 +182,7 @@ export default function Culture() {
                     hint="tap a star"
                     cards={crate}
                     onRate={handleRate}
+                    onVisible={loadCatalog}
                     emptyText="Loading the catalog…"
                 />
 

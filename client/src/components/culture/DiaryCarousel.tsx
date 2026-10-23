@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import type { DiaryTrackSeed } from '../../stores/diaryStore';
 import ScrollReveal from '../motion/ScrollReveal';
@@ -18,7 +18,51 @@ interface DiaryCarouselProps {
     hint?: string;
     cards: DiaryCard[];
     onRate: (card: DiaryCard, rating: number) => void;
+    onVisible?: () => void;
     emptyText?: string;
+}
+
+function usePerfLite() {
+    const [lite, setLite] = useState(false);
+
+    useEffect(() => {
+        if (typeof window.matchMedia !== 'function') return;
+
+        const queries = [
+            window.matchMedia('(pointer: coarse)'),
+            window.matchMedia('(prefers-reduced-motion: reduce)'),
+        ];
+        const connection = (navigator as Navigator & {
+            connection?: {
+                saveData?: boolean;
+                effectiveType?: string;
+                addEventListener?: (type: 'change', listener: () => void) => void;
+                removeEventListener?: (type: 'change', listener: () => void) => void;
+            };
+        }).connection;
+        const update = () => setLite(
+            queries.some((query) => query.matches) ||
+            Boolean(connection?.saveData) ||
+            Boolean(connection?.effectiveType && /(^|-)2g$/.test(connection.effectiveType))
+        );
+
+        update();
+        queries.forEach((query) => query.addEventListener('change', update));
+        connection?.addEventListener?.('change', update);
+        return () => {
+            queries.forEach((query) => query.removeEventListener('change', update));
+            connection?.removeEventListener?.('change', update);
+        };
+    }, []);
+
+    return lite;
+}
+
+function optimizedArtworkUrl(url: string) {
+    return url
+        .replace(/\/\d+x\d+bb(?=\.)/i, '/300x300bb')
+        .replace(/([?&]w=)\d+/i, '$1320')
+        .replace(/([?&]q=)\d+/i, '$170');
 }
 
 function StarRow({ value, onPick }: { value: number | null; onPick: (rating: number) => void }) {
@@ -49,15 +93,38 @@ function StarRow({ value, onPick }: { value: number | null; onPick: (rating: num
     );
 }
 
-export default function DiaryCarousel({ title, hint, cards, onRate, emptyText }: DiaryCarouselProps) {
+export default function DiaryCarousel({ title, hint, cards, onRate, onVisible, emptyText }: DiaryCarouselProps) {
     const scrollRef = useRef<HTMLDivElement | null>(null);
+    const sectionRef = useRef<HTMLElement | null>(null);
+    const onVisibleRef = useRef(onVisible);
+    const perfLite = usePerfLite();
+    const hasOnVisible = Boolean(onVisible);
+
+    useEffect(() => {
+        onVisibleRef.current = onVisible;
+    }, [onVisible]);
+
+    useEffect(() => {
+        if (!hasOnVisible || !sectionRef.current) return;
+        if (typeof IntersectionObserver === 'undefined') {
+            onVisibleRef.current?.();
+            return;
+        }
+        const observer = new IntersectionObserver(([entry]) => {
+            if (!entry?.isIntersecting) return;
+            onVisibleRef.current?.();
+            observer.disconnect();
+        }, { rootMargin: '300px 0px' });
+        observer.observe(sectionRef.current);
+        return () => observer.disconnect();
+    }, [hasOnVisible]);
 
     const nudge = (direction: 1 | -1) => {
         scrollRef.current?.scrollBy({ left: direction * 320, behavior: 'smooth' });
     };
 
     return (
-        <section className="mt-10">
+        <section ref={sectionRef} className="mt-10">
             <div className="mb-4 flex items-baseline justify-between gap-4">
                 <div className="flex items-baseline gap-3">
                     <ScrollReveal as="h2" className="font-heading text-2xl font-bold leading-tight text-text-1">
@@ -104,18 +171,19 @@ export default function DiaryCarousel({ title, hint, cards, onRate, emptyText }:
                     {cards.map((card, index) => (
                         <motion.div
                             key={card.trackId}
-                            whileHover={{ y: -5 }}
+                            whileHover={perfLite ? undefined : { y: -5 }}
                             transition={{ type: 'spring', stiffness: 320, damping: 24 }}
-                            className="group w-[154px] flex-none snap-start"
+                            className="group w-[min(68vw,154px)] flex-none snap-start sm:w-[154px]"
                         >
-                            <CoverReveal delay={Math.min(index * 0.05, 0.35)}>
+                            <CoverReveal enabled={!perfLite} delay={Math.min(index * 0.05, 0.35)}>
                             <div className="album-cover relative isolate aspect-square overflow-hidden rounded-2xl bg-white/[0.04] shadow-[0_8px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/5 transition-all duration-300 group-hover:shadow-[0_16px_48px_rgba(0,0,0,0.5)] group-hover:ring-amber/40">
                                 <img
-                                    src={card.albumArt}
+                                    src={optimizedArtworkUrl(card.albumArt)}
                                     alt={card.title}
                                     width={308}
                                     height={308}
-                                    loading="lazy"
+                                    loading={index === 0 ? 'eager' : 'lazy'}
+                                    fetchPriority={index === 0 ? 'high' : 'auto'}
                                     decoding="async"
                                     className="absolute inset-0 block h-full w-full object-cover"
                                 />

@@ -7,14 +7,16 @@ export default function CoverReveal({
     children,
     delay = 0,
     className,
+    enabled = true,
 }: {
     children: ReactNode;
     delay?: number;
     className?: string;
+    enabled?: boolean;
 }) {
     const reduced = useReducedMotion();
 
-    if (reduced) {
+    if (reduced || !enabled) {
         return <div className={className}>{children}</div>;
     }
 
