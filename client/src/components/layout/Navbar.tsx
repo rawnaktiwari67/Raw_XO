@@ -96,7 +96,7 @@ export default function Navbar() {
                             <>
                                 <Link
                                     to={`/profile/${user.username}`}
-                                    className="block max-w-[72px] truncate text-[11px] uppercase tracking-[0.14em] text-text-3 transition-colors hover:text-text-1 sm:max-w-none"
+                                    className="block max-w-[72px] truncate text-[11px] uppercase tracking-[0.14em] text-text-3 transition-colors hover:text-text-1 sm:max-w-[120px] md:max-w-none"
                                 >
                                     {user.username}
                                 </Link>
