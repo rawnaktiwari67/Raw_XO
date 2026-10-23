@@ -120,7 +120,7 @@ export default function DiaryCarousel({ title, hint, cards, onRate, emptyText }:
                             className="group w-[154px] flex-none snap-start"
                         >
                             <CoverReveal delay={Math.min(index * 0.05, 0.35)}>
-                            <div className="album-cover relative overflow-hidden rounded-2xl bg-white/[0.04] shadow-[0_8px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/5 transition-all duration-300 group-hover:shadow-[0_16px_48px_rgba(0,0,0,0.5)] group-hover:ring-amber/40">
+                            <div className="album-cover relative isolate aspect-square overflow-hidden rounded-2xl bg-white/[0.04] shadow-[0_8px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/5 transition-all duration-300 group-hover:shadow-[0_16px_48px_rgba(0,0,0,0.5)] group-hover:ring-amber/40">
                                 <img
                                     src={card.albumArt}
                                     alt={card.title}
@@ -128,7 +128,7 @@ export default function DiaryCarousel({ title, hint, cards, onRate, emptyText }:
                                     height={308}
                                     loading="lazy"
                                     decoding="async"
-                                    className="aspect-square w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.07]"
+                                    className="absolute inset-0 block h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.07]"
                                 />
                                 <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
                                     {coverBurstBits.map((bit, bitIndex) => (
