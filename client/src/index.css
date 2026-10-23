@@ -522,46 +522,6 @@ h6 {
     border-color: rgba(255, 255, 255, 0.06);
   }
 
-  .cover-burst-bit {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 7px;
-    height: 12px;
-    border-radius: 2px;
-    background: linear-gradient(180deg, #fff1d6, #f4a261 70%);
-    box-shadow: 0 0 12px rgba(244, 162, 97, 0.7);
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.15);
-  }
-
-  .album-cover:hover .cover-burst-bit {
-    animation: coverBurst 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-
-  .album-cover:hover .cover-burst-bit:nth-child(2n) {
-    animation-delay: 18ms;
-  }
-
-  @keyframes coverBurst {
-    0% {
-      opacity: 0;
-      transform: translate(-50%, -50%) scale(0.15);
-    }
-    18% {
-      opacity: 1;
-      transform: translate(-50%, -50%) scale(1);
-    }
-    100% {
-      opacity: 0;
-      transform: translate(
-          calc(-50% + var(--burst-x)),
-          calc(-50% + var(--burst-y))
-        )
-        rotate(var(--burst-rotate)) scale(0.3);
-    }
-  }
-
   /* ── Shimmer hover ── */
   .shimmer-hover {
     position: relative;

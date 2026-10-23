@@ -1,4 +1,4 @@
-import { useRef, useState, type CSSProperties } from 'react';
+import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import type { DiaryTrackSeed } from '../../stores/diaryStore';
 import ScrollReveal from '../motion/ScrollReveal';
@@ -12,17 +12,6 @@ export interface DiaryCard extends DiaryTrackSeed {
     // used by the full-screen crate reels for tap-to-play audio.
     previewUrl?: string;
 }
-
-const coverBurstBits = [
-    { x: -34, y: -42, rotate: -55 },
-    { x: 2, y: -54, rotate: 24 },
-    { x: 38, y: -34, rotate: 66 },
-    { x: 54, y: 3, rotate: 105 },
-    { x: 36, y: 40, rotate: 148 },
-    { x: -2, y: 54, rotate: 195 },
-    { x: -40, y: 32, rotate: 232 },
-    { x: -54, y: -3, rotate: 285 },
-];
 
 interface DiaryCarouselProps {
     title: string;
@@ -130,19 +119,6 @@ export default function DiaryCarousel({ title, hint, cards, onRate, emptyText }:
                                     decoding="async"
                                     className="absolute inset-0 block h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.07]"
                                 />
-                                <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
-                                    {coverBurstBits.map((bit, bitIndex) => (
-                                        <span
-                                            key={bitIndex}
-                                            className="cover-burst-bit"
-                                            style={{
-                                                '--burst-x': `${bit.x}px`,
-                                                '--burst-y': `${bit.y}px`,
-                                                '--burst-rotate': `${bit.rotate}deg`,
-                                            } as CSSProperties}
-                                        />
-                                    ))}
-                                </div>
                                 <div
                                     aria-hidden
                                     className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100"
