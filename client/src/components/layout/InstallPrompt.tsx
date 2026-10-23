@@ -114,7 +114,7 @@ export default function InstallPrompt() {
         // `install-chip` lets the gameplay-locked body rule hide it while a round
         // is running (mirrors how the header/footer are hidden).
         <div
-            className="install-chip pointer-events-none fixed inset-x-0 bottom-0 z-[90] flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+            className="install-chip pointer-events-none fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-[90] flex justify-center px-4 pb-0 md:bottom-0 md:pb-[max(1rem,env(safe-area-inset-bottom))]"
             style={{
                 transition: 'opacity 0.42s cubic-bezier(0.16,1,0.3,1), transform 0.42s cubic-bezier(0.16,1,0.3,1)',
                 opacity: entered ? 1 : 0,
