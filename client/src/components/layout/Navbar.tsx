@@ -75,7 +75,7 @@ export default function Navbar() {
                     borderBottom: isScrolled ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(255,255,255,0.03)',
                 }}
             >
-                <div className="pt-safe mx-auto flex h-[62px] max-w-[1280px] items-center justify-between gap-4 px-4 md:h-[76px] md:px-12">
+                <div className="pt-safe mx-auto flex h-[62px] max-w-[1280px] items-center justify-between gap-2 px-3 sm:gap-4 sm:px-4 md:h-[76px] md:px-12">
                     <Link to="/" className="tap-target inline-flex items-center shrink-0" aria-label="Raw XO home">
                         <span className="brand-mark text-[1.6rem] leading-none text-gradient-gold md:text-[1.9rem]">
                             Raw XO
@@ -91,12 +91,12 @@ export default function Navbar() {
                     {/* Account cluster. Primary navigation now lives in the phone
                         bottom tab bar (MobileTabBar), so this stays lean on mobile:
                         just enough to reach your profile and sign out. */}
-                    <div className="flex items-center gap-2 md:gap-3">
+                    <div className="flex min-w-0 shrink-0 items-center gap-2 md:gap-3">
                         {isAuthenticated && user ? (
                             <>
                                 <Link
                                     to={`/profile/${user.username}`}
-                                    className="block max-w-[92px] truncate text-[11px] uppercase tracking-[0.14em] text-text-3 transition-colors hover:text-text-1 sm:max-w-none"
+                                    className="block max-w-[72px] truncate text-[11px] uppercase tracking-[0.14em] text-text-3 transition-colors hover:text-text-1 sm:max-w-none"
                                 >
                                     {user.username}
                                 </Link>
@@ -113,7 +113,7 @@ export default function Navbar() {
                                         onClick={() => {
                                             void handleLocalSignOut();
                                         }}
-                                        className="btn-secondary rounded-[1.1rem] px-4 py-2 text-[11px] md:px-5 md:text-xs"
+                                        className="btn-secondary shrink-0 whitespace-nowrap rounded-[1.1rem] px-3 py-2 text-[10px] md:px-5 md:text-xs"
                                     >
                                         Sign Out
                                     </button>
@@ -152,7 +152,7 @@ function ClerkSignedInControls({ onAfterSignOut }: { onAfterSignOut: () => void 
     const { signOut } = useClerk();
 
     return (
-        <div className="flex items-center gap-2 md:gap-3">
+        <div className="flex shrink-0 items-center gap-2 md:gap-3">
             <UserButton
                 appearance={{
                     elements: {
@@ -168,7 +168,7 @@ function ClerkSignedInControls({ onAfterSignOut }: { onAfterSignOut: () => void 
                     await signOut();
                     onAfterSignOut();
                 }}
-                className="btn-secondary hidden rounded-[1.1rem] px-4 py-2 text-[11px] sm:inline-flex md:px-5 md:text-xs"
+                className="btn-secondary hidden shrink-0 whitespace-nowrap rounded-[1.1rem] px-3 py-2 text-[10px] sm:inline-flex md:px-5 md:text-xs"
             >
                 Sign Out
             </button>
