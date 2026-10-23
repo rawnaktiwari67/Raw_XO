@@ -50,6 +50,11 @@ export default function Culture() {
 
     useEffect(() => {
         let alive = true;
+        // Paint the curated cards as soon as their small iTunes batch completes;
+        // the larger catalog can keep loading without leaving the page blank.
+        musicService.getFeaturedTracks().then((tracks) => {
+            if (alive) setCatalog(tracks);
+        });
         musicService.getTrendingTracks().then((tracks) => {
             if (alive) setCatalog(tracks);
         });

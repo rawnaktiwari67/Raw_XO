@@ -268,35 +268,49 @@ const fallbackTracks = (): NormalizedMusicItem[] =>
         featured: true,
     }));
 
+let featuredPromise: Promise<NormalizedMusicItem[]> | null = null;
 let catalogPromise: Promise<NormalizedMusicItem[]> | null = null;
 
 export const musicService = {
+    // Return the curated cards independently so the Archive can render useful
+    // content while the larger catalog is still being assembled.
+    getFeaturedTracks(): Promise<NormalizedMusicItem[]> {
+        if (!featuredPromise) {
+            featuredPromise = Promise.all(
+                TRENDING_TRACK_SEEDS.map((seed, index) => fetchFeatured(seed, index))
+            ).then((tracks) => {
+                const featured = tracks.filter((track): track is NormalizedMusicItem => Boolean(track));
+                return featured.length > 0 ? featured : fallbackTracks();
+            }).catch(() => fallbackTracks());
+        }
+
+        return featuredPromise;
+    },
+
     async getTrendingTracks(): Promise<NormalizedMusicItem[]> {
         if (!catalogPromise) {
             catalogPromise = (async () => {
                 // Featured (curated, with lyric hooks) always come from iTunes for
                 // reliable previews. The broad pool prefers Spotify, then iTunes.
-                const featured = await Promise.all(
-                    TRENDING_TRACK_SEEDS.map((seed, index) => fetchFeatured(seed, index))
-                );
+                const featuredPromise = this.getFeaturedTracks();
 
-                // Fire Spotify and the iTunes fallback concurrently rather than
-                // awaiting the (cold, serverless) Spotify round-trip first and only
-                // then starting iTunes. Prefer Spotify when it returns data; else
-                // use iTunes. The iTunes batch is memoized (catalogCache) and often
-                // already warm from the hero wall, so racing it costs ~nothing.
-                const [spotifyCatalog, itunesBatches] = await Promise.all([
-                    fetchSpotifyCatalog(),
-                    Promise.all(CATALOG_QUERIES.map((query) => fetchCatalog(query))),
-                ]);
-                const catalog = spotifyCatalog.length > 0 ? spotifyCatalog : itunesBatches.flat();
+                // Keep the iTunes fallback in flight alongside Spotify, but do
+                // not wait for all 26 searches when Spotify has already supplied
+                // the broad catalog. That fallback is only needed when Spotify
+                // is unavailable or returns no tracks.
+                const spotifyPromise = fetchSpotifyCatalog();
+                const itunesPromise = Promise.all(CATALOG_QUERIES.map((query) => fetchCatalog(query)));
+                const [featured, spotifyCatalog] = await Promise.all([featuredPromise, spotifyPromise]);
+                const catalog = spotifyCatalog.length > 0
+                    ? spotifyCatalog
+                    : (await itunesPromise).flat();
 
                 const seen = new Set<string>();
                 const ordered: NormalizedMusicItem[] = [];
 
                 // Featured first so the hero + Meaning Lab lead with curated tracks.
                 for (const track of featured) {
-                    if (!track || seen.has(track.trackId)) continue;
+                    if (seen.has(track.trackId)) continue;
                     seen.add(track.trackId);
                     ordered.push(track);
                 }
