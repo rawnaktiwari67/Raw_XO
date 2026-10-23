@@ -117,7 +117,7 @@ export default function DiaryCarousel({ title, hint, cards, onRate, emptyText }:
                                     height={308}
                                     loading="lazy"
                                     decoding="async"
-                                    className="absolute inset-0 block h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.07]"
+                                    className="absolute inset-0 block h-full w-full object-cover"
                                 />
                                 <div
                                     aria-hidden
